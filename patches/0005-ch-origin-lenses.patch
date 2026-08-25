@@ -1,0 +1,27 @@
+diff --git a/apps/viewer/src/components/viewer/LensPanel.tsx b/apps/viewer/src/components/viewer/LensPanel.tsx
+index bc8930a..c39a4e0 100644
+--- a/apps/viewer/src/components/viewer/LensPanel.tsx
++++ b/apps/viewer/src/components/viewer/LensPanel.tsx
+@@ -35,6 +35,8 @@ import {
+   deriveRuleName, compoundCriteriaSummary, isRuleValid,
+ } from './lens-editor-utils';
+ import { importLensFile } from './lens-import';
++// Trassia overlay — shortcut to the upstream auto-color path, see the file.
++import { ChOriginLenses } from './lens/ChOriginLenses';
+ import { planLensHiddenSync, ruleIsolationOwnsChannel } from './lens-visibility-ownership';
+ import type { Lens, LensRule, LensCriteria, AutoColorSpec, AutoColorLegendEntry, DiscoveredLensData } from '@/store/slices/lensSlice';
+ import {
+@@ -1685,6 +1687,13 @@ export function LensPanel({ onClose }: LensPanelProps) {
+         {/* New lens buttons */}
+         {!editingLens && !creatingAutoColor && (
+           <div className="space-y-1.5">
++            {/* Trassia: one click to the auto-color lens a Swiss engineer
++                actually wants. Renders nothing when the model carries no
++                provenance columns. */}
++            <ChOriginLenses
++              discovered={discoveredLensData}
++              onRequestDiscovery={handleRequestDiscovery}
++            />
+             <button
+               onClick={handleNewLens}
+               className="w-full border-2 border-dashed border-zinc-300 dark:border-zinc-600 hover:border-primary dark:hover:border-primary py-2.5 flex items-center justify-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-primary transition-colors rounded-sm"

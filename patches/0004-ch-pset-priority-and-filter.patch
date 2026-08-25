@@ -1,0 +1,106 @@
+diff --git a/apps/viewer/src/components/viewer/PropertiesPanel.tsx b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
+index 9ac451d..7bee9fa 100644
+--- a/apps/viewer/src/components/viewer/PropertiesPanel.tsx
++++ b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
+@@ -48,6 +48,9 @@ import { CoordVal, CoordRow } from './properties/CoordinateDisplay';
+ import { renderToWorldViewer, viewerToIfcAxes } from './tools/measure-modes/coordinates';
+ import { useRenderFrameOffsets } from '@/hooks/useRenderFrameOffsets';
+ import { PropertySetCard } from './properties/PropertySetCard';
++// Trassia overlay — see lib/ch/ch-psets.ts for why.
++import { chSortPsetsChFirst, chFilterPsets, chPsetGroupLabel } from '@/lib/ch/ch-psets';
++import { ChPropertyFilterBar } from './properties/ChPropertyFilterBar';
+ import { QuantitySetCard } from './properties/QuantitySetCard';
+ import { ModelMetadataPanel } from './properties/ModelMetadataPanel';
+ import { ClassificationCard } from './properties/ClassificationCard';
+@@ -221,6 +224,10 @@ export function PropertiesPanel() {
+   const [copied, setCopied] = useState(false);
+   const [coordCopied, setCoordCopied] = useState<string | null>(null);
+   const [coordOpen, setCoordOpen] = useState(false);
++  // Trassia: free-text filter over the rendered property sets. Component
++  // state, deliberately not store state — it is a reading aid for the
++  // current selection, not a viewer mode worth persisting or sharing.
++  const [chPropFilter, setChPropFilter] = useState('');
+ 
+   // Inline property editing is gated by the global edit-mode pill in
+   // the main toolbar (see `uiSlice.editEnabled`). Reading it from the
+@@ -1158,8 +1165,12 @@ export function PropertiesPanel() {
+   const renderedEntityDescription = overlayAttr(3) ?? entityNode?.description ?? undefined;
+   const renderedEntityObjectType = overlayAttr(4) ?? entityNode?.objectType ?? undefined;
+   const renderedSpatialInfo = spatialInfo;
+-  const renderedOccurrenceProperties = occurrenceProperties;
+-  const renderedInheritedTypeProperties = inheritedTypeProperties;
++  // Trassia: provenance sets first, then the free-text filter. Applied to the
++  // two arrays the Properties tab RENDERS only — `mergedProperties` below stays
++  // complete, so the edit toolbar's "which psets already exist" check and the
++  // bSDD de-duplication never see a filtered view of the element.
++  const renderedOccurrenceProperties = chFilterPsets(chSortPsetsChFirst(occurrenceProperties), chPropFilter);
++  const renderedInheritedTypeProperties = chFilterPsets(chSortPsetsChFirst(inheritedTypeProperties), chPropFilter);
+   const renderedMergedProperties = mergedProperties;
+   const renderedQuantities = quantities;
+   const renderedQuantitiesWithInheritedType = quantitiesWithInheritedType;
+@@ -1666,6 +1677,15 @@ export function PropertiesPanel() {
+                 <TaskEditCard taskGlobalId={singleSelectedTaskGlobalId} />
+               </div>
+             )}
++            {/* Trassia: property filter. Only offered once there is something
++                to filter — a three-row element does not need a search box. */}
++            {renderedMergedProperties.length > 0 && (
++              <ChPropertyFilterBar
++                value={chPropFilter}
++                onChange={setChPropFilter}
++                matchCount={renderedOccurrenceProperties.length + renderedInheritedTypeProperties.length}
++              />
++            )}
+             {/* Edit toolbar - only shown when edit mode is active */}
+             {editMode && selectedEntity && (
+               <>
+@@ -1711,6 +1731,7 @@ export function PropertiesPanel() {
+                       <PropertySetCard
+                         key={`occ-${pset.name}`}
+                         pset={pset}
++                        chGroupLabel={chPsetGroupLabel(pset.name)}
+                         modelId={selectedEntity?.modelId}
+                         entityId={selectedEntity?.expressId}
+                         enableEditing={editMode}
+@@ -1738,6 +1759,7 @@ export function PropertiesPanel() {
+                       <PropertySetCard
+                         key={`type-${pset.name}`}
+                         pset={pset}
++                        chGroupLabel={chPsetGroupLabel(pset.name)}
+                         modelId={selectedEntity?.modelId}
+                         entityId={renderedTypeProperties.typeId}
+                         enableEditing={editMode}
+diff --git a/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx b/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx
+index e1ef446..7dbc6f8 100644
+--- a/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx
++++ b/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx
+@@ -37,9 +37,14 @@ export interface PropertySetCardProps {
+    *  renders CONVERTED into that unit instead of the file's raw value.
+    *  Omitted (or empty) keeps the existing unconverted-file-unit display. */
+   unitDisplayOverrides?: Record<string, string>;
++  /** Trassia: family badge for a Swiss/Trassia provenance set — `Origin`,
++   *  `Processing`, `Alignment`, `Client`, `Source data`. Undefined for an
++   *  ordinary IFC set, which then renders exactly as before
++   *  (see `lib/ch/ch-psets.ts`). */
++  chGroupLabel?: string;
+ }
+ 
+-export function PropertySetCard({ pset, modelId, entityId, enableEditing, isTypeProperty, typeEditScope, focusedPropKey, projectUnits, unitDisplayOverrides }: PropertySetCardProps) {
++export function PropertySetCard({ pset, modelId, entityId, enableEditing, isTypeProperty, typeEditScope, focusedPropKey, projectUnits, unitDisplayOverrides, chGroupLabel }: PropertySetCardProps) {
+   // Check if any property in this set is mutated
+   const hasMutations = pset.properties.some(p => p.isMutated);
+   const isNewPset = pset.isNewPset;
+@@ -102,6 +107,13 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
+           </Tooltip>
+         )}
+         <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-0">{pset.name}</span>
++        {/* Trassia: names WHY this set is at the top of the panel. Data
++            provenance is the first question on a converted Swiss model. */}
++        {chGroupLabel && (
++          <span className="text-[9px] uppercase tracking-wider font-semibold bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200 border border-teal-300 dark:border-teal-700 px-1.5 py-0.5 shrink-0">
++            {chGroupLabel}
++          </span>
++        )}
+         <span className="text-[10px] font-mono bg-zinc-100 dark:bg-zinc-900 px-1.5 py-0.5 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 shrink-0">{pset.properties.length}</span>
+       </CollapsibleTrigger>
+       <CollapsibleContent>

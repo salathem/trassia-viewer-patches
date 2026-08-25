@@ -11,17 +11,29 @@ executable form served at https://viewer.trassia.com.
 
 - `patches/` — the exact patches applied on top of upstream commit
   `ec358164ed368aba89ae1a9e8744977e54293fd7` (tag `@ifc-lite/wasm@6.0.0`)
-- `modified-files/` — the four modified files in full source form (base commit + patches applied):
+- `modified-files/` — the seven modified files in full source form (base commit + patches applied):
   - `apps/viewer/src/store/slices/measurementSlice.ts`
   - `apps/viewer/src/components/viewer/tools/MeasurePanel.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx`
   - `apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx`
+  - `apps/viewer/src/components/viewer/PropertiesPanel.tsx`
+  - `apps/viewer/src/components/viewer/properties/PropertySetCard.tsx`
+  - `apps/viewer/src/components/viewer/LensPanel.tsx`
 - `LICENSE` — Mozilla Public License 2.0 (unchanged, from upstream)
 
 All files in this repository are licensed under the **MPL-2.0**.
 
-Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate helpers)
-are not modifications of MPL-covered files and are not part of this source offer
+The patches fall into two groups:
+
+- `0001`–`0003` — Swiss coordinate readout for the measurement tools
+  (LV95/LV03 formatting, georeference status).
+- `0004`–`0005` — property panel: Swiss/Trassia provenance property sets sorted
+  to the top with a family badge, a free-text filter over the selected element's
+  properties, and a one-click "colour by data origin" row in the Lens panel.
+
+Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
+helpers, the property-set family classifier) are not modifications of MPL-covered
+files and are not part of this source offer
 (MPL 2.0 is a file-level license; see §1.10 "Larger Work").
 
 This repository is updated whenever the deployed application changes MPL-covered files.
