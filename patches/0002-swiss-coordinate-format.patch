@@ -1,0 +1,34 @@
+diff --git a/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx b/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx
+index eb94cdc..11baa7b 100644
+--- a/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx
++++ b/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx
+@@ -20,6 +20,8 @@ import {
+   reprojectionInputKey,
+   type LatLon,
+ } from '@/lib/geo/reproject';
++// Trassia overlay (not upstream) — see overlay/apps/viewer/src/lib/geo/ch-coordinates.ts
++import { formatSwissEnh, isSwissProjectedCrs } from '@/lib/geo/ch-coordinates';
+ 
+ export interface Vec3Like { x: number; y: number; z: number }
+ export interface Enh { e: string; n: string; h: string }
+@@ -34,11 +36,15 @@ export interface Enh { e: string; n: string; h: string }
+ export function projectedEnh(point: Vec3Like, anchor: AnchorGeoreference): Enh {
+   const proj = viewerPointToProjected(point, anchor.eff, anchor.originViewer);
+   const { projectedCRS, lengthUnitScale } = anchor.eff;
+-  return {
+-    e: mapUnitsToMeters(proj.eastings, projectedCRS, lengthUnitScale).toFixed(3),
+-    n: mapUnitsToMeters(proj.northings, projectedCRS, lengthUnitScale).toFixed(3),
+-    h: mapUnitsToMeters(proj.height, projectedCRS, lengthUnitScale).toFixed(3),
+-  };
++  const e = mapUnitsToMeters(proj.eastings, projectedCRS, lengthUnitScale);
++  const n = mapUnitsToMeters(proj.northings, projectedCRS, lengthUnitScale);
++  const h = mapUnitsToMeters(proj.height, projectedCRS, lengthUnitScale);
++  // Trassia: on the Swiss national grids the same number is written
++  // `E 2'675'200.00` — apostrophe groups, centimetres. Presentation only; the
++  // projection above is untouched, and every other CRS keeps the upstream
++  // bare-metre / millimetre format so nothing outside CH changes.
++  if (isSwissProjectedCrs(projectedCRS)) return formatSwissEnh(e, n, h);
++  return { e: e.toFixed(3), n: n.toFixed(3), h: h.toFixed(3) };
+ }
+ 
+ /** One compact monospace E/N/H line, optionally labelled (A/B endpoints). */

@@ -1,0 +1,55 @@
+diff --git a/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx b/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx
+index 7e703b8..96a9bb3 100644
+--- a/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx
++++ b/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx
+@@ -130,6 +130,8 @@ import {
+   EnhLine,
+   type Vec3Like,
+ } from './measure-modes/geo-readout';
++// Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-geo-status.tsx
++import { ChGeoBanner } from './measure-modes/ch-geo-status';
+ import { useDraggablePanel } from '@/hooks/useDraggablePanel';
+ import { useAnchorGeoreference, type AnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
+ 
+@@ -688,6 +690,16 @@ export function MeasureOverlay() {
+         </div>
+       )}
+ 
++      {/* Trassia: the other half of the box above — when the model carries no
++          IfcMapConversion, upstream renders nothing at all and the user cannot
++          tell an un-georeferenced model from a georeferenced one near zero. */}
++      <ChGeoBanner
++        anchor={anchor}
++        point={livePoint}
++        enabled={geoReadoutEnabled}
++        bottomClass={readoutBottomClass}
++      />
++
+       {/* Render measurement lines, labels, and snap indicators */}
+       <MeasurementOverlays
+         measurements={measurements}
+diff --git a/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx b/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx
+index 8250a85..20f8718 100644
+--- a/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx
++++ b/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx
+@@ -52,6 +52,8 @@ import {
+ } from './measure-modes/coordinates';
+ import { formatDistance, formatSignedTriple } from './formatDistance';
+ import { projectedEnh, useProjectedLatLon, type Vec3Like } from './measure-modes/geo-readout';
++// Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-geo-status.tsx
++import { ChGeoStatus } from './measure-modes/ch-geo-status';
+ 
+ /** One labelled coordinate row. */
+ function CoordRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+@@ -196,6 +198,11 @@ export function MeasurePointReadout() {
+           {anchor.eff.projectedCRS.name}
+         </div>
+       )}
++
++      {/* Trassia: says out loud what upstream leaves silent — no georeference,
++          the declared vertical datum, or a point outside the declared Swiss
++          grid. Renders nothing when there is nothing to report. */}
++      <ChGeoStatus anchor={anchor} point={livePoint} enabled={geoReadoutEnabled} />
+     </div>
+   );
+ }

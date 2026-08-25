@@ -1,0 +1,19 @@
+diff --git a/apps/viewer/src/store/slices/measurementSlice.ts b/apps/viewer/src/store/slices/measurementSlice.ts
+index 0cfeee1..f72f535 100644
+--- a/apps/viewer/src/store/slices/measurementSlice.ts
++++ b/apps/viewer/src/store/slices/measurementSlice.ts
+@@ -300,7 +300,13 @@ export const createMeasurementSlice: StateCreator<MeasurementSlice, [], [], Meas
+   activeMeasurement: null,
+   snapTarget: null,
+   snapEnabled: true,
+-  geoReadoutEnabled: false,
++  // Trassia: ON by default. Real-world coordinates are the reason our users
++  // open this viewer at all (Swiss infrastructure work is done in LV95), so a
++  // readout they have to discover behind a toggle is a readout most of them
++  // never see. The toggle itself is unchanged and still disables itself for a
++  // model without an IfcMapConversion, so this default cannot show a number
++  // that is not backed by the file.
++  geoReadoutEnabled: true,
+   snapVisualization: null,
+   edgeLockState: getDefaultEdgeLockState(),
+   measurementConstraintEdge: null,
