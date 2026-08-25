@@ -11,7 +11,7 @@ executable form served at https://viewer.trassia.com.
 
 - `patches/` — the exact patches applied on top of upstream commit
   `ec358164ed368aba89ae1a9e8744977e54293fd7` (tag `@ifc-lite/wasm@6.0.0`)
-- `modified-files/` — the seven modified files in full source form (base commit + patches applied):
+- `modified-files/` — the eight modified files in full source form (base commit + patches applied):
   - `apps/viewer/src/store/slices/measurementSlice.ts`
   - `apps/viewer/src/components/viewer/tools/MeasurePanel.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx`
@@ -19,6 +19,7 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/PropertiesPanel.tsx`
   - `apps/viewer/src/components/viewer/properties/PropertySetCard.tsx`
   - `apps/viewer/src/components/viewer/LensPanel.tsx`
+  - `apps/viewer/src/components/viewer/tools/SectionPanel.tsx`
 - `LICENSE` — Mozilla Public License 2.0 (unchanged, from upstream)
 
 All files in this repository are licensed under the **MPL-2.0**.
@@ -30,6 +31,10 @@ The patches fall into two groups:
 - `0004`–`0005` — property panel: Swiss/Trassia provenance property sets sorted
   to the top with a family badge, a free-text filter over the selected element's
   properties, and a one-click "colour by data origin" row in the Lens panel.
+- `0006` — section panel: a "cross-section at station" block that places the
+  section plane perpendicular to an `IfcAlignment` centreline at a chosen
+  station (import plus one line of JSX; all of the logic lives in newly created
+  files outside this source offer).
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the property-set family classifier) are not modifications of MPL-covered
