@@ -1,0 +1,123 @@
+diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
+index 141df2d..6cafd64 100644
+--- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
++++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
+@@ -26,6 +26,11 @@ import { useViewerStore } from '@/store';
+ import { isCollabEnabled } from '@/lib/collab/config';
+ import { toast } from '@/components/ui/toast';
+ import { parseRoleFromToken } from '@/lib/collab/share-link';
++// Trassia overlay — a ?model= link that 404s used to fail in the console only,
++// and an incomplete file loaded without a word. See the two files.
++import { chIsHtmlResponse } from '@/lib/ch/ch-file-validation';
++import { chSetLoadNotice } from '@/lib/ch/ch-load-notice';
++import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
+ import { EntityContextMenu } from './EntityContextMenu';
+ import { useDuplicateShortcut } from './useDuplicateShortcut';
+ import { HoverTooltip } from './HoverTooltip';
+@@ -108,21 +113,45 @@ export function ViewerLayout() {
+       return;
+     }
+     if (resolvedUrl.origin !== window.location.origin) {
++      const message = 'This link points at a model on another site. Only models from this site are loaded automatically.';
+       console.error(
+         `[viewer] autoload from ?model= refused: cross-origin URL (${resolvedUrl.origin}) - only same-origin models are auto-loaded`,
+       );
++      // Trassia: refusing silently leaves an empty start screen that reads as
++      // "the viewer is broken" rather than "the link is wrong" (M-02).
++      useViewerStore.getState().setError(message);
++      chSetLoadNotice({ fileName: modelUrl, message });
++      toast.error(message);
+       return;
+     }
+     (async () => {
++      const shown = resolvedUrl.pathname;
+       try {
+         const res = await fetch(resolvedUrl.href);
+         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
++        // Trassia (M-04): a static host's SPA fallback answers any
++        // extension-less path with index.html, so `?model=/etc/passwd` came
++        // back 200 text/html and was loaded as a 13.9 KB "IFC4 model". An
++        // HTML body is never a model; say so here rather than after the parse.
++        if (chIsHtmlResponse(res.headers.get('content-type'))) {
++          throw new Error('the server returned a web page, not a model file');
++        }
+         const blob = await res.blob();
+         const filename = resolvedUrl.pathname.split('/').pop() || 'model.ifc';
+         const file = new File([blob], filename, { type: blob.type || 'application/x-step' });
+         await autoloadAddModel(file);
+       } catch (err) {
+         console.error('[viewer] autoload from ?model=… failed:', err);
++        // Trassia: `state.error` stayed null and the app showed its ordinary
++        // start screen, so a recipient of a stale link saw an empty viewer and
++        // no reason for it (M-02). The path is named because that is the part
++        // whoever sent the link has to correct.
++        const message = `Could not load the linked model "${shown}": ${
++          err instanceof Error ? err.message : String(err)
++        }. Check the link, or open a file from your computer.`;
++        useViewerStore.getState().setError(message);
++        chSetLoadNotice({ fileName: shown, message });
++        toast.error(message);
+       }
+     })();
+   }, [autoloadAddModel]);
+@@ -378,6 +407,10 @@ export function ViewerLayout() {
+             </span>
+           </div>
+         )}
++        {/* Trassia: a link that yielded no model, or a model that loaded
++            incomplete. Its own row, above everything, until dismissed. */}
++        <ChLoadNoticeBanner />
++
+         {/* Keyboard Shortcuts Dialog */}
+         <KeyboardShortcutsDialog open={shortcutsDialog.open} onClose={shortcutsDialog.close} initialTab={shortcutsDialog.tab} />
+ 
+diff --git a/apps/viewer/src/hooks/useIfcLoader.ts b/apps/viewer/src/hooks/useIfcLoader.ts
+index fc3e421..2091b34 100644
+--- a/apps/viewer/src/hooks/useIfcLoader.ts
++++ b/apps/viewer/src/hooks/useIfcLoader.ts
+@@ -70,6 +70,10 @@ import { capturePreAlignment } from './ingest/federationRealign.js';
+ import type { PreAlignmentSnapshot } from '../store/index.js';
+ import { computePointCloudAlignment, unregisterPointCloudAlignment, hasRegisteredPointCloudAlignment, type PointCloudSourceUnit } from './ingest/pointCloudAlignment.js';
+ import { toast } from '../components/ui/toast.js';
++// Trassia overlay — empty / non-STEP / truncated files used to report
++// "IFC4 · Ready". See lib/ch/ch-file-validation.ts.
++import { chValidateIfcSource } from '../lib/ch/ch-file-validation.js';
++import { chSetLoadNotice, chClearLoadNotice } from '../lib/ch/ch-load-notice.js';
+ import { posthog } from '../lib/analytics.js';
+ import { reportRenderStats } from '../utils/renderStatsReport.js';
+ import { nextFrameOrTimeout } from '../utils/frameWait.js';
+@@ -743,6 +747,34 @@ export function useIfcLoader() {
+       // cloud format was already resolved from the head slice above.
+       const format = pointCloudFormat ?? detectFormat(buffer);
+ 
++      // Trassia: minimum honesty check before the parser gets the bytes. An
++      // empty file, a text file renamed `.ifc` and an HTML page served by a
++      // SPA fallback all used to come back as "IFC4 · Ready · 0 entities",
++      // and a TRUNCATED IFC loaded partially with no warning at all — while
++      // its intact header kept the LV95 readout producing correct-looking
++      // coordinates for geometry that is missing (QA 2026-08-26, M-03/M-04).
++      // Non-STEP formats pass through untouched; see the module.
++      const chVerdict = chValidateIfcSource(buffer, file.name, format);
++      if (chVerdict.level === 'reject') {
++        setError(chVerdict.message);
++        chSetLoadNotice({ fileName: file.name, message: chVerdict.message });
++        toast.error(chVerdict.message);
++        updateModel(modelId, { loadState: 'error', loadError: 'not-an-ifc-file' });
++        setLoading(false);
++        return;
++      }
++      if (chVerdict.level === 'warn') {
++        // Not a refusal: a partial model is still worth looking at. It just
++        // must not pass itself off as complete, and a toast that vanishes in
++        // five seconds is not enough for a warning that has to hold for as
++        // long as the model is loaded.
++        chSetLoadNotice({ fileName: file.name, message: chVerdict.message });
++        toast.error(chVerdict.message);
++      } else {
++        // A sound file retires the previous file's warning.
++        chClearLoadNotice();
++      }
++
+       // LAS / LAZ point clouds: stream chunks straight to the renderer.
+       // No on-disk cache, no server upload — the data goes worker → GPU.
+       if (format === 'las' || format === 'laz' || format === 'ply' || format === 'pcd' || format === 'e57' || format === 'pts' || format === 'xyz') {

@@ -1,0 +1,85 @@
+diff --git a/apps/viewer/src/components/viewer/PropertiesPanel.tsx b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
+index 7bee9fa..bdbc1a2 100644
+--- a/apps/viewer/src/components/viewer/PropertiesPanel.tsx
++++ b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
+@@ -44,7 +44,10 @@ import { ZoneVolumeBreakdown } from './ZoneVolumeBreakdown';
+ import type { ZoneSet } from '@/lib/zones';
+ import { withInheritedTypeQuantities } from '@/lib/zones/inherited-quantities';
+ 
+-import { CoordVal, CoordRow } from './properties/CoordinateDisplay';
++import { CoordRow } from './properties/CoordinateDisplay';
++// Trassia overlay — the World row used to print the model's own world
++// coordinates under the letters E/N beside an EPSG chip. See the file.
++import { ChWorldSummary, ChWorldRows } from './properties/ChWorldPosition';
+ import { renderToWorldViewer, viewerToIfcAxes } from './tools/measure-modes/coordinates';
+ import { useRenderFrameOffsets } from '@/hooks/useRenderFrameOffsets';
+ import { PropertySetCard } from './properties/PropertySetCard';
+@@ -1457,16 +1460,11 @@ export function PropertiesPanel() {
+               <span className="font-bold uppercase tracking-wide shrink-0">World</span>
+               {!coordOpen && (
+                 <>
+-                  {entityCoordinates && (
+-                    <span className="font-mono text-[10px] text-teal-600/70 dark:text-teal-500/70 truncate min-w-0 flex-1 tabular-nums">
+-                      <CoordVal axis="E" value={entityCoordinates.worldZup.center.x} />{' '}
+-                      <CoordVal axis="N" value={entityCoordinates.worldZup.center.y} />{' '}
+-                      <CoordVal axis="Z" value={entityCoordinates.worldZup.center.z} />
+-                    </span>
+-                  )}
+-                  {renderedGeoref?.projectedCRS?.name && (
+-                    <span className="font-mono text-[9px] text-teal-500/60 shrink-0">{renderedGeoref.projectedCRS.name}</span>
+-                  )}
++                  {/* Trassia: the real projected coordinate (E/N/H through the
++                      model's IfcMapConversion) plus the CRS of the frame those
++                      numbers are actually in — or the model coordinate labelled
++                      `local` with no EPSG chip at all. */}
++                  <ChWorldSummary coordinates={entityCoordinates} />
+                   <span className="text-[9px] text-teal-500/0 group-hover/coord:text-teal-500/40 transition-colors shrink-0">details</span>
+                 </>
+               )}
+@@ -1474,15 +1472,11 @@ export function PropertiesPanel() {
+             <CollapsibleContent>
+               {entityCoordinates && (
+                 <div className="px-2 py-1.5 space-y-0.5">
+-                  <CoordRow
+-                    label=""
+-                    values={[
+-                      { axis: 'E', value: entityCoordinates.worldZup.center.x },
+-                      { axis: 'N', value: entityCoordinates.worldZup.center.y },
+-                      { axis: 'Z', value: entityCoordinates.worldZup.center.z },
+-                    ]}
+-                    primary
+-                    copyLabel="world"
++                  {/* Trassia: replaces the former unlabelled E/N/Z row, which
++                      showed model coordinates under national-coordinate
++                      letters. `Local` (render frame) below is untouched. */}
++                  <ChWorldRows
++                    coordinates={entityCoordinates}
+                     coordCopied={coordCopied}
+                     onCopy={copyCoords}
+                   />
+diff --git a/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx b/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx
+index d431469..79fdebd 100644
+--- a/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx
++++ b/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx
+@@ -973,9 +973,18 @@ describe('guard sanity', () => {
+ 
+       const container = renderNode(<PropertiesPanel />);
+       const text = container.textContent ?? '';
+-      // `\s` and not a literal space: `CoordVal` separates the axis letter from
+-      // its value with U+2009 THIN SPACE, which an ASCII space does not match.
+-      assert.match(text, /E\s12\.000\s+N\s16\.000\s+Z\s33\.000/, `wrong world centre: ${text.slice(0, 200)}`);
++      // Trassia: the NUMBERS this test is about are unchanged — the frame
++      // resolution it pins is untouched. The LETTERS are not: this row used to
++      // print `E 12.000  N 16.000  Z 33.000`, i.e. model coordinates under
++      // national-coordinate labels, which on a georeferenced Swiss model was
++      // wrong by the whole map anchor (QA 2026-08-26, B-01). The model
++      // coordinate is now labelled `X / Y / Z`, and `E / N / H` is reserved
++      // for a coordinate that has actually been through the IfcMapConversion.
++      assert.match(text, /X\s12\.000\s+Y\s16\.000\s+Z\s33\.000/, `wrong world centre: ${text.slice(0, 200)}`);
++      // The fixture models carry no IfcMapConversion, so there must be no
++      // projected row and no CRS chip — only the honest `local` marker.
++      assert.match(text, /local/, `expected the un-georeferenced marker: ${text.slice(0, 200)}`);
++      assert.doesNotMatch(text, /EPSG:/, `no CRS may be claimed here: ${text.slice(0, 200)}`);
+     });
+   });
+ 

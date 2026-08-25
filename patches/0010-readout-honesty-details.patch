@@ -1,0 +1,54 @@
+diff --git a/apps/viewer/src/components/viewer/properties/ModelMetadataPanel.tsx b/apps/viewer/src/components/viewer/properties/ModelMetadataPanel.tsx
+index 3e98d58..4c1233e 100644
+--- a/apps/viewer/src/components/viewer/properties/ModelMetadataPanel.tsx
++++ b/apps/viewer/src/components/viewer/properties/ModelMetadataPanel.tsx
+@@ -274,7 +274,14 @@ export function ModelMetadataPanel({ model }: { model: FederatedModel }) {
+             </div>
+             <div className="flex items-center gap-3 px-3 py-2">
+               <Building2 className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+-              <span className="text-xs text-zinc-500">Elements with Geometry</span>
++              {/* Trassia: this counts elements ASSIGNED TO A STOREY, not
++                  elements that have geometry — the two coincide in a building
++                  and diverge completely in an infrastructure model, which has
++                  no storeys at all. Every one of our demo models therefore
++                  read "Elements with Geometry 0" beside a status bar saying
++                  "1.7K elements / 219.9K tris" (QA 2026-08-26, S-02). The
++                  number was right; the label was not. */}
++              <span className="text-xs text-zinc-500">Elements in Storeys</span>
+               <span className="text-xs font-mono text-zinc-900 dark:text-zinc-100 ml-auto">
+                 {stats.elementsWithGeometry.toLocaleString()}
+               </span>
+diff --git a/apps/viewer/src/components/viewer/tools/formatDistance.ts b/apps/viewer/src/components/viewer/tools/formatDistance.ts
+index fb11e05..85bb88b 100644
+--- a/apps/viewer/src/components/viewer/tools/formatDistance.ts
++++ b/apps/viewer/src/components/viewer/tools/formatDistance.ts
+@@ -15,6 +15,12 @@ const EMPTY_UNITS = ProjectUnits.empty();
+ /** Auto-scaled metric string (mm / cm / m / km), the fallback used when no
+  *  LENGTHUNIT override is set. */
+ function formatAutoScaledMetric(meters: number): string {
++  // Trassia: EXACTLY zero is not a small length, it is no length — and the
++  // auto-scaler used to render it as `0.0 mm`, so the first point of a
++  // polyline in a metre-unit model announced itself in millimetres before any
++  // distance existed at all (QA 2026-08-26, S-03). Metres is the neutral unit
++  // to say "nothing yet" in; every non-zero value keeps its previous scaling.
++  if (meters === 0) return '0.000 m';
+   if (meters < 0.01) {
+     return `${(meters * 1000).toFixed(1)} mm`;
+   } else if (meters < 1) {
+diff --git a/apps/viewer/src/components/viewer/tools/measure-modes/components.test.ts b/apps/viewer/src/components/viewer/tools/measure-modes/components.test.ts
+index 71f4525..424c032 100644
+--- a/apps/viewer/src/components/viewer/tools/measure-modes/components.test.ts
++++ b/apps/viewer/src/components/viewer/tools/measure-modes/components.test.ts
+@@ -72,7 +72,11 @@ describe('formatSignedDistance', () => {
+     // Sub-metre values scale to cm/mm; the sign must survive that branch.
+     assert.strictEqual(formatSignedDistance(-0.25), '-25.0 cm');
+     assert.strictEqual(formatSignedDistance(-0.005), '-5.0 mm');
+-    assert.strictEqual(formatSignedDistance(0), '0.0 mm');
++    // Trassia: exactly zero now reads `0.000 m`, not `0.0 mm`. A polyline's
++    // first point announced "0.0 mm" in a metre-unit model before any distance
++    // existed (QA 2026-08-26, S-03); no length is not a millimetre-scale
++    // length. Every non-zero value above is unchanged, sign included.
++    assert.strictEqual(formatSignedDistance(0), '0.000 m');
+   });
+ });
+ 

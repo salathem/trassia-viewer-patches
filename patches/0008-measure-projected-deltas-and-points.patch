@@ -1,0 +1,146 @@
+diff --git a/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx b/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx
+index 96a9bb3..725622b 100644
+--- a/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx
++++ b/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx
+@@ -119,7 +119,6 @@ const ANGLE_KIND_LABELS: ReadonlyArray<readonly [AngleKind, string, string]> = [
+ ];
+ import {
+   distanceComponents,
+-  formatAxisDeltas,
+   formatHorizontalVertical,
+ } from './measure-modes/components';
+ import { inclination, formatInclination } from './measure-modes/inclination';
+@@ -132,6 +131,10 @@ import {
+ } from './measure-modes/geo-readout';
+ // Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-geo-status.tsx
+ import { ChGeoBanner } from './measure-modes/ch-geo-status';
++// Trassia overlay — ΔE/ΔN/ΔH instead of renderer-axis deltas, and E/N/H for
++// polyline vertices / angle picks. See measure-modes/ch-measure-readouts.tsx.
++import { ChAxisDeltas, ChEnhPoints, chAnglePickLabels } from './measure-modes/ch-measure-readouts';
++import { chLatestMeasurePoint } from '@/lib/ch/ch-measure-points';
+ import { useDraggablePanel } from '@/hooks/useDraggablePanel';
+ import { useAnchorGeoreference, type AnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
+ 
+@@ -301,8 +304,23 @@ export function MeasureOverlay() {
+   const showGeo = geoReadoutEnabled && anchor !== null;
+   // Live point: the current drag endpoint while measuring, else the most
+   // recently finalized endpoint. Drives the standalone readout box.
+-  const livePoint: Vec3Like | null = activeMeasurement?.current
+-    ?? (measurements.length > 0 ? measurements[measurements.length - 1].end : null);
++  //
++  // Trassia: upstream looked at the DRAG modes only, so with `Geo XYZ` lit a
++  // polyline or an angle produced no coordinate readout at all — the case
++  // where vertex coordinates are the whole point of the measurement (M-06).
++  // `chLatestMeasurePoint` resolves the latest point across every mode and
++  // still prefers the drag endpoint, so nothing that used to show stops.
++  const livePoint: Vec3Like | null = chLatestMeasurePoint({
++    measureMode,
++    activeMeasurement,
++    measurements,
++    activePolyline,
++    polylineMeasurements,
++    activeAngle,
++    angleMeasurements,
++    activeRadius,
++    radiusMeasurements,
++  });
+   const liveEnh = showGeo && anchor && livePoint ? projectedEnh(livePoint, anchor) : null;
+   // Async WGS84 lat/lon for the live point. Non-blocking: null until proj4
+   // resolves (and stays null for an unresolvable CRS), so E/N/H is unaffected.
+@@ -330,7 +348,12 @@ export function MeasureOverlay() {
+       <div ref={overlayRef} className="absolute top-0 left-0 w-0 h-0" />
+ 
+       {/* Compact Measure Tool Panel */}
+-      <div ref={panelRef} style={drag.style} className="pointer-events-auto absolute top-4 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur-sm rounded-lg border shadow-lg z-30">
++      {/* Trassia: on a phone the centred panel (min-w-64) runs under the
++          ViewCube at top-6 right-6 — at 390 px they overlap by ~47 px and the
++          cube cannot be grabbed (QA 2026-08-26, S-01). Below the `sm`
++          breakpoint the panel hugs the left edge instead, which clears it.
++          Unchanged from `sm` up, and dragging still overrides both. */}
++      <div ref={panelRef} style={drag.style} className="pointer-events-auto absolute top-4 left-2 translate-x-0 sm:left-1/2 sm:-translate-x-1/2 bg-background/95 backdrop-blur-sm rounded-lg border shadow-lg z-30">
+         {/* Header: grip drags (issue #1107), title + section buttons below. */}
+         <div className="flex items-center justify-between gap-2 p-2">
+           <div className="flex items-center gap-1 min-w-0">
+@@ -526,6 +549,10 @@ export function MeasureOverlay() {
+                           <X className="h-2.5 w-2.5" />
+                         </Button>
+                       </div>
++                      {/* Trassia (M-06): the vertex coordinates. A polyline
++                          along an alignment is the case where these ARE the
++                          measurement; upstream showed only the length. */}
++                      <ChEnhPoints points={pl.points} />
+                     </div>
+                   ))}
+                 </div>
+@@ -551,6 +578,13 @@ export function MeasureOverlay() {
+                           <X className="h-2.5 w-2.5" />
+                         </Button>
+                       </div>
++                      {/* Trassia (M-06): the picked points. `S` is the apex of
++                          a three-point angle — which pick that was cannot be
++                          recovered from the coordinates themselves. */}
++                      <ChEnhPoints
++                        points={a.picks.map((pick) => pick.point)}
++                        labels={chAnglePickLabels(a.kind, a.picks.length)}
++                      />
+                     </div>
+                   ))}
+                 </div>
+@@ -751,7 +785,12 @@ function MeasurementItem({ measurement, index, onDelete, geoAnchor, unitDisplayO
+       </div>
+       <div className="overflow-x-auto">
+         <div className="font-mono text-[10px] leading-tight text-muted-foreground whitespace-nowrap">
+-          {formatAxisDeltas(components, unitDisplayOverrides)}
++          {/* Trassia: ΔE/ΔN/ΔH when the model is georeferenced. Upstream's
++              dX/dY/dZ are RENDERER axes (Y up), so directly above the E/N/H
++              line the northing appeared under `dZ` with the sign inverted
++              (M-05). Falls back to the upstream line when there is no
++              georeference — there is no E/N line to be misread as then. */}
++          <ChAxisDeltas start={measurement.start} end={measurement.end} overrides={unitDisplayOverrides} />
+         </div>
+         <div className="font-mono text-[10px] leading-tight text-muted-foreground whitespace-nowrap">
+           {formatHorizontalVertical(components, unitDisplayOverrides)}
+diff --git a/apps/viewer/src/components/viewer/tools/MeasurementVisuals.tsx b/apps/viewer/src/components/viewer/tools/MeasurementVisuals.tsx
+index 0ea8533..1910968 100644
+--- a/apps/viewer/src/components/viewer/tools/MeasurementVisuals.tsx
++++ b/apps/viewer/src/components/viewer/tools/MeasurementVisuals.tsx
+@@ -13,9 +13,11 @@ import { SnapType, type SnapTarget } from '@ifc-lite/renderer';
+ import { formatDistance } from './formatDistance';
+ import {
+   distanceComponents,
+-  formatAxisDeltas,
+   formatHorizontalVertical,
+ } from './measure-modes/components';
++// Trassia overlay — ΔE/ΔN/ΔH instead of renderer-axis deltas when the model
++// carries an IfcMapConversion. See measure-modes/ch-measure-readouts.tsx.
++import { ChAxisDeltas } from './measure-modes/ch-measure-readouts';
+ import { inclination, formatInclination } from './measure-modes/inclination';
+ import { polylineOpenLength, polylineBasisLabel } from './measure-modes/polyline';
+ import { CLOSE_LOOP_SCREEN_RADIUS_PX } from '../measureHandlers';
+@@ -141,9 +143,11 @@ export const MeasurementOverlays = React.memo(function MeasurementOverlays({ mea
+             }}
+           >
+             {formatDistance(m.distance, unitDisplayOverrides)}
+-            {/* Axis breakdown, derived on render (see measure-modes/components). */}
++            {/* Axis breakdown, derived on render (see measure-modes/components).
++                Trassia: ΔE/ΔN/ΔH on a georeferenced model — the renderer axes
++                put the northing under `dZ` with the sign inverted (M-05). */}
+             <div className="font-normal text-[10px] leading-tight opacity-80">
+-              {formatAxisDeltas(components, unitDisplayOverrides)}
++              <ChAxisDeltas start={m.start} end={m.end} overrides={unitDisplayOverrides} />
+             </div>
+             <div className="font-normal text-[10px] leading-tight opacity-80">
+               {formatHorizontalVertical(components, unitDisplayOverrides)}
+@@ -303,7 +307,11 @@ export const MeasurementOverlays = React.memo(function MeasurementOverlays({ mea
+                 horizontal/vertical — the drag is exactly when a setting-out user
+                 wants dX/dY/dZ, so the live readout must not be the poorer one. */}
+             <div className="font-normal text-[10px] leading-tight opacity-80">
+-              {formatAxisDeltas(distanceComponents(activeMeasurement.start, activeMeasurement.current), unitDisplayOverrides)}
++              <ChAxisDeltas
++                start={activeMeasurement.start}
++                end={activeMeasurement.current}
++                overrides={unitDisplayOverrides}
++              />
+             </div>
+             <div className="font-normal text-[10px] leading-tight opacity-80">
+               {formatHorizontalVertical(distanceComponents(activeMeasurement.start, activeMeasurement.current), unitDisplayOverrides)}

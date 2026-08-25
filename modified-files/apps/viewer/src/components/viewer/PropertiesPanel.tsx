@@ -44,7 +44,10 @@ import { ZoneVolumeBreakdown } from './ZoneVolumeBreakdown';
 import type { ZoneSet } from '@/lib/zones';
 import { withInheritedTypeQuantities } from '@/lib/zones/inherited-quantities';
 
-import { CoordVal, CoordRow } from './properties/CoordinateDisplay';
+import { CoordRow } from './properties/CoordinateDisplay';
+// Trassia overlay — the World row used to print the model's own world
+// coordinates under the letters E/N beside an EPSG chip. See the file.
+import { ChWorldSummary, ChWorldRows } from './properties/ChWorldPosition';
 import { renderToWorldViewer, viewerToIfcAxes } from './tools/measure-modes/coordinates';
 import { useRenderFrameOffsets } from '@/hooks/useRenderFrameOffsets';
 import { PropertySetCard } from './properties/PropertySetCard';
@@ -1457,16 +1460,11 @@ export function PropertiesPanel() {
               <span className="font-bold uppercase tracking-wide shrink-0">World</span>
               {!coordOpen && (
                 <>
-                  {entityCoordinates && (
-                    <span className="font-mono text-[10px] text-teal-600/70 dark:text-teal-500/70 truncate min-w-0 flex-1 tabular-nums">
-                      <CoordVal axis="E" value={entityCoordinates.worldZup.center.x} />{' '}
-                      <CoordVal axis="N" value={entityCoordinates.worldZup.center.y} />{' '}
-                      <CoordVal axis="Z" value={entityCoordinates.worldZup.center.z} />
-                    </span>
-                  )}
-                  {renderedGeoref?.projectedCRS?.name && (
-                    <span className="font-mono text-[9px] text-teal-500/60 shrink-0">{renderedGeoref.projectedCRS.name}</span>
-                  )}
+                  {/* Trassia: the real projected coordinate (E/N/H through the
+                      model's IfcMapConversion) plus the CRS of the frame those
+                      numbers are actually in — or the model coordinate labelled
+                      `local` with no EPSG chip at all. */}
+                  <ChWorldSummary coordinates={entityCoordinates} />
                   <span className="text-[9px] text-teal-500/0 group-hover/coord:text-teal-500/40 transition-colors shrink-0">details</span>
                 </>
               )}
@@ -1474,15 +1472,11 @@ export function PropertiesPanel() {
             <CollapsibleContent>
               {entityCoordinates && (
                 <div className="px-2 py-1.5 space-y-0.5">
-                  <CoordRow
-                    label=""
-                    values={[
-                      { axis: 'E', value: entityCoordinates.worldZup.center.x },
-                      { axis: 'N', value: entityCoordinates.worldZup.center.y },
-                      { axis: 'Z', value: entityCoordinates.worldZup.center.z },
-                    ]}
-                    primary
-                    copyLabel="world"
+                  {/* Trassia: replaces the former unlabelled E/N/Z row, which
+                      showed model coordinates under national-coordinate
+                      letters. `Local` (render frame) below is untouched. */}
+                  <ChWorldRows
+                    coordinates={entityCoordinates}
                     coordCopied={coordCopied}
                     onCopy={copyCoords}
                   />
