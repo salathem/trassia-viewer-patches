@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-index 6cafd64..1f682cc 100644
+index 6cafd64..b9ed6d6 100644
 --- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
 +++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-@@ -31,6 +31,10 @@ import { parseRoleFromToken } from '@/lib/collab/share-link';
+@@ -31,6 +31,12 @@ import { parseRoleFromToken } from '@/lib/collab/share-link';
  import { chIsHtmlResponse } from '@/lib/ch/ch-file-validation';
  import { chSetLoadNotice } from '@/lib/ch/ch-load-notice';
  import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
@@ -10,10 +10,12 @@ index 6cafd64..1f682cc 100644
 +// models from a manifest instead of one file. See hooks/useChProjectLoader.ts.
 +import { useChProjectLoader } from '@/hooks/useChProjectLoader';
 +import { ChProjectBanner } from './ChProjectBanner';
++import { ChLensEngine } from './ChLensEngine';
++import { chReadProjectParam } from '@/lib/ch/project-manifest';
  import { EntityContextMenu } from './EntityContextMenu';
  import { useDuplicateShortcut } from './useDuplicateShortcut';
  import { HoverTooltip } from './HoverTooltip';
-@@ -97,10 +101,24 @@ export function ViewerLayout() {
+@@ -97,10 +103,30 @@ export function ViewerLayout() {
    // the param against the current document and require its origin to match
    // window.location.origin; a cross-origin URL is refused, never fetched.
    const { addModel: autoloadAddModel } = useIfc();
@@ -29,7 +31,13 @@ index 6cafd64..1f682cc 100644
 +    // decide that origin by whichever fetch returned first, so the project
 +    // link wins and the single-file link stands down — with a word in the
 +    // console rather than silently.
-+    if (params.has('project')) {
++    //
++    // Only a NAMED project takes the wheel. `params.has('project')` is true
++    // for `?project=` too, so an empty parameter used to silence `?model=`
++    // while the project loader had no slug to load — an empty viewer with the
++    // reason in the console (finding M-1). An empty parameter now says so and
++    // lets `?model=` proceed.
++    if (chReadProjectParam(window.location.search).slug !== '') {
 +      if (params.has('model')) {
 +        console.warn('[viewer] ?model= ignored: ?project= loads this session');
 +      }
@@ -38,7 +46,7 @@ index 6cafd64..1f682cc 100644
      const modelUrl = params.get('model');
      if (!modelUrl) return;
      autoloadDoneRef.current = true;
-@@ -407,6 +425,11 @@ export function ViewerLayout() {
+@@ -407,6 +433,16 @@ export function ViewerLayout() {
              </span>
            </div>
          )}
@@ -47,22 +55,28 @@ index 6cafd64..1f682cc 100644
 +            files hang in. */}
 +        <ChProjectBanner />
 +
++        {/* Trassia: on a phone the Lens panel is never mounted (one bottom
++            sheet, closed at start), so nothing evaluates the lens a project
++            manifest set. This runs it where the panel cannot. */}
++        <ChLensEngine />
++
          {/* Trassia: a link that yielded no model, or a model that loaded
              incomplete. Its own row, above everything, until dismissed. */}
          <ChLoadNoticeBanner />
 diff --git a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
-index 71d8c9a..2b8a289 100644
+index 71d8c9a..c18540c 100644
 --- a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
 +++ b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
-@@ -17,6 +17,7 @@ import { SectionPlaneVisualization } from './SectionVisualization';
+@@ -17,6 +17,8 @@ import { SectionPlaneVisualization } from './SectionVisualization';
  import { SectionCapControls } from './SectionCapControls';
  // Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/ChAlignmentSection.tsx
  import { ChAlignmentSection } from './ChAlignmentSection';
 +import { chPeekProjectSection } from '@/lib/ch/ch-project-section';
++import { useChSectionPanelAutoCollapse } from '@/hooks/useChNarrowPanels';
  
  export function SectionOverlay() {
    const sectionPlane = useViewerStore((s) => s.sectionPlane);
-@@ -34,7 +35,11 @@ export function SectionOverlay() {
+@@ -34,7 +36,15 @@ export function SectionOverlay() {
    const setDrawingPanelVisible = useViewerStore((s) => s.setDrawing2DPanelVisible);
    const drawingPanelVisible = useViewerStore((s) => s.drawing2DPanelVisible);
    const clearDrawing = useViewerStore((s) => s.clearDrawing2D);
@@ -72,6 +86,10 @@ index 71d8c9a..2b8a289 100644
 +  // it. A project manifest that asks for a cross-section would therefore wait
 +  // forever for a click. When such a request is pending, the panel opens.
 +  const [isPanelCollapsed, setIsPanelCollapsed] = useState(() => !chPeekProjectSection());
++  // Trassia (finding M-2): having opened for the manifest's cross-section, the
++  // panel folds itself away again on a narrow viewport — there it covers the
++  // whole canvas and the model would never be seen. See the hook.
++  useChSectionPanelAutoCollapse(setIsPanelCollapsed);
    const isCustom = sectionPlane.custom !== undefined;
  
    const handleClose = useCallback(() => {

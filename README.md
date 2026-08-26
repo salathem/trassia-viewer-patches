@@ -99,6 +99,16 @@ The patches fall into two groups:
   inside the collapsed part and would otherwise never render. All of the logic
   lives in newly created files outside this source offer.
 
+  Revised after the acceptance test of 2026-08-26: only a NAMED project stands
+  the `?model=` branch down — `?project=` with an empty value used to silence it
+  while the loader had no slug to load, leaving an empty viewer with the reason
+  in the console. On a narrow viewport the section panel now folds itself away
+  once it has placed the manifest's cut, and a headless hook evaluates the lens
+  where the Lens panel is never mounted (a phone hosts one bottom sheet, closed
+  at start), so a project's colouring and its legend exist there too. Both
+  additions are one import and one call each; the logic lives in newly created
+  files outside this source offer.
+
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the property-set family classifier) are not modifications of MPL-covered
 files and are not part of this source offer

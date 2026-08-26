@@ -35,6 +35,8 @@ import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
 // models from a manifest instead of one file. See hooks/useChProjectLoader.ts.
 import { useChProjectLoader } from '@/hooks/useChProjectLoader';
 import { ChProjectBanner } from './ChProjectBanner';
+import { ChLensEngine } from './ChLensEngine';
+import { chReadProjectParam } from '@/lib/ch/project-manifest';
 import { EntityContextMenu } from './EntityContextMenu';
 import { useDuplicateShortcut } from './useDuplicateShortcut';
 import { HoverTooltip } from './HoverTooltip';
@@ -113,7 +115,13 @@ export function ViewerLayout() {
     // decide that origin by whichever fetch returned first, so the project
     // link wins and the single-file link stands down — with a word in the
     // console rather than silently.
-    if (params.has('project')) {
+    //
+    // Only a NAMED project takes the wheel. `params.has('project')` is true
+    // for `?project=` too, so an empty parameter used to silence `?model=`
+    // while the project loader had no slug to load — an empty viewer with the
+    // reason in the console (finding M-1). An empty parameter now says so and
+    // lets `?model=` proceed.
+    if (chReadProjectParam(window.location.search).slug !== '') {
       if (params.has('model')) {
         console.warn('[viewer] ?model= ignored: ?project= loads this session');
       }
@@ -429,6 +437,11 @@ export function ViewerLayout() {
             to skip. Above the file-level notice, because it is the frame the
             files hang in. */}
         <ChProjectBanner />
+
+        {/* Trassia: on a phone the Lens panel is never mounted (one bottom
+            sheet, closed at start), so nothing evaluates the lens a project
+            manifest set. This runs it where the panel cannot. */}
+        <ChLensEngine />
 
         {/* Trassia: a link that yielded no model, or a model that loaded
             incomplete. Its own row, above everything, until dismissed. */}

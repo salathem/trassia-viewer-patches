@@ -18,6 +18,7 @@ import { SectionCapControls } from './SectionCapControls';
 // Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/ChAlignmentSection.tsx
 import { ChAlignmentSection } from './ChAlignmentSection';
 import { chPeekProjectSection } from '@/lib/ch/ch-project-section';
+import { useChSectionPanelAutoCollapse } from '@/hooks/useChNarrowPanels';
 
 export function SectionOverlay() {
   const sectionPlane = useViewerStore((s) => s.sectionPlane);
@@ -40,6 +41,10 @@ export function SectionOverlay() {
   // it. A project manifest that asks for a cross-section would therefore wait
   // forever for a click. When such a request is pending, the panel opens.
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(() => !chPeekProjectSection());
+  // Trassia (finding M-2): having opened for the manifest's cross-section, the
+  // panel folds itself away again on a narrow viewport — there it covers the
+  // whole canvas and the model would never be seen. See the hook.
+  useChSectionPanelAutoCollapse(setIsPanelCollapsed);
   const isCustom = sectionPlane.custom !== undefined;
 
   const handleClose = useCallback(() => {
