@@ -1,0 +1,28 @@
+diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
+index 0bf9acb..c4231ea 100644
+--- a/apps/viewer/src/hooks/useDrawingExport.ts
++++ b/apps/viewer/src/hooks/useDrawingExport.ts
+@@ -6,6 +6,9 @@ import { useCallback } from 'react';
+ import type React from 'react';
+ import { posthog } from '@/lib/analytics';
+ import { downloadFile, sanitizeFilename } from '@/lib/export/download';
++// Trassia overlay (not upstream) — the station cut publishes what it is
++// called; see overlay/apps/viewer/src/lib/ch/section-export-name.ts.
++import { chSectionExportStem } from '@/lib/ch/section-export-name';
+ import { toast } from '@/components/ui/toast';
+ import { pdfLineStyleFor } from '@/lib/export/pdf-line-style';
+ import {
+@@ -1030,7 +1033,12 @@ function useDrawingExport({
+       coordinateTransform,
+       metadataComment,
+     });
+-    const stem = `section-${sectionPlane.axis}-${sectionPlane.position}`;
++    // Trassia (audit finding M-11): a cut set at a station on an
++    // IfcAlignment names itself after that axis and station
++    // (`N4_49+249.66_20260826.dxf`). Upstream's cardinal-axis-plus-percentage
++    // name is kept for every other section, where it is the honest one.
++    const stem = chSectionExportStem(sectionPlane.custom)
++      ?? `section-${sectionPlane.axis}-${sectionPlane.position}`;
+     downloadFile(dxf, `${stem}.dxf`, 'application/dxf');
+     posthog.capture('drawing_exported', {
+       format: 'dxf',

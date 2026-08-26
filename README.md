@@ -11,7 +11,7 @@ executable form served at https://viewer.trassia.com.
 
 - `patches/` — the exact patches applied on top of upstream commit
   `ec358164ed368aba89ae1a9e8744977e54293fd7` (tag `@ifc-lite/wasm@6.0.0`)
-- `modified-files/` — the fifteen modified files in full source form (base commit + patches applied):
+- `modified-files/` — the twenty-one modified files in full source form (base commit + patches applied):
   - `apps/viewer/src/store/slices/measurementSlice.ts`
   - `apps/viewer/src/components/viewer/tools/MeasurePanel.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx`
@@ -27,6 +27,12 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/properties/PropertySetCard.tsx`
   - `apps/viewer/src/components/viewer/properties/ModelMetadataPanel.tsx`
   - `apps/viewer/src/hooks/useIfcLoader.ts`
+  - `apps/viewer/src/hooks/useDrawingExport.ts`
+  - `apps/viewer/src/hooks/dxfExportGeoref.test.ts`
+  - `packages/drawing-2d/src/dxf/writer.ts`
+  - `packages/drawing-2d/src/dxf/writer.test.ts`
+  - `packages/drawing-2d/src/dxf-exporter.ts`
+  - `packages/drawing-2d/src/dxf-exporter.test.ts`
 - `LICENSE` — Mozilla Public License 2.0 (unchanged, from upstream)
 
 All files in this repository are licensed under the **MPL-2.0**.
@@ -59,6 +65,27 @@ The patches fall into two groups:
   - `0010` `Elements with Geometry` renamed to `Elements in Storeys` (it counts
     storey assignments); a length of exactly zero prints `0.000 m`, not
     `0.0 mm`. Includes the matching adjustment to the upstream test.
+
+- `0011`–`0012` — corrections from the same acceptance test, finding M-11
+  (DXF export):
+  - `0011` the exported DXF declares its unit in the header (`$INSUNITS = 6`,
+    metres) instead of only in a `999` comment that no CAD import reads.
+    `$INSUNITS` post-dates the writer's R12 target, and is written anyway: a
+    DXF HEADER is a flat list of `9`-tagged variable names and every reader
+    skips the ones it does not know, so the file stays valid for readers that
+    ignore it and becomes unit-correct for AutoCAD, BricsCAD and QGIS, which
+    otherwise import it unitless. The `999` comment is kept alongside as the
+    R12-legal statement of the same fact. Includes the matching adjustments to
+    the three upstream tests that pinned the absence of the variable; the
+    R12-conformance assertions they also carry (no handles, no subclass
+    markers, `POLYLINE` rather than `LWPOLYLINE`, LTYPE without group 74) are
+    untouched.
+  - `0012` a section cut placed at a station on an `IfcAlignment` exports as
+    `<axis>_<station>_<date>.dxf` (e.g. `N4_49+250.00_20260826.dxf`) instead of
+    `section-<cardinal direction>-<percentage>.dxf`. Every other section keeps
+    upstream's own name, which for those is the accurate one. One import plus
+    one call; the naming logic lives in a newly created file outside this
+    source offer.
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the property-set family classifier) are not modifications of MPL-covered

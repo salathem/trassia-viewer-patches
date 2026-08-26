@@ -1,0 +1,146 @@
+diff --git a/apps/viewer/src/hooks/dxfExportGeoref.test.ts b/apps/viewer/src/hooks/dxfExportGeoref.test.ts
+index dec150b..7c98e53 100644
+--- a/apps/viewer/src/hooks/dxfExportGeoref.test.ts
++++ b/apps/viewer/src/hooks/dxfExportGeoref.test.ts
+@@ -377,8 +377,8 @@ describe('DXF export georeference round trip (through the real writer + parser)'
+       flipped: false,
+     });
+     const dxf = exportToDXF(drawing, { coordinateTransform: transform });
+-    // R12 (the writer's target, see dxf/writer.ts) has no $INSUNITS header
+-    // var; the unit (always metres) is stated in a leading 999 comment.
++    // The unit (always metres) is stated in a leading 999 comment and,
++    // since the Trassia M-11 patch, in $INSUNITS = 6 as well.
+     assert.match(dxf, /^999\n.*metres/);
+     const doc = parseDxf(dxf);
+     const line = doc.entities.find((e) => e.kind === 'line');
+diff --git a/packages/drawing-2d/src/dxf-exporter.test.ts b/packages/drawing-2d/src/dxf-exporter.test.ts
+index c0e9630..3a3a2d1 100644
+--- a/packages/drawing-2d/src/dxf-exporter.test.ts
++++ b/packages/drawing-2d/src/dxf-exporter.test.ts
+@@ -85,10 +85,12 @@ const underlay = (): DxfUnderlay => ({
+ });
+ 
+ describe('DXFExporter', () => {
+-  it('produces parseable DXF (R12, no $INSUNITS) stating metres in the leading comment', () => {
++  it('produces parseable DXF (R12) stating metres in $INSUNITS and in the leading comment', () => {
+     const dxf = exportToDXF(emptyDrawing());
+     expect(dxf).toMatch(/^999\n.*metres/);
+     expect(dxf).toContain('$ACADVER\n1\nAC1009');
++    // Trassia patch, finding M-11.
++    expect(dxf).toContain('$INSUNITS\n70\n6');
+     const doc = parseDxf(dxf);
+     expect(doc.entities).toHaveLength(0);
+   });
+diff --git a/packages/drawing-2d/src/dxf-exporter.ts b/packages/drawing-2d/src/dxf-exporter.ts
+index e7dd3af..5ce51d3 100644
+--- a/packages/drawing-2d/src/dxf-exporter.ts
++++ b/packages/drawing-2d/src/dxf-exporter.ts
+@@ -21,10 +21,12 @@
+  *
+  * Output targets DXF R12 (AC1009) — see `dxf/writer.ts`'s module docs for
+  * why (handles/subclass markers are mandatory from R13 on; R12 needs
+- * neither and is the universal interop baseline). There is accordingly no
+- * `$INSUNITS` header variable; the unit (always metres) is stated in a
+- * `999` comment at the top of the file instead, optionally naming the
+- * `IfcProjectedCRS` via `metadataComment`.
++ * neither and is the universal interop baseline). The unit (always metres)
++ * is declared twice: as `$INSUNITS = 6`, which importers read, and in a
++ * `999` comment at the top of the file, which is what R12 itself allows —
++ * the comment optionally naming the `IfcProjectedCRS` via
++ * `metadataComment`. See the writer's docs for why a post-R12 header
++ * variable is written anyway (Trassia patch, audit finding M-11).
+  */
+ 
+ import type { Drawing2D, DrawingLine, DrawingPolygon, LineCategory, Point2D } from './types.js';
+diff --git a/packages/drawing-2d/src/dxf/writer.test.ts b/packages/drawing-2d/src/dxf/writer.test.ts
+index b8b0693..f4acd7e 100644
+--- a/packages/drawing-2d/src/dxf/writer.test.ts
++++ b/packages/drawing-2d/src/dxf/writer.test.ts
+@@ -24,16 +24,18 @@ import { parseDxf } from './parser.js';
+ import type { DxfLineEntity, DxfPolylineEntity, DxfTextEntity } from './types.js';
+ 
+ describe('DxfWriter structure', () => {
+-  it('writes HEADER with $ACADVER=AC1009 (R12) and no $INSUNITS', () => {
++  it('writes HEADER with $ACADVER=AC1009 (R12) and $INSUNITS=6 (metres)', () => {
+     const w = new DxfWriter();
+     const layer = w.layer('A', '#000000');
+     w.addLine({ x: 0, y: 0 }, { x: 1, y: 1 }, layer);
+     const dxf = w.toString();
+     expect(dxf).toContain('$ACADVER\n1\nAC1009');
+-    expect(dxf).not.toContain('$INSUNITS');
++    // Trassia patch (finding M-11): the unit is declared where importers
++    // look for it, not only in a comment no importer reads.
++    expect(dxf).toContain('$INSUNITS\n70\n6');
+   });
+ 
+-  it('states the unit in a leading 999 comment (R12 has no $INSUNITS)', () => {
++  it('states the unit in a leading 999 comment as well as in $INSUNITS', () => {
+     const w = new DxfWriter();
+     const dxf = w.toString();
+     expect(dxf.startsWith('999\n')).toBe(true);
+@@ -129,9 +131,10 @@ describe('DxfWriter entity round trip (via this package\'s own parser)', () => {
+     const layer = w.layer('walls', '#000000');
+     w.addLine({ x: 1.5, y: -2.25 }, { x: 10, y: 20 }, layer);
+     const doc = parseDxf(w.toString());
+-    // R12 has no $INSUNITS; the parser's default (0/unitless) is expected —
+-    // the writer always emits metres and states so via the 999 comment.
+-    expect(doc.insunits).toBe(0);
++    // Trassia patch (finding M-11): the writer declares metres in
++    // $INSUNITS, so the parser reads 6 rather than falling back to
++    // 0/unitless. The 999 comment still states the same thing.
++    expect(doc.insunits).toBe(6);
+     expect(doc.entities).toHaveLength(1);
+     const line = doc.entities[0] as DxfLineEntity;
+     expect(line.kind).toBe('line');
+diff --git a/packages/drawing-2d/src/dxf/writer.ts b/packages/drawing-2d/src/dxf/writer.ts
+index bbac440..e97195a 100644
+--- a/packages/drawing-2d/src/dxf/writer.ts
++++ b/packages/drawing-2d/src/dxf/writer.ts
+@@ -22,9 +22,17 @@
+  * is a possible follow-up, not this writer's job.
+  *
+  * Consequences of the R12 target:
+- *  - No `$INSUNITS` header variable (introduced in R14) — the exported
+- *    unit (always metres) is instead stated in a `999` comment at the very
+- *    top of the file (valid in every DXF version, ignored by every reader).
++ *  - `$INSUNITS` post-dates R12 (it arrives with R14). It is written
++ *    anyway, as `6` (metres). The HEADER section is a flat list of
++ *    `9`-tagged variable names and every DXF reader — this package's own
++ *    `parser.ts` included — skips the variables it does not know, so an
++ *    R12 file carrying it stays valid for readers that ignore it and
++ *    becomes unit-correct for the many that honour it. Without it
++ *    AutoCAD, BricsCAD and QGIS import the drawing as unitless, and the
++ *    `999` comment stating "metres" is read by no importer at all
++ *    (Trassia patch, audit finding M-11 of 2026-08-26). That comment is
++ *    kept alongside: it is the only unit statement a strict R12 reader
++ *    will accept.
+  *  - `LWPOLYLINE` doesn't exist until R14 either; polylines are written as
+  *    classic `POLYLINE` + `VERTEX`* + `SEQEND`.
+  *  - No group 5 (handle) or group 100 (subclass marker) anywhere in this
+@@ -67,7 +75,7 @@ interface DxfLayerRecord {
+ const H_ALIGN_CODE: Record<DxfTextHAlign, number> = { left: 0, center: 1, right: 2 };
+ const V_ALIGN_CODE: Record<DxfTextVAlign, number> = { baseline: 0, bottom: 1, middle: 2, top: 3 };
+ 
+-/** Default `999` comment prepended to the file (states units — R12 has no `$INSUNITS`). */
++/** Default `999` comment prepended to the file (states units alongside `$INSUNITS`). */
+ const DEFAULT_HEADER_COMMENT = 'ifc-lite section export - units: metres';
+ 
+ /**
+@@ -323,11 +331,15 @@ export class DxfWriter {
+     const [minX, minY, maxX, maxY] = this.hasExtents()
+       ? [this.minX, this.minY, this.maxX, this.maxY]
+       : [0, 0, 0, 0];
+-    // R12 (AC1009): no $INSUNITS (introduced R14) — see the `999` comment
+-    // this.toString() prepends ahead of this section instead.
++    // $INSUNITS = 6 (metres). Later than R12 strictly allows, and written
++    // deliberately: unknown header variables are skipped by every reader,
++    // and without it the drawing imports unitless (Trassia patch, finding
++    // M-11). The `999` comment this.toString() prepends stays as the
++    // R12-legal statement of the same fact.
+     return (
+       '0\nSECTION\n2\nHEADER\n' +
+       '9\n$ACADVER\n1\nAC1009\n' +
++      '9\n$INSUNITS\n70\n6\n' +
+       '9\n$EXTMIN\n10\n' + fmt(minX) + '\n20\n' + fmt(minY) + '\n30\n0.0\n' +
+       '9\n$EXTMAX\n10\n' + fmt(maxX) + '\n20\n' + fmt(maxY) + '\n30\n0.0\n' +
+       '0\nENDSEC\n'
