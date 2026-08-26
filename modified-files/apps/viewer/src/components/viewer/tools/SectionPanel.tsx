@@ -17,6 +17,7 @@ import { SectionPlaneVisualization } from './SectionVisualization';
 import { SectionCapControls } from './SectionCapControls';
 // Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/ChAlignmentSection.tsx
 import { ChAlignmentSection } from './ChAlignmentSection';
+import { chPeekProjectSection } from '@/lib/ch/ch-project-section';
 
 export function SectionOverlay() {
   const sectionPlane = useViewerStore((s) => s.sectionPlane);
@@ -34,7 +35,11 @@ export function SectionOverlay() {
   const setDrawingPanelVisible = useViewerStore((s) => s.setDrawing2DPanelVisible);
   const drawingPanelVisible = useViewerStore((s) => s.drawing2DPanelVisible);
   const clearDrawing = useViewerStore((s) => s.clearDrawing2D);
-  const [isPanelCollapsed, setIsPanelCollapsed] = useState(true);
+  // Trassia (Phase 1.1): the panel ships collapsed, and the station block
+  // lives INSIDE the collapsed part — it is not rendered until the user opens
+  // it. A project manifest that asks for a cross-section would therefore wait
+  // forever for a click. When such a request is pending, the panel opens.
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(() => !chPeekProjectSection());
   const isCustom = sectionPlane.custom !== undefined;
 
   const handleClose = useCallback(() => {

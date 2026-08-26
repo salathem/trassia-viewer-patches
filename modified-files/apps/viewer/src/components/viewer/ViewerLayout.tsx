@@ -31,6 +31,10 @@ import { parseRoleFromToken } from '@/lib/collab/share-link';
 import { chIsHtmlResponse } from '@/lib/ch/ch-file-validation';
 import { chSetLoadNotice } from '@/lib/ch/ch-load-notice';
 import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
+// Trassia overlay (Phase 1.1) — `?project=<slug>` opens a curated set of
+// models from a manifest instead of one file. See hooks/useChProjectLoader.ts.
+import { useChProjectLoader } from '@/hooks/useChProjectLoader';
+import { ChProjectBanner } from './ChProjectBanner';
 import { EntityContextMenu } from './EntityContextMenu';
 import { useDuplicateShortcut } from './useDuplicateShortcut';
 import { HoverTooltip } from './HoverTooltip';
@@ -97,10 +101,24 @@ export function ViewerLayout() {
   // the param against the current document and require its origin to match
   // window.location.origin; a cross-origin URL is refused, never fetched.
   const { addModel: autoloadAddModel } = useIfc();
+  // Trassia (Phase 1.1): the project-manifest deep link. Its own hook, so this
+  // one keeps its shape; it does nothing without `?project=`.
+  useChProjectLoader();
   const autoloadDoneRef = useRef(false);
   useEffect(() => {
     if (autoloadDoneRef.current) return;
     const params = new URLSearchParams(window.location.search);
+    // Trassia: `?project=` owns the load order (the FIRST model fixes the
+    // shared RTC origin for the whole federation). A `?model=` racing it would
+    // decide that origin by whichever fetch returned first, so the project
+    // link wins and the single-file link stands down — with a word in the
+    // console rather than silently.
+    if (params.has('project')) {
+      if (params.has('model')) {
+        console.warn('[viewer] ?model= ignored: ?project= loads this session');
+      }
+      return;
+    }
     const modelUrl = params.get('model');
     if (!modelUrl) return;
     autoloadDoneRef.current = true;
@@ -407,6 +425,11 @@ export function ViewerLayout() {
             </span>
           </div>
         )}
+        {/* Trassia: which project is loading, how far it is, and what it had
+            to skip. Above the file-level notice, because it is the frame the
+            files hang in. */}
+        <ChProjectBanner />
+
         {/* Trassia: a link that yielded no model, or a model that loaded
             incomplete. Its own row, above everything, until dismissed. */}
         <ChLoadNoticeBanner />

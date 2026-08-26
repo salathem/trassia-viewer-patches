@@ -87,6 +87,18 @@ The patches fall into two groups:
     one call; the naming logic lives in a newly created file outside this
     source offer.
 
+- `0013` — project sets: `?project=<slug>` loads a curated JSON manifest from
+  the same origin (`/modelle/projekte/<slug>.json`) and federates the models it
+  names, then applies the start view, an optional auto-colour lens and an
+  optional cross-section at an alignment station. Twenty-nine added lines in two
+  files: the hook call plus the progress strip in `ViewerLayout.tsx`, a guard
+  that stands the single-file `?model=` branch down while `?project=` is set
+  (both racing would let the faster `fetch` decide the shared coordinate
+  origin), and in `SectionPanel.tsx` a `useState` initialiser so the panel opens
+  expanded when a manifest ordered a cross-section — its station block lives
+  inside the collapsed part and would otherwise never render. All of the logic
+  lives in newly created files outside this source offer.
+
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the property-set family classifier) are not modifications of MPL-covered
 files and are not part of this source offer
