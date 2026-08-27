@@ -1,0 +1,61 @@
+diff --git a/apps/viewer/src/components/viewer/Viewport.tsx b/apps/viewer/src/components/viewer/Viewport.tsx
+index e939c60..2dcd945 100644
+--- a/apps/viewer/src/components/viewer/Viewport.tsx
++++ b/apps/viewer/src/components/viewer/Viewport.tsx
+@@ -68,6 +68,8 @@ import { useAlignmentLines3D } from '../../hooks/useAlignmentLines3D.js';
+ import { useGridLines3D } from '../../hooks/useGridLines3D.js';
+ import { useDxfUnderlays3DLines } from '../../hooks/useDxfUnderlay.js';
+ import { uploadDxfLines3DGuarded } from './dxf-lines-3d-upload.js';
++// Trassia overlay (not upstream) — Paket V-DRAPE, siehe hooks/useChDrapeLines.ts.
++import { chDrapeMergeLines, useChDrapeLines } from '@/hooks/useChDrapeLines';
+ import { subscribeViewportHealth } from './device-loss-report.js';
+ 
+ interface ViewportProps {
+@@ -1509,7 +1511,20 @@ export function Viewport({
+   // a load-time choice — see DxfUnderlayPanel.tsx), independent of the 2D
+   // drawing panel's underlay. Only line paths are lifted to 3D; fills/text
+   // are not (see dxfUnderlayToWorldLines3D's doc).
+-  const dxfLines3D = useDxfUnderlays3DLines(coordinateInfo);
++  const dxfLines3DUpstream = useDxfUnderlays3DLines(coordinateInfo);
++  // Trassia (Paket V-DRAPE): 2D-Daten, die auf der Gelaendeoberflaeche liegen.
++  // Sie teilen sich diesen GPU-Puffer mit den DXF-Unterlagen des Upstreams —
++  // wer ihn allein beschriebe, loeschte die Linien des anderen. Der Haken
++  // meldet ausserdem den Szenenwechsel, weil er hier immer haengt.
++  // `useMemo` ist nicht Kosmetik: liegen BEIDE Quellen an, legt das
++  // Zusammenfuegen einen neuen Puffer an — ohne die Merkung waere das je
++  // Renderdurchlauf eine neue Identitaet und der Effekt unten wuerde bei jedem
++  // Durchlauf neu auf die GPU schreiben.
++  const chDrape = useChDrapeLines();
++  const dxfLines3D = useMemo(
++    () => chDrapeMergeLines(dxfLines3DUpstream, chDrape.positions),
++    [dxfLines3DUpstream, chDrape.positions],
++  );
+   useEffect(() => {
+     const renderer = rendererRef.current;
+     if (!renderer || !isInitialized) return;
+diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
+index 7f7d688..6e57683 100644
+--- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
++++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
+@@ -52,6 +52,8 @@ import { recordDownloadedSourceFile } from '@/lib/sources/persistence';
+ import { sanitizeFilename } from '@/lib/export/download';
+ import { enqueueSourceLoad } from '@/lib/sources/loadQueue';
+ import { toast } from '@/components/ui/toast';
++// Trassia overlay (not upstream) — Paket V-DRAPE, siehe lib/ch/drape-ingest.ts.
++import { chDrapeTakeDroppedFiles } from '@/lib/ch/drape-ingest';
+ import { TourInvite } from '@/components/tours/TourInvite';
+ import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
+ import { describeUnsupportedFormat } from '@/hooks/ingest/pointCloudIngest';
+@@ -624,6 +626,12 @@ export function ViewportContainer() {
+     const allDropped0 = Array.from(e.dataTransfer.files);
+     const { dxfFiles, modelFiles: allDropped } = splitDxfFiles(allDropped0);
+     if (dxfFiles.length > 0) void ingestDxfFiles(dxfFiles);
++    // Trassia (Paket V-DRAPE): dieselbe Datei ZUSAETZLICH auf das Gelaende
++    // legen. Die 2D-Unterlage oben bleibt unveraendert — hier kommt nur eine
++    // 3D-Fassung dazu, die im Panel „Terrain drape" ein- und ausschaltbar ist
++    // (worauf der Hinweis dort auch aufmerksam macht). GeoJSON kommt nicht
++    // durch `splitDxfFiles`, also wird aus der vollen Liste gelesen.
++    chDrapeTakeDroppedFiles(allDropped0);
+     if (allDropped.length === 0) return;
+ 
+     // Filter to supported files (IFC, IFCX, GLB, point clouds)
