@@ -10,7 +10,7 @@ executable form served at https://viewer.trassia.com.
 ## Contents
 
 - `patches/` — the exact patches applied on top of upstream commit
-  `ec358164ed368aba89ae1a9e8744977e54293fd7` (tag `@ifc-lite/wasm@6.0.0`)
+  `989da893d180ccc7c960fa67919eb41aa562ea16` (tag `@ifc-lite/wasm@6.0.1`; identical patches applied cleanly to the previous pin `ec358164`, tag `@ifc-lite/wasm@6.0.0`)
 - `modified-files/` — the twenty-one modified files in full source form (base commit + patches applied):
   - `apps/viewer/src/store/slices/measurementSlice.ts`
   - `apps/viewer/src/components/viewer/tools/MeasurePanel.tsx`
