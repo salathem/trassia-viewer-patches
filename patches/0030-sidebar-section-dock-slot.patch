@@ -1,0 +1,30 @@
+diff --git a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
+--- a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
++++ b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
+@@ -21,6 +21,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
+ import { useViewerStore } from '@/store';
+ import { ActivityBar } from './ActivityBar';
+ import { SidebarPanelHost } from './SidebarPanelHost';
++// Trassia overlay (not upstream) — Paket V-UX (P4): der Platz, in den das
++// Schnittpanel andockt. Eine eigene Zeile ueber dem Panelwirt, damit es weder
++// Drape noch Kubatur noch die Attribute verdraengt.
++import { ChSectionDockSlot } from '@/components/viewer/ChSectionDockSlot';
+ 
+ const ACTIVITY_BAR_PX = 48; // w-12
+ // Mirrors the clamp in sidebarSlice so the live drag matches what is persisted.
+@@ -105,10 +109,13 @@ export function SidebarDock() {
+             aria-label="Resize sidebar"
+           />
+           <div
+-            className="h-full min-w-0 overflow-hidden panel-container"
++            className="h-full min-w-0 overflow-hidden panel-container flex flex-col"
+             style={{ width: contentPx ?? `${effectivePct}%` }}
+           >
+-            <SidebarPanelHost />
++            <ChSectionDockSlot />
++            <div className="min-h-0 flex-1">
++              <SidebarPanelHost />
++            </div>
+           </div>
+         </>
+       )}

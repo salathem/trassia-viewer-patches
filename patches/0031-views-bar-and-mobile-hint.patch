@@ -1,0 +1,35 @@
+diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
+--- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
++++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
+@@ -36,6 +36,13 @@ import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
+ import { useChProjectLoader } from '@/hooks/useChProjectLoader';
+ import { ChProjectBanner } from './ChProjectBanner';
+ import { ChLensEngine } from './ChLensEngine';
++// Trassia overlay (not upstream) — Paket V-UX: die Zeile der benannten
++// Ansichten (U3), der Hinweis auf schmalen Schirmen (P6/U4) und der
++// Beobachter, der ein verdraengtes Werkzeugpanel in den zweiten Stapelplatz
++// legt statt es hinauszuwerfen (P4).
++import { ChViewsBar } from './ChViewsBar';
++import { ChMobileHint } from './ChMobileHint';
++import { ChPanelStackKeeper } from './ChPanelStackKeeper';
+ import { chReadProjectParam } from '@/lib/ch/project-manifest';
+ import { EntityContextMenu } from './EntityContextMenu';
+ import { useDuplicateShortcut } from './useDuplicateShortcut';
+@@ -438,6 +445,17 @@ export function ViewerLayout() {
+             files hang in. */}
+         <ChProjectBanner />
+ 
++        {/* Trassia: benannte Ansichten dieser Mappe (U3). Nur bei `?project=`,
++            weil die Ablage am Mappen-Slug haengt. */}
++        <ChViewsBar />
++
++        {/* Trassia: unter 30 rem blendet die Anwendung ihre Werkzeuge aus.
++            Das darf sie — aber nicht stumm (U4). */}
++        <ChMobileHint />
++
++        {/* Trassia: kein Bauteil, ein Beobachter (P4). */}
++        <ChPanelStackKeeper />
++
+         {/* Trassia: on a phone the Lens panel is never mounted (one bottom
+             sheet, closed at start), so nothing evaluates the lens a project
+             manifest set. This runs it where the panel cannot. */}

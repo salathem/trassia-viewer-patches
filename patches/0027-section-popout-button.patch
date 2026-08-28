@@ -1,0 +1,27 @@
+diff --git a/apps/viewer/src/components/viewer/Section2DPanel.tsx b/apps/viewer/src/components/viewer/Section2DPanel.tsx
+--- a/apps/viewer/src/components/viewer/Section2DPanel.tsx
++++ b/apps/viewer/src/components/viewer/Section2DPanel.tsx
+@@ -47,6 +47,10 @@
+ // Trassia overlay (not upstream) — Beschriftung der Querprofil-Ansicht,
+ // siehe overlay/apps/viewer/src/components/viewer/ChQpStamp.tsx
+ import { ChQpStamp, ChQpSheetTitle } from '@/components/viewer/ChQpStamp';
++// Trassia overlay (not upstream) — Paket V-UX (P1): die 2D-Ansicht in ein
++// eigenes Browserfenster ausdocken. Alles daran (Kanal, Nutzlast, Popup-Blocker)
++// liegt im Overlay; hier steht nur der Knopf.
++import { ChSectionPopout } from '@/components/viewer/ChSectionPopout';
+ 
+ interface Section2DPanelProps {
+   mergedGeometry?: GeometryResult | null;
+@@ -1107,6 +1111,12 @@
+             </>
+           )}
+ 
++          {/* Trassia (Paket V-UX, P1): ausdocken. Steht ABSICHTLICH ausserhalb
++              des `!isNarrow`-Blocks und ist damit immer sichtbar — gerade im
++              schmalen Panel ist das eigene Fenster am meisten wert, und
++              genau dort verschwinden sonst alle Knoepfe ins Ueberlaufmenue. */}
++          <ChSectionPopout />
++
+           {/* Close button always visible */}
+           <Button variant="ghost" size="icon-sm" onClick={handleClose} title="Close">
+             <X className="h-4 w-4" />

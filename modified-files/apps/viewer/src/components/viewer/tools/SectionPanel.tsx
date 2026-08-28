@@ -17,6 +17,15 @@ import { SectionPlaneVisualization } from './SectionVisualization';
 import { SectionCapControls } from './SectionCapControls';
 // Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/ChAlignmentSection.tsx
 import { ChAlignmentSection } from './ChAlignmentSection';
+// Trassia overlay (not upstream) — Querprofil-Ansicht, Paket V-QP.
+import { ChQpTools } from './ChQpTools';
+// Trassia overlay (not upstream) — Paket V-UX (P3/P4): Hoehendeckel mit
+// Bildlauf, Z-Ordnung nach Benutzung, die ganze Kopfleiste als Griff und das
+// Andocken in die rechte Leiste. Die Logik liegt im Overlay; hier steht nur,
+// welches Element das Panel ist und woran man es zieht.
+import { ChPanelFrame } from '@/components/viewer/ChPanelFrame';
+import { ChDockButton } from '@/components/viewer/ChDockButton';
+import { useChHeaderDrag } from '@/hooks/useChPanelChrome';
 import { chPeekProjectSection } from '@/lib/ch/ch-project-section';
 import { useChSectionPanelAutoCollapse } from '@/hooks/useChNarrowPanels';
 
@@ -153,19 +162,28 @@ export function SectionOverlay() {
 
   const panelRef = useRef<HTMLDivElement>(null);
   const drag = useDraggablePanel(panelRef);
+  // Trassia (Paket V-UX, P3): die GANZE Kopfleiste zieht. Bisher zog nur das
+  // 12x20-px-Griffsymbol; die Kopfleiste selbst bewegte im Audit 0 px.
+  const chHeaderDrag = useChHeaderDrag(drag.onDragStart);
 
   return (
     <>
       {/* Compact Section Tool Panel - matches Measure tool style */}
-      <div
-        ref={panelRef}
-        style={drag.style}
-        className="pointer-events-auto absolute top-4 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur-sm rounded-lg border shadow-lg z-30"
-        {...tourAnchor(TOUR_ANCHORS.sectionPanel)}
+      <ChPanelFrame
+        panelId="section"
+        panelRef={panelRef}
+        dockable
+        floatStyle={drag.style}
+        anchor={drag.position}
+        className="pointer-events-auto absolute top-4 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur-sm rounded-lg border shadow-lg"
+        rest={tourAnchor(TOUR_ANCHORS.sectionPanel)}
       >
         {/* Header doubles as a drag handle — buttons/inputs are ignored by the
             hook so they keep working (issue #1107). */}
-        <div className="flex items-center justify-between gap-2 p-2">
+        <div
+          className="flex shrink-0 cursor-move items-center justify-between gap-2 p-2"
+          {...chHeaderDrag}
+        >
           <div className="flex items-center gap-1 min-w-0">
             <span
               onMouseDown={drag.onDragStart}
@@ -198,6 +216,9 @@ export function SectionOverlay() {
                 <FileImage className="h-3 w-3" />
               </Button>
             )}
+            {/* Trassia (Paket V-UX, P4): in die rechte Leiste holen. Das
+                schwebende Panel deckt bei 1440x900 37 % des 3D-Bildes zu. */}
+            <ChDockButton />
             <Button variant="ghost" size="icon-sm" onClick={handleClose} title="Close">
               <X className="h-3 w-3" />
             </Button>
@@ -206,7 +227,7 @@ export function SectionOverlay() {
 
         {/* Expandable content */}
         {!isPanelCollapsed && (
-          <div className="border-t px-3 pb-3 min-w-72">
+          <div className="border-t px-3 pb-3 min-w-72 min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {/* Direction Selection. "Pick face" is the primary affordance —
                 face-pick auto-arms on tool open (issue #243 follow-up) and
                 matches Bonsai/Revit point-and-cut UX. Cardinal presets are
@@ -266,6 +287,13 @@ export function SectionOverlay() {
                 Renders nothing when no loaded model carries an alignment, so a
                 building model sees the panel exactly as upstream ships it. */}
             <ChAlignmentSection />
+
+            {/* Trassia: Korridorbreite und Hoehenueberhoehung der
+                Querprofil-Ansicht, und der Schnitt entlang einer Nutzerlinie
+                (angeklickte Polylinie oder DXF-Linie). Der Ansichtsblock
+                erscheint nur bei einer eigenen Schnittebene; der Linienblock
+                immer, weil er selbst eine erzeugt. */}
+            <ChQpTools />
 
             {/* Position. In cardinal mode this is a 0..100% slider along the
                 axis. In custom mode (issue #243) the numeric input becomes
@@ -352,7 +380,7 @@ export function SectionOverlay() {
             )}
           </div>
         )}
-      </div>
+      </ChPanelFrame>
 
       {/* Instruction hint - brutalist style matching Measure tool */}
       <div

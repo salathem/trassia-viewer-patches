@@ -1,0 +1,43 @@
+diff --git a/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx b/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx
+--- a/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx
++++ b/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx
+@@ -146,7 +146,11 @@ export function HierarchyNode({
+                   onModelVisibilityToggle(modelId, e);
+                 }}
+                 aria-label={modelVisible ? `Hide model ${node.name}` : `Show model ${node.name}`}
+-                className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
++                /* Trassia (Paket V-UX, P6 / Befund R-9): dauerhaft sichtbar
++                   und mindestens 24x24 px. Vorher 18x18 px und erst beim
++                   Hovern eingeblendet — der Tester fand die Schalter nicht,
++                   und auf einem Zeigegeraet ohne Hover gibt es sie gar nicht. */
++                className="inline-flex h-6 w-6 items-center justify-center rounded p-0.5 opacity-70 transition-opacity hover:bg-muted hover:opacity-100 group-hover:opacity-100"
+               >
+                 {modelVisible ? (
+                   <Eye className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100" />
+@@ -170,7 +174,7 @@ export function HierarchyNode({
+                   }}
+                   aria-label={`Sync model ${node.name} from source`}
+                   className={cn(
+-                    'p-0.5 opacity-0 group-hover:opacity-100 transition-opacity',
++                    'inline-flex h-6 w-6 items-center justify-center rounded p-0.5 opacity-70 transition-opacity hover:bg-muted hover:opacity-100 group-hover:opacity-100',
+                     sourceSyncing && 'opacity-100',
+                   )}
+                   disabled={sourceSyncing}
+@@ -200,7 +204,7 @@ export function HierarchyNode({
+                     onRemoveModel(modelId, e);
+                   }}
+                   aria-label={`Remove model ${node.name}`}
+-                  className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
++                  className="inline-flex h-6 w-6 items-center justify-center rounded p-0.5 opacity-70 transition-opacity hover:bg-muted hover:opacity-100 group-hover:opacity-100"
+                 >
+                   <X className="h-3.5 w-3.5 text-zinc-400 hover:text-red-500" />
+                 </button>
+@@ -291,7 +295,7 @@ export function HierarchyNode({
+                 }}
+                 aria-label={node.isVisible ? `Hide ${node.name}` : `Show ${node.name}`}
+                 className={cn(
+-                  'p-0.5 opacity-0 group-hover:opacity-100 transition-opacity mr-1',
++                  'mr-1 inline-flex h-6 w-6 items-center justify-center rounded p-0.5 opacity-70 transition-opacity hover:bg-muted hover:opacity-100 group-hover:opacity-100',
+                   nodeHidden && 'opacity-100'
+                 )}
+               >

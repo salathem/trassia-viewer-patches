@@ -1,0 +1,22 @@
+diff --git a/apps/viewer/vite.config.ts b/apps/viewer/vite.config.ts
+index 307c509..58d86ce 100644
+--- a/apps/viewer/vite.config.ts
++++ b/apps/viewer/vite.config.ts
+@@ -342,6 +342,17 @@ export default defineConfig({
+         // asset pipeline through the real build so
+         // tests/e2e/laz-wasm.e2e.spec.ts can assert it end to end (#2097).
+         lazProbe: path.resolve(__dirname, 'laz-probe.html'),
++        // Trassia (Paket V-UX, P1) — die Seite des ausgedockten Fensters
++        // (`overlay/apps/viewer/popout.html` + `src/ch-popout.ts`). Sie ist ein
++        // eigener Eingang und KEINE Route der App: nginx liefert `/popout.html`
++        // als gewoehnliche Datei aus, der SPA-Fallback fasst sie nicht an.
++        //
++        // Warum ein zweiter Eingang und nicht eine Route der bestehenden App:
++        // ein `window.open('/?popout=1')` haette in jedem Popout den ganzen
++        // Viewer geladen — WebGPU-Kontext, Cesium, Parser, Store — fuer eine
++        // Zeichnung auf einem Kanevas. Der eigene Eingang buendelt nur, was
++        // diese Seite wirklich braucht.
++        popout: path.resolve(__dirname, 'popout.html'),
+       },
+       output: {
+         manualChunks(id) {
