@@ -1,0 +1,57 @@
+diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
+index 04cec09..5d410e2 100644
+--- a/apps/viewer/src/lib/panels/registry.ts
++++ b/apps/viewer/src/lib/panels/registry.ts
+@@ -35,6 +35,8 @@ import {
+   Box,
+   // Trassia overlay (not upstream) — Paket V-DRAPE.
+   Mountain,
++  // Trassia overlay (not upstream) — Paket V-KUBATUR.
++  Ruler,
+   type LucideIcon,
+ } from 'lucide-react';
+ 
+@@ -60,7 +62,9 @@ export type WorkspacePanelId =
+   | 'layers'
+   | 'zones'
+   // Trassia overlay (not upstream) — Paket V-DRAPE.
+-  | 'drape';
++  | 'drape'
++  // Trassia overlay (not upstream) — Paket V-KUBATUR.
++  | 'kubatur';
+ 
+ /** Activity-bar clustering — a divider is drawn whenever the group changes. */
+ export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
+@@ -121,6 +125,10 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   // Alt+1..0-Zuordnung der ersten zehn Eintraege unberuehrt bleibt — dieses
+   // Panel bekommt keine Ziffer und ist ueber die Leiste erreichbar.
+   { id: 'drape', title: 'Terrain drape', short: 'Drape', Icon: Mountain, group: 'author', region: 'side' },
++  // Trassia (Paket V-KUBATUR): Auftrag/Abtrag zwischen zwei Modellen entlang
++  // einer Achse. ANGEHAENGT, aus demselben Grund wie `drape` — keine Ziffer,
++  // erreichbar ueber die Leiste.
++  { id: 'kubatur', title: 'Cut and fill', short: 'Cut/fill', Icon: Ruler, group: 'author', region: 'side' },
+ ];
+ 
+ /** The bottom-strip panel ids, mapped to their store visibility flag + setter
+diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
+index 47de0b9..38a4bf6 100644
+--- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
++++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
+@@ -29,6 +29,8 @@ import { RoomPanel } from '@/components/viewer/RoomPanel';
+ import { ZonesPanel } from '@/components/viewer/ZonesPanel';
+ // Trassia overlay (not upstream) — Paket V-DRAPE, siehe ChDrapePanel.tsx.
+ import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
++// Trassia overlay (not upstream) — Paket V-KUBATUR, siehe ChKubaturPanel.tsx.
++import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
+ // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
+ // dynamic chunk keeps it out of the initial bundle until first opened.
+ const LayersPanel = lazy(() =>
+@@ -64,6 +66,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+     case 'zones': return <ZonesPanel onClose={onClose} />;
+     // Trassia (Paket V-DRAPE).
+     case 'drape': return <ChDrapePanel onClose={onClose} />;
++    // Trassia (Paket V-KUBATUR).
++    case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
+     case 'layers': return (
+       <ChunkErrorBoundary label="Layers panel">
+         <Suspense fallback={null}>

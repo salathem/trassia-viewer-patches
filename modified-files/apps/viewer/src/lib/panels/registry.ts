@@ -35,6 +35,8 @@ import {
   Box,
   // Trassia overlay (not upstream) — Paket V-DRAPE.
   Mountain,
+  // Trassia overlay (not upstream) — Paket V-KUBATUR.
+  Ruler,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -60,7 +62,9 @@ export type WorkspacePanelId =
   | 'layers'
   | 'zones'
   // Trassia overlay (not upstream) — Paket V-DRAPE.
-  | 'drape';
+  | 'drape'
+  // Trassia overlay (not upstream) — Paket V-KUBATUR.
+  | 'kubatur';
 
 /** Activity-bar clustering — a divider is drawn whenever the group changes. */
 export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
@@ -121,6 +125,10 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
   // Alt+1..0-Zuordnung der ersten zehn Eintraege unberuehrt bleibt — dieses
   // Panel bekommt keine Ziffer und ist ueber die Leiste erreichbar.
   { id: 'drape', title: 'Terrain drape', short: 'Drape', Icon: Mountain, group: 'author', region: 'side' },
+  // Trassia (Paket V-KUBATUR): Auftrag/Abtrag zwischen zwei Modellen entlang
+  // einer Achse. ANGEHAENGT, aus demselben Grund wie `drape` — keine Ziffer,
+  // erreichbar ueber die Leiste.
+  { id: 'kubatur', title: 'Cut and fill', short: 'Cut/fill', Icon: Ruler, group: 'author', region: 'side' },
 ];
 
 /** The bottom-strip panel ids, mapped to their store visibility flag + setter
