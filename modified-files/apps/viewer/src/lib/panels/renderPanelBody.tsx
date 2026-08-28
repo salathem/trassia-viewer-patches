@@ -31,6 +31,9 @@ import { ZonesPanel } from '@/components/viewer/ZonesPanel';
 import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
 // Trassia overlay (not upstream) — Paket V-KUBATUR, siehe ChKubaturPanel.tsx.
 import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
+// Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT, siehe
+// ChLaengsschnittPanel.tsx.
+import { ChLaengsschnittPanel } from '@/components/viewer/ChLaengsschnittPanel';
 // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
 // dynamic chunk keeps it out of the initial bundle until first opened.
 const LayersPanel = lazy(() =>
@@ -68,6 +71,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
     case 'drape': return <ChDrapePanel onClose={onClose} />;
     // Trassia (Paket V-KUBATUR).
     case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
+    // Trassia (Paket V-LAENGSSCHNITT).
+    case 'laengsschnitt': return <ChLaengsschnittPanel onClose={onClose} />;
     case 'layers': return (
       <ChunkErrorBoundary label="Layers panel">
         <Suspense fallback={null}>

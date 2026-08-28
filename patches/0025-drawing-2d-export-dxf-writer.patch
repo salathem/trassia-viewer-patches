@@ -1,0 +1,34 @@
+diff --git a/packages/drawing-2d/src/index.ts b/packages/drawing-2d/src/index.ts
+index 36492fd..f5ae0f8 100644
+--- a/packages/drawing-2d/src/index.ts
++++ b/packages/drawing-2d/src/index.ts
+@@ -225,12 +225,25 @@ export type { ColorRaster, ColorRasterOptions, RasterFit } from './color-raster.
+ // DXF EXPORT (issue #1861)
+ // ═══════════════════════════════════════════════════════════════════════════
+ 
+-// Only the exporter facade is public. The low-level writer internals
+-// (DxfWriter, sanitizeDxfLayerName, cssToAci, the linetype/justification
+-// types) stay package-private: no external consumer exists, and an unused
+-// public export is permanent semver liability (PR #1871 review).
++// The exporter facade turns a `Drawing2D` into DXF, with one layer per
++// `LineCategory`. Upstream kept the low-level writer package-private because
++// "no external consumer exists" (PR #1871 review); with the Trassia patch
++// layer one does. The longitudinal-profile panel draws curves, not a section
++// cut: one line per model and per cross offset, each needing its own named
++// layer, which the seven fixed category layers cannot express. It writes them
++// with THIS writer rather than carrying a second R12 implementation — with its
++// own header, its own `$INSUNITS` (patch 0011), its own layer-name sanitiser
++// and its own extents bookkeeping — in the overlay. `cssToAci` stays private;
++// it is not needed from outside.
+ export { DXFExporter, exportToDXF } from './dxf-exporter.js';
+ export type { DXFExportOptions, DXFUnderlayOptions } from './dxf-exporter.js';
++export { DxfWriter, sanitizeDxfLayerName } from './dxf/writer.js';
++export type {
++  DxfLinetype,
++  DxfTextHAlign,
++  DxfTextVAlign,
++  DxfWriterOptions,
++} from './dxf/writer.js';
+ 
+ // ═══════════════════════════════════════════════════════════════════════════
+ // GPU ACCELERATION

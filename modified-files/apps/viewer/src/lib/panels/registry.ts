@@ -37,6 +37,8 @@ import {
   Mountain,
   // Trassia overlay (not upstream) — Paket V-KUBATUR.
   Ruler,
+  // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
+  ChartSpline,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -64,7 +66,9 @@ export type WorkspacePanelId =
   // Trassia overlay (not upstream) — Paket V-DRAPE.
   | 'drape'
   // Trassia overlay (not upstream) — Paket V-KUBATUR.
-  | 'kubatur';
+  | 'kubatur'
+  // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
+  | 'laengsschnitt';
 
 /** Activity-bar clustering — a divider is drawn whenever the group changes. */
 export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
@@ -129,6 +133,15 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
   // einer Achse. ANGEHAENGT, aus demselben Grund wie `drape` — keine Ziffer,
   // erreichbar ueber die Leiste.
   { id: 'kubatur', title: 'Cut and fill', short: 'Cut/fill', Icon: Ruler, group: 'author', region: 'side' },
+  // Trassia (Paket V-LAENGSSCHNITT): Hoehenprofil entlang einer Achse.
+  // ANGEHAENGT wie `drape` und `kubatur` — keine Ziffer, erreichbar ueber die
+  // Leiste. `prefersWide`, weil eine Profilzeichnung Breite braucht: ein
+  // ausgeklinktes Fenster ist damit 780 x 680 statt 440 x 640 px
+  // (`services/panel-windows.ts`). Auf die Breite der ANGEDOCKTEN
+  // Seitenleiste wirkt das Feld nicht — `SIDEBAR_WIDE_WIDTH_PCT` steht
+  // zwar unten in dieser Datei, wird aber nirgends gelesen (geprueft im
+  // Pin 989da893: einzige Fundstelle ist die Deklaration selbst).
+  { id: 'laengsschnitt', title: 'Longitudinal profile', short: 'Profile', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
 ];
 
 /** The bottom-strip panel ids, mapped to their store visibility flag + setter

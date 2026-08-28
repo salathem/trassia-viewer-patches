@@ -1,0 +1,63 @@
+diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
+index 5d410e2..c832137 100644
+--- a/apps/viewer/src/lib/panels/registry.ts
++++ b/apps/viewer/src/lib/panels/registry.ts
+@@ -37,6 +37,8 @@ import {
+   Mountain,
+   // Trassia overlay (not upstream) — Paket V-KUBATUR.
+   Ruler,
++  // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
++  ChartSpline,
+   type LucideIcon,
+ } from 'lucide-react';
+ 
+@@ -64,7 +66,9 @@ export type WorkspacePanelId =
+   // Trassia overlay (not upstream) — Paket V-DRAPE.
+   | 'drape'
+   // Trassia overlay (not upstream) — Paket V-KUBATUR.
+-  | 'kubatur';
++  | 'kubatur'
++  // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
++  | 'laengsschnitt';
+ 
+ /** Activity-bar clustering — a divider is drawn whenever the group changes. */
+ export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
+@@ -129,6 +133,15 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   // einer Achse. ANGEHAENGT, aus demselben Grund wie `drape` — keine Ziffer,
+   // erreichbar ueber die Leiste.
+   { id: 'kubatur', title: 'Cut and fill', short: 'Cut/fill', Icon: Ruler, group: 'author', region: 'side' },
++  // Trassia (Paket V-LAENGSSCHNITT): Hoehenprofil entlang einer Achse.
++  // ANGEHAENGT wie `drape` und `kubatur` — keine Ziffer, erreichbar ueber die
++  // Leiste. `prefersWide`, weil eine Profilzeichnung Breite braucht: ein
++  // ausgeklinktes Fenster ist damit 780 x 680 statt 440 x 640 px
++  // (`services/panel-windows.ts`). Auf die Breite der ANGEDOCKTEN
++  // Seitenleiste wirkt das Feld nicht — `SIDEBAR_WIDE_WIDTH_PCT` steht
++  // zwar unten in dieser Datei, wird aber nirgends gelesen (geprueft im
++  // Pin 989da893: einzige Fundstelle ist die Deklaration selbst).
++  { id: 'laengsschnitt', title: 'Longitudinal profile', short: 'Profile', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
+ ];
+ 
+ /** The bottom-strip panel ids, mapped to their store visibility flag + setter
+diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
+index 38a4bf6..7c4e544 100644
+--- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
++++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
+@@ -31,6 +31,9 @@ import { ZonesPanel } from '@/components/viewer/ZonesPanel';
+ import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
+ // Trassia overlay (not upstream) — Paket V-KUBATUR, siehe ChKubaturPanel.tsx.
+ import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
++// Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT, siehe
++// ChLaengsschnittPanel.tsx.
++import { ChLaengsschnittPanel } from '@/components/viewer/ChLaengsschnittPanel';
+ // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
+ // dynamic chunk keeps it out of the initial bundle until first opened.
+ const LayersPanel = lazy(() =>
+@@ -68,6 +71,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+     case 'drape': return <ChDrapePanel onClose={onClose} />;
+     // Trassia (Paket V-KUBATUR).
+     case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
++    // Trassia (Paket V-LAENGSSCHNITT).
++    case 'laengsschnitt': return <ChLaengsschnittPanel onClose={onClose} />;
+     case 'layers': return (
+       <ChunkErrorBoundary label="Layers panel">
+         <Suspense fallback={null}>
