@@ -1,0 +1,27 @@
+diff --git a/apps/viewer/src/components/viewer/CesiumOverlay.tsx b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
+index b60b8ed..832ce1b 100644
+--- a/apps/viewer/src/components/viewer/CesiumOverlay.tsx
++++ b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
+@@ -30,6 +30,10 @@ import { useCesiumBridge } from './cesium/useCesiumBridge';
+ import { useCesiumModel } from './cesium/useCesiumModel';
+ import { useCesiumSolar } from './cesium/useCesiumSolar';
+ import { useCesiumCameraSync } from './cesium/useCesiumCameraSync';
++// Trassia overlay (Paket V-TILES) — die Kachelsaetze der Projektmappe als
++// ZUSAETZLICHE Primitive in derselben Szene. Warum nicht als weiterer Fall in
++// addDataSourceLayer(): siehe cesium/useChCesiumTiles.ts.
++import { useChCesiumTiles } from './cesium/useChCesiumTiles';
+ 
+ export interface CesiumOverlayProps {
+   mapConversion?: MapConversion;
+@@ -390,6 +394,11 @@ export function CesiumOverlay({
+   // ─── Camera sync: mirror the viewport's pose onto the globe, per frame ──
+   useCesiumCameraSync({ status, viewerRef, bridgeRef, cameraBridgeRef, terrainClipY, rafRef });
+ 
++  // ─── Trassia: die Kachelsaetze der Projektmappe (3D Tiles) ──────────────
++  // Zuletzt, also raeumt er zuletzt auf — nach dem Effekt, der den Viewer
++  // zerstoert. Der Haken rechnet damit.
++  useChCesiumTiles({ status, viewerRef });
++
+   if (!cesiumEnabled || !mapConversion || !projectedCRS) {
+     return null;
+   }

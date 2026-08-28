@@ -53,7 +53,7 @@ import { sanitizeFilename } from '@/lib/export/download';
 import { enqueueSourceLoad } from '@/lib/sources/loadQueue';
 import { toast } from '@/components/ui/toast';
 // Trassia overlay (not upstream) — Paket V-DRAPE, siehe lib/ch/drape-ingest.ts.
-import { chDrapeTakeDroppedFiles } from '@/lib/ch/drape-ingest';
+import { chDrapeTakeDroppedFiles, chDrapeUnderlayCandidates } from '@/lib/ch/drape-ingest';
 import { TourInvite } from '@/components/tours/TourInvite';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
 import { describeUnsupportedFormat } from '@/hooks/ingest/pointCloudIngest';
@@ -625,11 +625,16 @@ export function ViewportContainer() {
     // a dropped site plan must never replace or federate with the model.
     const allDropped0 = Array.from(e.dataTransfer.files);
     const { dxfFiles, modelFiles: allDropped } = splitDxfFiles(allDropped0);
-    if (dxfFiles.length > 0) void ingestDxfFiles(dxfFiles);
+    // Trassia (Paket V-DRAPE v2): eine sehr grosse DXF wird NICHT als
+    // 2D-Unterlage gelesen — `importDxf` laeuft auf dem Hauptthread und in
+    // einem Zug, und bei 153 MB steht der Tab dabei trotz unseres Workers.
+    // Siehe `chDrapeUnderlayCandidates`; der Hinweis dazu steht im Toast.
+    const dxfFuerUnterlage = chDrapeUnderlayCandidates(dxfFiles);
+    if (dxfFuerUnterlage.length > 0) void ingestDxfFiles(dxfFuerUnterlage);
     // Trassia (Paket V-DRAPE): dieselbe Datei ZUSAETZLICH auf das Gelaende
-    // legen. Die 2D-Unterlage oben bleibt unveraendert — hier kommt nur eine
-    // 3D-Fassung dazu, die im Panel „Terrain drape" ein- und ausschaltbar ist
-    // (worauf der Hinweis dort auch aufmerksam macht). GeoJSON kommt nicht
+    // legen. Die 2D-Unterlage oben bleibt fuer normal grosse Dateien, wie sie
+    // war — hier kommt nur eine 3D-Fassung dazu, die im Panel „Terrain drape"
+    // ein- und ausschaltbar ist. GeoJSON kommt nicht
     // durch `splitDxfFiles`, also wird aus der vollen Liste gelesen.
     chDrapeTakeDroppedFiles(allDropped0);
     if (allDropped.length === 0) return;

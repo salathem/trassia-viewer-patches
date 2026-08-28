@@ -1,0 +1,34 @@
+diff --git a/apps/viewer/src/components/viewer/HierarchyPanel.tsx b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
+index 93d7dcf..afd3dce 100644
+--- a/apps/viewer/src/components/viewer/HierarchyPanel.tsx
++++ b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
+@@ -36,6 +36,9 @@ import { SectionHeader } from './hierarchy/SectionHeader';
+ import { StoreyDisplayControls } from './hierarchy/StoreyDisplayControls';
+ import { HierarchySortControl } from './hierarchy/HierarchySortControl';
+ import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
++// Trassia overlay (Paket V-TILES) — die Kachelsaetze der Projektmappe stehen
++// ueber der Modellliste. Ohne Kachelsatz rendert die Komponente nichts.
++import { ChTileLayers } from './ChTileLayers';
+ 
+ export function HierarchyPanel() {
+   const {
+@@ -990,6 +993,8 @@ export function HierarchyPanel() {
+ 
+           {/* Models Section */}
+           <div style={{ height: `${(1 - splitRatio) * 100}%` }} className="flex flex-col min-h-0">
++            {/* Trassia: Kachelsaetze der Mappe, ueber den Modellen. */}
++            <ChTileLayers />
+             <SectionHeader icon={FileBox} title="Models" count={models.size} />
+             <div ref={modelsRef} className="flex-1 overflow-auto scrollbar-thin bg-white dark:bg-black">
+               <div
+@@ -1079,6 +1084,10 @@ export function HierarchyPanel() {
+         )}
+       </div>
+ 
++      {/* Trassia: Kachelsaetze der Mappe — auch in der flachen Ansicht, sonst
++          verschwaende die Liste, sobald jemand die Gruppierung wechselt. */}
++      <ChTileLayers />
++
+       {/* Section Header */}
+       <SectionHeader
+         icon={groupingMode === 'spatial' ? Building2 : groupingMode === 'type' ? Layers : groupingMode === 'material' ? Palette : groupingMode === 'groups' ? Network : FileBox}
