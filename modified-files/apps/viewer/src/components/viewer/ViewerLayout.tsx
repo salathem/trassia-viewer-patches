@@ -41,7 +41,9 @@ import { ChLensEngine } from './ChLensEngine';
 // Seit Paket UX-KOPF (Marco-Befund 2026-09-02: zwei Kopfzeilen ohne Mehrwert
 // kosteten Bildflaeche) wohnen der Projektstreifen in der Fusszeile
 // (StatusBar -> ChProjektFuss) und die benannten Ansichten im View-Tab des
-// Ribbons (ChViewsGroup) — hier haengt beides nicht mehr.
+// Ribbons (ChViewsGroup) — hier haengt nur noch die Mobil-Fassung des
+// Status (Tester-Auflage M-1: Telefone haben keine Fusszeile).
+import { ChProjektFuss } from './ChProjektFuss';
 import { ChMobileHint } from './ChMobileHint';
 import { ChPanelStackKeeper } from './ChPanelStackKeeper';
 import { chReadProjectParam } from '@/lib/ch/project-manifest';
@@ -435,6 +437,16 @@ export function ViewerLayout() {
             </span>
           </div>
         )}
+        {/* Trassia (UX-KOPF, Tester-Auflage M-1): auf Telefonen gibt es keine
+            Fusszeile — ohne diese schmale Zeile waere ein Mappen-Fehler dort
+            NIRGENDS sichtbar. Nur mobil; am Desktop wohnt der Status in der
+            StatusBar. */}
+        {isMobile && (
+          <div className="flex items-center border-b border-border/60 bg-muted/20 px-3 py-1 text-xs">
+            <ChProjektFuss />
+          </div>
+        )}
+
         {/* Trassia: unter 30 rem blendet die Anwendung ihre Werkzeuge aus.
             Das darf sie — aber nicht stumm (U4). */}
         <ChMobileHint />

@@ -114,7 +114,10 @@ export function StatusBar() {
   return (
     <div className="h-7 px-3 border-t bg-muted/30 flex items-center justify-between text-xs text-muted-foreground">
       {/* Left: Status */}
-      <div className="flex items-center gap-3">
+      {/* Trassia (UX-KOPF, Tester-Auflage M-2): min-w-0 + flex-1 links und
+          shrink-0 auf den festen Bloecken, damit das Projektsegment schrumpft
+          und truncat statt die Zeile zu sprengen (Ueberlauf bei 768 px). */}
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         {loading ? (
           <span className="text-primary">{progress?.phase || 'Loading...'}</span>
         ) : error ? (
@@ -140,7 +143,7 @@ export function StatusBar() {
       </div>
 
       {/* Center: Model Stats */}
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-4">
         <div className="flex items-center gap-1.5">
           <Boxes className="h-3.5 w-3.5" />
           <span>
@@ -161,7 +164,7 @@ export function StatusBar() {
       </div>
 
       {/* Right: Performance */}
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-3">
         <span className={fps < 30 ? 'text-destructive' : fps < 50 ? 'text-yellow-500' : ''}>
           {fps} FPS
         </span>
