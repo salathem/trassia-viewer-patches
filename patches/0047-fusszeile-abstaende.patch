@@ -1,15 +1,16 @@
 diff --git a/apps/viewer/src/components/viewer/StatusBar.tsx b/apps/viewer/src/components/viewer/StatusBar.tsx
-index d24ff3e..1adced9 100644
+index d24ff3e..180bf5a 100644
 --- a/apps/viewer/src/components/viewer/StatusBar.tsx
 +++ b/apps/viewer/src/components/viewer/StatusBar.tsx
-@@ -112,7 +112,10 @@ export function StatusBar() {
+@@ -111,8 +111,11 @@ export function StatusBar() {
+     return count || stats.elements;
    }, [selectedStoreys, ifcDataStore, stats.elements]);
  
++  // Trassia (UX-KOPF-Nachschliff, Marco 2026-09-02): gap-3 auf dem Root,
++  // damit Statistik- und Perf-Block denselben Abstand tragen wie die
++  // Eintraege INNERHALB des Perf-Blocks (gap-3 + senkrechter Trenner).
    return (
 -    <div className="h-7 px-3 border-t bg-muted/30 flex items-center justify-between text-xs text-muted-foreground">
-+    {/* Trassia (UX-KOPF-Nachschliff, Marco 2026-09-02): gap-3 auf dem Root,
-+        damit Statistik- und Perf-Block denselben Abstand tragen wie die
-+        Eintraege INNERHALB des Perf-Blocks (gap-3 + senkrechter Trenner). */}
 +    <div className="h-7 px-3 border-t bg-muted/30 flex items-center justify-between gap-3 text-xs text-muted-foreground">
        {/* Left: Status */}
        {/* Trassia (UX-KOPF, Tester-Auflage M-2): min-w-0 + flex-1 links und
