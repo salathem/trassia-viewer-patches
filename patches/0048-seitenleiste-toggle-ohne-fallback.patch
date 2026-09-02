@@ -16,6 +16,28 @@ index a094e73..d61d0fa 100644
            const open = isOpen(id);
            const showDivider = prevGroup !== null && def.group !== prevGroup;
            prevGroup = def.group;
+diff --git a/apps/viewer/src/hooks/usePanelControls.ts b/apps/viewer/src/hooks/usePanelControls.ts
+index 1cf3e0d..ab216c5 100644
+--- a/apps/viewer/src/hooks/usePanelControls.ts
++++ b/apps/viewer/src/hooks/usePanelControls.ts
+@@ -185,6 +185,17 @@ export function usePanelControls(): PanelControls {
+     useViewerStore.getState().closeFloatingPanel(id);
+     closePanelWindow(id);
+     if (isAnalysisPanel(id)) setDockedVisible(id, false);
++    // Trassia (Paket SEITENLEISTE, Tester-Blocker B-1): ein Seitenpanel OHNE
++    // eigenes Sichtbarkeits-Flag (Zones, Trassia-Panels drape/kubatur/
++    // laengsschnitt/entwurf) wird nur ueber `sidebarActivePanel` gefuehrt —
++    // fuer die ist `setDockedVisible` ein No-op und das X in der Kopfzeile
++    // schloss nichts. Ist das Panel danach immer noch das aktive, schliesst
++    // dieselbe Aktion wie der zweite Klick auf sein Symbol. Flag-Panels sind
++    // hier nie mehr aktiv (die Exklusivitaets-Subscription hat synchron
++    // umgeschaltet), darum greift die Zeile nur im flaglosen Fall.
++    if (useViewerStore.getState().sidebarActivePanel === id) {
++      useViewerStore.getState().toggleWorkspacePanel(id);
++    }
+   }, []);
+ 
+   const dockPanel = useCallback((id: WorkspacePanelId) => openInHome(id), [openInHome]);
 diff --git a/apps/viewer/src/store/index.ts b/apps/viewer/src/store/index.ts
 index 6f14925..f2e7bac 100644
 --- a/apps/viewer/src/store/index.ts

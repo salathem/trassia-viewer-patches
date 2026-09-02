@@ -11,7 +11,7 @@ executable form served at https://viewer.trassia.com.
 
 - `patches/` — the exact patches (`0001`–`0048`) applied, in numeric order, on top of
   upstream commit `49dfc3090425569095622ca567715d017c4cf166` (tag `@ifc-lite/wasm@6.1.1`)
-- `modified-files/` — the forty-eight modified files in full source form
+- `modified-files/` — the forty-nine modified files in full source form
   (base commit + all patches applied):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/Drawing2DCanvas.tsx`
@@ -46,6 +46,7 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/hooks/useDrawingGeneration.ts`
   - `apps/viewer/src/hooks/useIfcLoader.ts`
   - `apps/viewer/src/hooks/useMeasure2D.ts`
+  - `apps/viewer/src/hooks/usePanelControls.ts`
   - `apps/viewer/src/hooks/useViewControls.ts`
   - `apps/viewer/src/lib/geo/cesium-bridge.ts`
   - `apps/viewer/src/lib/panels/registry.ts`
@@ -207,7 +208,10 @@ All files in this repository are licensed under the **MPL-2.0**.
   exclusivity subscription does the same when the last open panel is closed
   through its own close button; a side-panel icon only highlights while the
   sidebar is expanded. Two small additions in the store and one line in the
-  activity bar; no upstream logic removed.
+  activity bar; no upstream logic removed. Also in `usePanelControls.ts`:
+  `closePanel` now closes side panels that have no visibility flag of their
+  own (upstream's Zones and the Trassia panels) — their header close button
+  was a no-op before.
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil
