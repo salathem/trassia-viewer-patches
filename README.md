@@ -9,9 +9,9 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0047`) applied, in numeric order, on top of
+- `patches/` — the exact patches (`0001`–`0048`) applied, in numeric order, on top of
   upstream commit `49dfc3090425569095622ca567715d017c4cf166` (tag `@ifc-lite/wasm@6.1.1`)
-- `modified-files/` — the forty-six modified files in full source form
+- `modified-files/` — the forty-eight modified files in full source form
   (base commit + all patches applied):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/Drawing2DCanvas.tsx`
@@ -29,6 +29,7 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/properties/ModelMetadataPanel.tsx`
   - `apps/viewer/src/components/viewer/properties/PropertySetCard.tsx`
   - `apps/viewer/src/components/viewer/ribbon/tabs/ViewTab.tsx`
+  - `apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx`
   - `apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurePanel.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx`
@@ -50,6 +51,7 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/lib/panels/registry.ts`
   - `apps/viewer/src/lib/panels/renderPanelBody.tsx`
   - `apps/viewer/src/main.tsx`
+  - `apps/viewer/src/store/index.ts`
   - `apps/viewer/src/store/slices/measurementSlice.ts`
   - `apps/viewer/src/store/slices/sidebarSlice.test.ts`
   - `apps/viewer/src/store/slices/sidebarSlice.ts`
@@ -199,6 +201,13 @@ All files in this repository are licensed under the **MPL-2.0**.
 - `0047` — status-bar spacing: one gap for the whole footer (`gap-3` on the
   root and the stats block) and the same vertical separator before "FPS" as
   between FPS, WebGPU and the flavor indicator. Three class/JSX lines, no logic.
+- `0048` — sidebar toggling without the Information fallback: a second click on
+  the active rail icon (Information included) closes the panel and collapses
+  the sidebar to its icon rail instead of revealing Information; the
+  exclusivity subscription does the same when the last open panel is closed
+  through its own close button; a side-panel icon only highlights while the
+  sidebar is expanded. Two small additions in the store and one line in the
+  activity bar; no upstream logic removed.
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil

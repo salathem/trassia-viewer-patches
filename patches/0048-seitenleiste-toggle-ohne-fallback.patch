@@ -1,0 +1,55 @@
+diff --git a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
+index a094e73..d61d0fa 100644
+--- a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
++++ b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
+@@ -120,7 +120,12 @@ export function ActivityBar() {
+           if (!def) return null;
+           const Icon = def.Icon;
+           const loc = panelLocation(id);
+-          const active = loc === 'docked';
++          // Trassia (Paket SEITENLEISTE): blau nur, wenn das Panel auch zu sehen
++          // ist. Ein Seitenpanel gilt bei zusammengeklappter Leiste zwar als
++          // "docked" (Information bleibt der Store-Fallback), sichtbar ist es
++          // nicht — ohne diese Klemme leuchtete das Information-Symbol ueber
++          // einem leeren Bereich. Links-/Bodenpanels haben eigene Slots.
++          const active = loc === 'docked' && (def.region !== 'side' || mode === 'expanded');
+           const open = isOpen(id);
+           const showDivider = prevGroup !== null && def.group !== prevGroup;
+           prevGroup = def.group;
+diff --git a/apps/viewer/src/store/index.ts b/apps/viewer/src/store/index.ts
+index 6f14925..f2e7bac 100644
+--- a/apps/viewer/src/store/index.ts
++++ b/apps/viewer/src/store/index.ts
+@@ -705,8 +705,18 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
+     const isActive = s.sidebarActivePanel === panel
+       && !s.floatingPanels.some((p) => p.id === panel)
+       && !s.poppedOutIds.includes(panel);
+-    if (isActive) get().showWorkspacePanel('properties');
+-    else get().showWorkspacePanel(panel);
++    // Trassia (Paket SEITENLEISTE, Marco-Befund 2026-09-02): ein zweiter Klick
++    // auf das aktive Symbol schliesst das Panel und laesst NICHTS erscheinen —
++    // die Leiste klappt auf ihre Symbolspalte zusammen. Vorher sprang der
++    // Upstream still auf den Information-Fallback (bei Information selbst war
++    // der Klick ein No-op). showWorkspacePanel('properties') raeumt weiterhin
++    // alle Flags; das Zusammenklappen danach ist die einzige Ergaenzung.
++    if (isActive) {
++      get().showWorkspacePanel('properties');
++      get().setSidebarMode('collapsed');
++    } else {
++      get().showWorkspacePanel(panel);
++    }
+   },
+ 
+   toggleBottomPanel: (panel) => {
+@@ -808,6 +818,11 @@ function registerSidebarExclusivity(store: ReturnType<typeof createViewerStore>)
+       if (flag && !state[flag] && prev[flag]) {
+         const next = SIDEBAR_PANEL_FLAGS.find(([f]) => state[f]);
+         state.setSidebarActivePanel(next ? next[1] : 'properties');
++        // Trassia (Paket SEITENLEISTE): schliesst das letzte offene Panel (auch
++        // ueber sein eigenes X), bleibt der Bereich leer statt Information zu
++        // zeigen — die Leiste klappt auf die Symbolspalte zusammen. Ein Klick
++        // auf ein Symbol oeffnet wieder (ActivityBar, collapsed-Zweig).
++        if (!next && state.sidebarMode === 'expanded') state.setSidebarMode('collapsed');
+       }
+     }
+   });
