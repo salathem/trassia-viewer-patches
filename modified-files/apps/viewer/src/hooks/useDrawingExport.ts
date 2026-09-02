@@ -9,6 +9,8 @@ import { downloadFile, sanitizeFilename } from '@/lib/export/download';
 // Trassia overlay (not upstream) — the station cut publishes what it is
 // called; see overlay/apps/viewer/src/lib/ch/section-export-name.ts.
 import { chSectionExportStem } from '@/lib/ch/section-export-name';
+// Trassia overlay (not upstream) — see overlay/apps/viewer/src/lib/ch/qp-corridor.ts
+import { chQpUndistorted } from '@/lib/ch/qp-corridor';
 import { toast } from '@/components/ui/toast';
 import { pdfLineStyleFor } from '@/lib/export/pdf-line-style';
 import {
@@ -338,7 +340,7 @@ interface UseDrawingExportResult {
 }
 
 function useDrawingExport({
-  drawing,
+  drawing: drawingFromStore,
   displayOptions,
   sectionPlane,
   activePresetId,
@@ -358,6 +360,14 @@ function useDrawingExport({
   isPinned = false,
   cachedSheetTransformRef,
 }: UseDrawingExportParams): UseDrawingExportResult {
+  // Trassia (Paket V-QP): JEDER Export — SVG, PDF, DXF — nimmt die unverzerrte
+  // Zeichnung. Die Hoehenueberhoehung des Querprofil-Panels ist eine Lesehilfe
+  // am Bildschirm; ein 2x gestrecktes DXF waere ein Plan, der aussieht wie ein
+  // brauchbarer und keiner ist. Der KORRIDOR dagegen steckt schon in dieser
+  // Zeichnung und soll es auch: der Benutzer hat den Schnitt begrenzt, und der
+  // Plan soll enthalten, was er auf dem Schirm hatte. Ohne Ueberhoehung ist das
+  // dasselbe Objekt, der Export also bitgleich mit dem Upstream.
+  const drawing = chQpUndistorted(drawingFromStore);
   // Georef inputs for the DXF export (PR #1871 review, P1): placement edits
   // applied in CesiumPlacementEditor live in `georefMutations` (per model
   // id), not in `ifcDataStore`, and in a federation the georef frame is the

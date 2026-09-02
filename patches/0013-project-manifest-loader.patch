@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-index 6cafd64..b9ed6d6 100644
+index 35862c0..411d33c 100644
 --- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
 +++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
 @@ -31,6 +31,12 @@ import { parseRoleFromToken } from '@/lib/collab/share-link';
@@ -13,10 +13,10 @@ index 6cafd64..b9ed6d6 100644
 +import { ChLensEngine } from './ChLensEngine';
 +import { chReadProjectParam } from '@/lib/ch/project-manifest';
  import { EntityContextMenu } from './EntityContextMenu';
+ import { AnonymizedExportDialog } from './anonymized-export/AnonymizedExportDialog';
  import { useDuplicateShortcut } from './useDuplicateShortcut';
- import { HoverTooltip } from './HoverTooltip';
-@@ -97,10 +103,30 @@ export function ViewerLayout() {
-   // the param against the current document and require its origin to match
+@@ -96,10 +102,30 @@ export function ViewerLayout() {
+   // against the current document and require its origin to match
    // window.location.origin; a cross-origin URL is refused, never fetched.
    const { addModel: autoloadAddModel } = useIfc();
 +  // Trassia (Phase 1.1): the project-manifest deep link. Its own hook, so this
@@ -46,7 +46,7 @@ index 6cafd64..b9ed6d6 100644
      const modelUrl = params.get('model');
      if (!modelUrl) return;
      autoloadDoneRef.current = true;
-@@ -407,6 +433,16 @@ export function ViewerLayout() {
+@@ -401,6 +427,16 @@ export function ViewerLayout() {
              </span>
            </div>
          )}

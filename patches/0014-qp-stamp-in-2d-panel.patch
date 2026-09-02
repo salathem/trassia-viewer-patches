@@ -1,0 +1,28 @@
+diff --git a/apps/viewer/src/components/viewer/Section2DPanel.tsx b/apps/viewer/src/components/viewer/Section2DPanel.tsx
+--- a/apps/viewer/src/components/viewer/Section2DPanel.tsx
++++ b/apps/viewer/src/components/viewer/Section2DPanel.tsx
+@@ -44,6 +44,9 @@
+ import { useDxfUnderlaysForDrawing, useDxfMapToWorldTransform, dxfWorldShift, dxfUnderlayDrawingBounds } from '@/hooks/useDxfUnderlay';
+ import { useScanSectionLayer } from '@/hooks/useScanSectionLayer';
+ import type { CachedSheetTransform } from '@/lib/drawing/sheet-geometry-key';
++// Trassia overlay (not upstream) — Beschriftung der Querprofil-Ansicht,
++// siehe overlay/apps/viewer/src/components/viewer/ChQpStamp.tsx
++import { ChQpStamp, ChQpSheetTitle } from '@/components/viewer/ChQpStamp';
+ 
+ interface Section2DPanelProps {
+   mergedGeometry?: GeometryResult | null;
+@@ -1122,6 +1125,14 @@
+         onMouseLeave={handleMouseLeave}
+         onDoubleClick={handleDoubleClick}
+       >
++        {/* Trassia: was dieses Querprofil IST — Achse/Linie, Station,
++            Serienplatz, LV95. Liegt ueber dem Kanevas und laesst Maus und Rad
++            durch; die Zeichnung selbst bleibt unangetastet, damit der Export
++            Geometrie enthaelt und keine Bildschirmbeschriftung. Denselben Text
++            traegt im Blattmodus das Schriftfeld (`ChQpSheetTitle`). */}
++        <ChQpStamp />
++        <ChQpSheetTitle />
++
+         {status === 'generating' && (
+           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80">
+             <Loader2 className="h-8 w-8 animate-spin mb-4 text-primary" />

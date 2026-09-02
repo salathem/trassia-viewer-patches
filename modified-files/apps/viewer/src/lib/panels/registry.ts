@@ -39,8 +39,14 @@ import {
   Ruler,
   // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
   ChartSpline,
+  // Trassia overlay (not upstream) — Trassierungs-Spike S0 (Paket ENTWURF).
+  Route,
   type LucideIcon,
 } from 'lucide-react';
+// Trassia overlay (not upstream) — die Spike-Flagge `?entwurf=1`. Winzig und
+// ohne Abhaengigkeiten; der eigentliche Spike haengt hinter einem dynamischen
+// Import (siehe renderPanelBody.tsx) und liegt darum nicht im Startbuendel.
+import { chEntwurfAktiv } from '@/lib/ch/entwurf/entwurf-flag';
 
 /** Every panel reachable from the unified sidebar rail. `properties` is the
  *  Information panel (the right pane's default fallback). Each panel opens in
@@ -68,7 +74,9 @@ export type WorkspacePanelId =
   // Trassia overlay (not upstream) — Paket V-KUBATUR.
   | 'kubatur'
   // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
-  | 'laengsschnitt';
+  | 'laengsschnitt'
+  // Trassia overlay (not upstream) — Trassierungs-Spike S0, nur bei `?entwurf=1`.
+  | 'entwurf';
 
 /** Activity-bar clustering — a divider is drawn whenever the group changes. */
 export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
@@ -142,6 +150,19 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
   // zwar unten in dieser Datei, wird aber nirgends gelesen (geprueft im
   // Pin 989da893: einzige Fundstelle ist die Deklaration selbst).
   { id: 'laengsschnitt', title: 'Longitudinal profile', short: 'Profile', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
+  // Trassia (Trassierungs-Spike S0): Achse und Gradiente entwerfen, Korridor,
+  // Massen und Normbefunde. **Nur bei `?entwurf=1`** — ohne die Flagge steht
+  // der Eintrag gar nicht in der Registratur, also gibt es kein Symbol in der
+  // Leiste, keinen Tastenweg und keinen Aufrufer fuer den dynamischen Import.
+  // Das ist der Unterschied zwischen „unsichtbar" und „nicht geladen".
+  //
+  // ANGEHAENGT wie `drape`, `kubatur` und `laengsschnitt`. Der bedingte
+  // Eintrag ist der EINZIGE in dieser Liste — und er steht am Ende, damit die
+  // eingefrorene Alt+1..0-Zuordnung der ersten zehn Eintraege in beiden
+  // Faellen (Flagge an wie aus) dieselbe ist.
+  ...(chEntwurfAktiv()
+    ? [{ id: 'entwurf' as const, title: 'Alignment design (spike)', short: 'Design', Icon: Route, group: 'author' as const, region: 'side' as const, prefersWide: true }]
+    : []),
 ];
 
 /** The bottom-strip panel ids, mapped to their store visibility flag + setter

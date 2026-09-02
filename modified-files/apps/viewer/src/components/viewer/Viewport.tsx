@@ -70,6 +70,11 @@ import { useDxfUnderlays3DLines } from '../../hooks/useDxfUnderlay.js';
 import { uploadDxfLines3DGuarded } from './dxf-lines-3d-upload.js';
 // Trassia overlay (not upstream) — Paket V-DRAPE, siehe hooks/useChDrapeLines.ts.
 import { chDrapeMergeLines, useChDrapeLines } from '@/hooks/useChDrapeLines';
+// Trassia overlay (not upstream) — Trassierungs-Spike S0, siehe
+// hooks/useChEntwurfKorridor.ts. Der Haken liest nur einen Speicher und
+// importiert KEINEN Rechenkern; ohne `?entwurf=1` ist der Speicher leer und
+// er tut nichts.
+import { useChEntwurfKorridor } from '@/hooks/useChEntwurfKorridor';
 import { subscribeViewportHealth } from './device-loss-report.js';
 
 interface ViewportProps {
@@ -1521,9 +1526,19 @@ export function Viewport({
   // Renderdurchlauf eine neue Identitaet und der Effekt unten wuerde bei jedem
   // Durchlauf neu auf die GPU schreiben.
   const chDrape = useChDrapeLines();
+  // Trassia (Trassierungs-Spike S0): das Korridor-Mesh haengt der Haken selbst
+  // per `appendToBatches` in die Szene (Muster `setSpaceOverlayMeshes`, damit
+  // der Streaming-Neuordner nicht bei jedem Zug die Kamera zuruecksetzt); die
+  // KANTEN kommen als Linien hierher und teilen sich denselben Puffer wie
+  // Drape und DXF-Unterlage. Deshalb wird `chDrapeMergeLines` zweimal
+  // angewandt und kein zweites Zusammenfuegen erfunden.
+  const chEntwurf = useChEntwurfKorridor(rendererRef, isInitialized);
   const dxfLines3D = useMemo(
-    () => chDrapeMergeLines(dxfLines3DUpstream, chDrape.positions),
-    [dxfLines3DUpstream, chDrape.positions],
+    () => chDrapeMergeLines(
+      chDrapeMergeLines(dxfLines3DUpstream, chDrape.positions),
+      chEntwurf.positions,
+    ),
+    [dxfLines3DUpstream, chDrape.positions, chEntwurf.positions],
   );
   useEffect(() => {
     const renderer = rendererRef.current;

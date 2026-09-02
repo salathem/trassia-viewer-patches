@@ -47,15 +47,37 @@ import type { CachedSheetTransform } from '@/lib/drawing/sheet-geometry-key';
 // Trassia overlay (not upstream) — Beschriftung der Querprofil-Ansicht,
 // siehe overlay/apps/viewer/src/components/viewer/ChQpStamp.tsx
 import { ChQpStamp, ChQpSheetTitle } from '@/components/viewer/ChQpStamp';
-// Trassia overlay (not upstream) — Paket V-UX (P1): die 2D-Ansicht in ein
-// eigenes Browserfenster ausdocken. Alles daran (Kanal, Nutzlast, Popup-Blocker)
-// liegt im Overlay; hier steht nur der Knopf.
-import { ChSectionPopout } from '@/components/viewer/ChSectionPopout';
+// Trassia overlay (not upstream) — die 2D-Ansicht in ein eigenes Browserfenster
+// ausdocken. Alles daran liegt im Overlay; hier steht nur der Knopf.
+//
+// Seit Paket QP-AUSDOCK steht hier der PORTAL-Weg (`ChAusdockRahmen2D`): das
+// Kindfenster zeigt DIESES Panel, nicht eine nachgebaute Ansicht davon, und
+// damit alle Werkzeuge seiner Kopfleiste. Der fruehere Weg (`ChSectionPopout`,
+// eigene Seite, Zeichnung ueber einen Kanal geschickt) bleibt im Quellcode und
+// behaelt seinen Zweck — er ueberlebt ein Neuladen des Hauptfensters, was ein
+// Portal nie kann. Zwei Fensterknoepfe nebeneinander waeren aber keine Auswahl,
+// sondern eine Frage, die niemand beantworten kann; darum ersetzt der eine den
+// anderen, statt sich danebenzustellen.
+import { ChAusdockRahmen2D } from '@/components/viewer/ChAusdockRahmen2D';
 // Trassia overlay (not upstream) — Paket V-UX (P3): Hoehendeckel, Z-Ordnung
 // nach Benutzung (das 2D-Panel lag fest ueber dem Schnittpanel und frass
-// dessen Klicks) und die ganze Kopfleiste als Griff.
+// dessen Klicks) und die ganze Kopfleiste als Griff. Seit Paket QP-AUSDOCK
+// kommt der dritte Ort dazu: das eigene Fenster.
 import { ChPanelFrame } from '@/components/viewer/ChPanelFrame';
 import { useChHeaderDrag } from '@/hooks/useChPanelChrome';
+// Trassia overlay (Paket QP-AUSDOCK) — die WIRKLICHE Breite dieses Panels,
+// gemessen dort, wo sein Ortswechsel ankommt.
+import {
+  chPanelBreite, chPanelIstSchmal, chPanelOrt, useChPanelBreiten, useChPanelOrte,
+} from '@/lib/ch/panel-breite';
+// Trassia overlay (not upstream) — Paket P3-NP: Marken und Bemassung der
+// Bestandsanalyse an der Station dieses Schnitts. Die Entscheidungen stehen
+// im Haken, damit dieser Patch klein bleibt.
+import { useChNpZeichnung } from '@/hooks/useChNpZeichnung';
+// Trassia overlay (not upstream) — Befund M-2: nach dem Ausdocken auf die
+// WIRKLICHE Groesse des Kindfensters einpassen, nicht auf die des Panels, das
+// gerade verschwunden ist.
+import { useChFitNachOrtswechsel } from '@/hooks/useChFitNachOrtswechsel';
 
 interface Section2DPanelProps {
   mergedGeometry?: GeometryResult | null;
@@ -219,9 +241,23 @@ export function Section2DPanel({
   const cachedSheetTransformRef = useRef<CachedSheetTransform | null>(null);
 
   // Track panel width for responsive header
+  //
+  // Trassia (Paket QP-AUSDOCK): GEMESSEN schlaegt gewuenscht. `panelSize` ist
+  // der Wunsch des schwebenden Kastens und aendert sich nur, wenn jemand an
+  // seinem Rand zieht — die Startwerte (400 x 300) bleiben sonst stehen. Im
+  // eigenen Fenster (1180 px) haette die Kopfleiste damit weiter die schmale
+  // Fassung gezeigt und zwanzig Werkzeuge in einem Ueberlaufmenue versteckt.
+  // Gemessen wird in `ChPanelFrame`, weil nur dort der Ortswechsel ankommt;
+  // die ganze Begruendung steht in `lib/ch/panel-breite.ts`.
+  const chBreiten = useChPanelBreiten();
+  const chGemessen = chPanelBreite(chBreiten, 'drawing2d');
+  // Wechselt, sobald das Wurzelelement ausgetauscht wurde (Ortswechsel).
+  const chOrt = chPanelOrt(useChPanelOrte(), 'drawing2d');
+  // Trassia (Paket P3-NP): Bruchkanten und Masse dieser Station.
+  const chNp = useChNpZeichnung();
   useEffect(() => {
-    setIsNarrow(panelSize.width < 480);
-  }, [panelSize.width]);
+    setIsNarrow(chPanelIstSchmal(chGemessen, panelSize.width));
+  }, [chGemessen, panelSize.width]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // MEMOIZED VALUES
@@ -310,7 +346,15 @@ export function Section2DPanel({
     drawing, sectionPlane, containerRef,
     panelVisible, status, sheetEnabled, activeSheet,
     isPinned, cachedSheetTransformRef,
+    // Trassia (Paket QP-AUSDOCK): nach einem Ortswechsel zeigt `containerRef`
+    // auf einen neuen Knoten — der Radzoom muss dorthin umziehen.
+    reattachToken: chOrt,
   });
+
+  // Trassia (Befund M-2): das Einpassen des Upstreams laeuft 50 ms nach dem
+  // Aufbau — im Kindfenster ist der Zeichenbereich dann noch der alte, kleine.
+  // Dieser Haken regelt nach, solange die Groesse sich noch setzt.
+  useChFitNachOrtswechsel(containerRef, chOrt, status === 'ready' && !!drawing, fitToView);
 
   const measureHandlers = useMeasure2D({
     drawing, viewTransform, setViewTransform, sectionAxis: sectionPlane.axis, containerRef,
@@ -1124,11 +1168,11 @@ export function Section2DPanel({
             </>
           )}
 
-          {/* Trassia (Paket V-UX, P1): ausdocken. Steht ABSICHTLICH ausserhalb
+          {/* Trassia (Paket QP-AUSDOCK): ausdocken. Steht ABSICHTLICH ausserhalb
               des `!isNarrow`-Blocks und ist damit immer sichtbar — gerade im
               schmalen Panel ist das eigene Fenster am meisten wert, und
               genau dort verschwinden sonst alle Knoepfe ins Ueberlaufmenue. */}
-          <ChSectionPopout />
+          <ChAusdockRahmen2D />
 
           {/* Close button always visible */}
           <Button variant="ghost" size="icon-sm" onClick={handleClose} title="Close">
@@ -1220,6 +1264,10 @@ export function Section2DPanel({
               scanPoints={displayOptions.showScanSection ? scanSectionLayer.points : undefined}
               scanOpacity={displayOptions.scanSectionOpacity}
               unitDisplayOverrides={unitDisplayOverrides}
+              chNpMarken={chNp.marken}
+              chNpBemassungen={chNp.bemassungen}
+              chNpKlassenLabel={chNp.klassenLabel}
+              chNpHerkunft={chNp.herkunft}
             />
             {/* Subtle updating indicator - shows while regenerating without hiding the drawing */}
             {isRegenerating && (

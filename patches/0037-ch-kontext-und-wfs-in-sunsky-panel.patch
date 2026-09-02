@@ -1,0 +1,76 @@
+diff --git a/apps/viewer/src/components/viewer/SunSkyPanel.tsx b/apps/viewer/src/components/viewer/SunSkyPanel.tsx
+index 3cfbab8..cce824a 100644
+--- a/apps/viewer/src/components/viewer/SunSkyPanel.tsx
++++ b/apps/viewer/src/components/viewer/SunSkyPanel.tsx
+@@ -25,6 +25,13 @@ import { useDraggablePanel } from '@/hooks/useDraggablePanel';
+ import { cn } from '@/lib/utils';
+ import type { CesiumDataSource } from '@/store/slices/cesiumSlice';
+ import { CustomBasemapEditor } from './CustomBasemapEditor';
++// Trassia overlay (Pakete V-KONTEXT / V-WFS) — die zuschaltbare
++// swisstopo-Umgebung und die amtlichen WFS-Ebenen. Beide gehoeren in den
++// Weltmodus-Zweig dieses Panels: dort steht schon die verwandte Entscheidung
++// (Basiskarte), und beide Bauteile rendern nichts, was den Upstream stoert.
++import { ChUmgebungSchalter } from './ChUmgebungSchalter';
++import { ChWfsLayers } from './ChWfsLayers';
++import { CH_BASISKARTEN_VERFUEGBAR } from '@/lib/ch/kontext/basiskarten';
+ import type { SolarSweepMode } from '@/store/slices/solarSlice';
+ import { LIGHTING_PRESETS, LIGHTING_PRESET_ORDER, isLightingPresetId } from '@/lib/lighting-presets';
+ import { LightingTrimControls } from './LightingTrimControls';
+@@ -148,22 +155,41 @@ export function SunSkyPanel() {
+               {/* Base map — pick the real-world backdrop. Photorealistic can
+                   be overwhelming; the plain OSM map is a simple flat
+                   alternative (#1744). Lives here (not just in the sun study)
+-                  so the choice is available whenever the world context is on. */}
+-              <label className="flex flex-col gap-0.5">
+-                <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Base map</span>
+-                <select
+-                  aria-label="World context base map"
+-                  value={dataSource}
+-                  onChange={(e) => setDataSource(e.target.value as CesiumDataSource)}
+-                  title={CONTEXT_SOURCES.find((s) => s.value === dataSource)?.hint}
+-                  className="w-full bg-muted/40 rounded px-1.5 py-1 border text-foreground text-[10px]"
+-                >
+-                  {CONTEXT_SOURCES.map((src) => (
+-                    <option key={src.value} value={src.value}>{src.label}</option>
+-                  ))}
+-                </select>
+-              </label>
+-              {dataSource === 'custom' && <CustomBasemapEditor />}
++                  so the choice is available whenever the world context is on.
++
++                  Trassia (V-WELT-FIX): AUSGEBLENDET. Keine der vier Quellen
++                  kann unter unserer CSP laden — drei brauchen Cesium ion
++                  (api.cesium.com), eine einen frei eingetippten Fremdhost.
++                  Der Tester-Befund dazu war „schwarze Kugel". Ein Knopf, der
++                  nachweislich nichts tun kann, ist schlimmer als kein Knopf.
++                  An seiner Stelle steht das SWISSIMAGE-Orthofoto in
++                  <ChUmgebungSchalter />. Begruendung und der Weg zurueck:
++                  lib/ch/kontext/basiskarten.ts. */}
++              {CH_BASISKARTEN_VERFUEGBAR && (
++                <>
++                  <label className="flex flex-col gap-0.5">
++                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Base map</span>
++                    <select
++                      aria-label="World context base map"
++                      value={dataSource}
++                      onChange={(e) => setDataSource(e.target.value as CesiumDataSource)}
++                      title={CONTEXT_SOURCES.find((s) => s.value === dataSource)?.hint}
++                      className="w-full bg-muted/40 rounded px-1.5 py-1 border text-foreground text-[10px]"
++                    >
++                      {CONTEXT_SOURCES.map((src) => (
++                        <option key={src.value} value={src.value}>{src.label}</option>
++                      ))}
++                    </select>
++                  </label>
++                  {dataSource === 'custom' && <CustomBasemapEditor />}
++                </>
++              )}
++              {/* Trassia: swisstopo-Umgebung (Gebaeude/Vegetation/Terrain),
++                  per Vorgabe aus, mit Quellenangabe. */}
++              <ChUmgebungSchalter />
++              {/* Trassia: amtliche WFS-Ebenen, auf den Kartenausschnitt
++                  zugeschnitten. Zugeklappt, bis jemand sie braucht. */}
++              <ChWfsLayers />
+             </>
+           ) : (
+             <label className="flex flex-col gap-0.5">

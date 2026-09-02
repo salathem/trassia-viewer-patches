@@ -1,0 +1,26 @@
+diff --git a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
+--- a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
++++ b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
+@@ -17,6 +17,8 @@
+ import { SectionCapControls } from './SectionCapControls';
+ // Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/ChAlignmentSection.tsx
+ import { ChAlignmentSection } from './ChAlignmentSection';
++// Trassia overlay (not upstream) — Querprofil-Ansicht, Paket V-QP.
++import { ChQpTools } from './ChQpTools';
+ import { chPeekProjectSection } from '@/lib/ch/ch-project-section';
+ import { useChSectionPanelAutoCollapse } from '@/hooks/useChNarrowPanels';
+ 
+@@ -267,6 +269,13 @@
+                 building model sees the panel exactly as upstream ships it. */}
+             <ChAlignmentSection />
+ 
++            {/* Trassia: Korridorbreite und Hoehenueberhoehung der
++                Querprofil-Ansicht, und der Schnitt entlang einer Nutzerlinie
++                (angeklickte Polylinie oder DXF-Linie). Der Ansichtsblock
++                erscheint nur bei einer eigenen Schnittebene; der Linienblock
++                immer, weil er selbst eine erzeugt. */}
++            <ChQpTools />
++
+             {/* Position. In cardinal mode this is a 0..100% slider along the
+                 axis. In custom mode (issue #243) the numeric input becomes
+                 a precise signed distance in world units along the picked

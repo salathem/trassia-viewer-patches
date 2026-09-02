@@ -1,0 +1,89 @@
+diff --git a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
+index 82752e0..77215d0 100644
+--- a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
++++ b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
+@@ -30,6 +30,24 @@ const ACTIVITY_BAR_PX = 48; // w-12
+ // Mirrors the clamp in sidebarSlice so the live drag matches what is persisted.
+ const MIN_WIDTH_PCT = 14;
+ const MAX_WIDTH_PCT = 60;
++// Trassia (Paket V-PFLEGE, Teil A): Pixelboden neben dem Prozentboden.
++//
++// Ein Prozentboden skaliert falsch herum — je breiter der Bildschirm, desto
++// breiter das erzwungene Minimum, obwohl der Platzbedarf des Inhalts in
++// Pixeln konstant ist. 14 % sind auf 1600 px 224 px, auf 2560 px aber 358 px
++// und auf 3440 px 482 px. Auf einem grossen Schirm liess sich die Leiste
++// dadurch nicht mehr schmal ziehen, ohne dass ein Grund sichtbar war (Marcos
++// Befund vom 2026-09-01).
++//
++// 240 px ist gemessen, nicht geraten: unterhalb davon laeuft im schmalsten
++// Upstream-Panel (Clash) die Knopfreihe aus dem Kasten — Protokoll
++// Business/tests/20260903_ui-dichte/audit-vorher.json.
++//
++// Der Boden ist das MINIMUM aus beiden Werten, nie das Maximum: auf schmalen
++// Fenstern bleibt alles wie bisher (dort sind 14 % ohnehin weniger als
++// 240 px), auf breiten wird der Prozentboden geloest. Diese Aenderung kann
++// den erlaubten Bereich also nur vergroessern, nie verkleinern.
++const MIN_WIDTH_PX = 240;
+ 
+ export function SidebarDock() {
+   const mode = useViewerStore((s) => s.sidebarMode);
+@@ -68,7 +86,11 @@ export function SidebarDock() {
+         // the store enforces so the pane doesn't rubber-band past the limits.
+         const contentPx = rect.right - ACTIVITY_BAR_PX - ev.clientX;
+         const pct = (contentPx / rect.width) * 100;
+-        setDragPct(Math.max(MIN_WIDTH_PCT, Math.min(MAX_WIDTH_PCT, pct)));
++        // Trassia: der kleinere der beiden Boeden gewinnt (siehe MIN_WIDTH_PX).
++        const minPct = rect.width > 0
++          ? Math.min(MIN_WIDTH_PCT, (MIN_WIDTH_PX / rect.width) * 100)
++          : MIN_WIDTH_PCT;
++        setDragPct(Math.max(minPct, Math.min(MAX_WIDTH_PCT, pct)));
+       };
+       const teardown = () => {
+         document.removeEventListener('mousemove', move);
+diff --git a/apps/viewer/src/store/slices/sidebarSlice.ts b/apps/viewer/src/store/slices/sidebarSlice.ts
+index 742575b..a7a6145 100644
+--- a/apps/viewer/src/store/slices/sidebarSlice.ts
++++ b/apps/viewer/src/store/slices/sidebarSlice.ts
+@@ -57,7 +57,19 @@ export interface SidebarLayoutSnapshot {
+ }
+ 
+ const STORAGE_KEY = 'ifc-lite:sidebar-layout-v1';
+-const MIN_WIDTH_PCT = 14;
++// Trassia (Paket V-PFLEGE, Teil A): von 14 auf 6 gesenkt.
++//
++// Diese Klemme ist die PERSISTENZ-Schranke — sie faengt kaputte oder
++// veraltete gespeicherte Werte ab. Der echte, bildschirmbreitenabhaengige
++// Boden liegt in SidebarDock.tsx (MIN_WIDTH_PX = 240 px), weil nur dort die
++// Breite der Zeile bekannt ist; ein Prozentwert allein kann ihn nicht
++// ausdruecken. Bliebe hier 14 stehen, wuerde der Speicher jede vom Nutzer
++// gezogene Breite unter 14 % sofort wieder hochklemmen und die Aenderung in
++// SidebarDock waere wirkungslos.
++//
++// 6 % deckt 240 px bis hinauf zu einem 4000-px-Schirm ab (240/4000 = 6 %) und
++// bleibt zugleich eine echte Schranke gegen eine auf null gespeicherte Breite.
++const MIN_WIDTH_PCT = 6;
+ const MAX_WIDTH_PCT = 60;
+ 
+ // Display order in the rail. Hierarchy (#1267) is appended to WORKSPACE_PANELS
+diff --git a/apps/viewer/src/store/slices/sidebarSlice.test.ts b/apps/viewer/src/store/slices/sidebarSlice.test.ts
+index 7ba80d7..4025c49 100644
+--- a/apps/viewer/src/store/slices/sidebarSlice.test.ts
++++ b/apps/viewer/src/store/slices/sidebarSlice.test.ts
+@@ -59,7 +59,16 @@ describe('sidebarSlice (#1208)', () => {
+     s.getState().setSidebarWidthPct(999);
+     assert.ok(s.getState().sidebarWidthPct <= 60);
+     s.getState().setSidebarWidthPct(1);
+-    assert.ok(s.getState().sidebarWidthPct >= 14);
++    // Trassia (Paket V-PFLEGE, Patch 0044): der Boden dieser Klemme ist von
++    // 14 auf 6 % gesenkt worden. Der Test hielt genau den Wert fest, den die
++    // Aenderung bewusst aufgibt — ein Prozentboden waechst mit dem Bildschirm
++    // (14 % sind auf einem 3440-px-Schirm 482 px) und ist darum der falsche
++    // Ort fuer eine Untergrenze. Der echte, breitenabhaengige Boden liegt
++    // seither in SidebarDock.tsx (MIN_WIDTH_PX = 240 px); diese Klemme ist
++    // nur noch die Persistenz-Schranke gegen kaputte gespeicherte Werte.
++    // Der Pruefgegenstand — „eine unsinnige Zahl wird geklemmt" — bleibt
++    // unveraendert, nur die Zahl folgt der neuen Schranke.
++    assert.ok(s.getState().sidebarWidthPct >= 6);
+   });
+ 
+   it('reorders a panel to the front', () => {

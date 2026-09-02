@@ -1,0 +1,85 @@
+diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
+index c832137..98f633f 100644
+--- a/apps/viewer/src/lib/panels/registry.ts
++++ b/apps/viewer/src/lib/panels/registry.ts
+@@ -39,8 +39,14 @@ import {
+   Ruler,
+   // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
+   ChartSpline,
++  // Trassia overlay (not upstream) — Trassierungs-Spike S0 (Paket ENTWURF).
++  Route,
+   type LucideIcon,
+ } from 'lucide-react';
++// Trassia overlay (not upstream) — die Spike-Flagge `?entwurf=1`. Winzig und
++// ohne Abhaengigkeiten; der eigentliche Spike haengt hinter einem dynamischen
++// Import (siehe renderPanelBody.tsx) und liegt darum nicht im Startbuendel.
++import { chEntwurfAktiv } from '@/lib/ch/entwurf/entwurf-flag';
+ 
+ /** Every panel reachable from the unified sidebar rail. `properties` is the
+  *  Information panel (the right pane's default fallback). Each panel opens in
+@@ -68,7 +74,9 @@ export type WorkspacePanelId =
+   // Trassia overlay (not upstream) — Paket V-KUBATUR.
+   | 'kubatur'
+   // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
+-  | 'laengsschnitt';
++  | 'laengsschnitt'
++  // Trassia overlay (not upstream) — Trassierungs-Spike S0, nur bei `?entwurf=1`.
++  | 'entwurf';
+ 
+ /** Activity-bar clustering — a divider is drawn whenever the group changes. */
+ export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
+@@ -142,6 +150,19 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   // zwar unten in dieser Datei, wird aber nirgends gelesen (geprueft im
+   // Pin 989da893: einzige Fundstelle ist die Deklaration selbst).
+   { id: 'laengsschnitt', title: 'Longitudinal profile', short: 'Profile', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
++  // Trassia (Trassierungs-Spike S0): Achse und Gradiente entwerfen, Korridor,
++  // Massen und Normbefunde. **Nur bei `?entwurf=1`** — ohne die Flagge steht
++  // der Eintrag gar nicht in der Registratur, also gibt es kein Symbol in der
++  // Leiste, keinen Tastenweg und keinen Aufrufer fuer den dynamischen Import.
++  // Das ist der Unterschied zwischen „unsichtbar" und „nicht geladen".
++  //
++  // ANGEHAENGT wie `drape`, `kubatur` und `laengsschnitt`. Der bedingte
++  // Eintrag ist der EINZIGE in dieser Liste — und er steht am Ende, damit die
++  // eingefrorene Alt+1..0-Zuordnung der ersten zehn Eintraege in beiden
++  // Faellen (Flagge an wie aus) dieselbe ist.
++  ...(chEntwurfAktiv()
++    ? [{ id: 'entwurf' as const, title: 'Alignment design (spike)', short: 'Design', Icon: Route, group: 'author' as const, region: 'side' as const, prefersWide: true }]
++    : []),
+ ];
+ 
+ /** The bottom-strip panel ids, mapped to their store visibility flag + setter
+diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
+index 7c4e544..83baccc 100644
+--- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
++++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
+@@ -34,6 +34,15 @@ import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
+ // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT, siehe
+ // ChLaengsschnittPanel.tsx.
+ import { ChLaengsschnittPanel } from '@/components/viewer/ChLaengsschnittPanel';
++// Trassia overlay (not upstream) — Trassierungs-Spike S0. Der EINZIGE Weg zu
++// den schweren Modulen des Spikes (Normalprofil, Korridor, Befunde) fuehrt
++// ueber diesen dynamischen Import, und der Fall `entwurf` ist ohne
++// `?entwurf=1` nicht erreichbar: die Registratur fuehrt den Eintrag dann gar
++// nicht. Ein STATISCHER Import hier zoege den Spike ins Startbuendel und die
++// Flagge waere eine Sichtbarkeits-, keine Ladefrage.
++const ChEntwurfPanel = lazy(() =>
++  import('@/components/viewer/ChEntwurfPanel').then((m) => ({ default: m.ChEntwurfPanel })),
++);
+ // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
+ // dynamic chunk keeps it out of the initial bundle until first opened.
+ const LayersPanel = lazy(() =>
+@@ -73,6 +82,14 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+     case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
+     // Trassia (Paket V-LAENGSSCHNITT).
+     case 'laengsschnitt': return <ChLaengsschnittPanel onClose={onClose} />;
++    // Trassia (Trassierungs-Spike S0, nur bei `?entwurf=1`).
++    case 'entwurf': return (
++      <ChunkErrorBoundary label="Alignment design panel">
++        <Suspense fallback={null}>
++          <ChEntwurfPanel onClose={onClose} />
++        </Suspense>
++      </ChunkErrorBoundary>
++    );
+     case 'layers': return (
+       <ChunkErrorBoundary label="Layers panel">
+         <Suspense fallback={null}>

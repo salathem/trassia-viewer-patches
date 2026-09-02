@@ -1,19 +1,21 @@
 diff --git a/apps/viewer/src/components/viewer/Section2DPanel.tsx b/apps/viewer/src/components/viewer/Section2DPanel.tsx
+index cf7249c..5322110 100644
 --- a/apps/viewer/src/components/viewer/Section2DPanel.tsx
 +++ b/apps/viewer/src/components/viewer/Section2DPanel.tsx
-@@ -51,6 +51,11 @@ import { ChQpStamp, ChQpSheetTitle } from '@/components/viewer/ChQpStamp';
- // eigenes Browserfenster ausdocken. Alles daran (Kanal, Nutzlast, Popup-Blocker)
- // liegt im Overlay; hier steht nur der Knopf.
- import { ChSectionPopout } from '@/components/viewer/ChSectionPopout';
+@@ -59,6 +59,12 @@ import { ChQpStamp, ChQpSheetTitle } from '@/components/viewer/ChQpStamp';
+ // sondern eine Frage, die niemand beantworten kann; darum ersetzt der eine den
+ // anderen, statt sich danebenzustellen.
+ import { ChAusdockRahmen2D } from '@/components/viewer/ChAusdockRahmen2D';
 +// Trassia overlay (not upstream) — Paket V-UX (P3): Hoehendeckel, Z-Ordnung
 +// nach Benutzung (das 2D-Panel lag fest ueber dem Schnittpanel und frass
-+// dessen Klicks) und die ganze Kopfleiste als Griff.
++// dessen Klicks) und die ganze Kopfleiste als Griff. Seit Paket QP-AUSDOCK
++// kommt der dritte Ort dazu: das eigene Fenster.
 +import { ChPanelFrame } from '@/components/viewer/ChPanelFrame';
 +import { useChHeaderDrag } from '@/hooks/useChPanelChrome';
  
  interface Section2DPanelProps {
    mergedGeometry?: GeometryResult | null;
-@@ -203,6 +208,9 @@ export function Section2DPanel({
+@@ -211,6 +217,9 @@ export function Section2DPanel({
    // Drag-to-move by the header grip (issue #1107). Disabled while expanded —
    // that mode is full-screen (inset-4), so a free position makes no sense.
    const drag = useDraggablePanel(panelRef, { disabled: isExpanded });
@@ -23,7 +25,7 @@ diff --git a/apps/viewer/src/components/viewer/Section2DPanel.tsx b/apps/viewer/
    const isResizing = useRef<'right' | 'top' | 'bottom' | 'corner-top' | 'corner-bottom' | null>(null);
    const resizeStartPos = useRef({ x: 0, y: 0, width: 0, height: 0 });
    // Track resize event handlers for cleanup
-@@ -694,13 +702,18 @@ export function Section2DPanel({
+@@ -702,13 +711,18 @@ export function Section2DPanel({
      : 'absolute bottom-4 left-4 z-40';
  
    return (
@@ -47,7 +49,7 @@ diff --git a/apps/viewer/src/components/viewer/Section2DPanel.tsx b/apps/viewer/
          <div className="flex items-center gap-1.5 min-w-0">
            {!isExpanded && (
              <span
-@@ -1383,6 +1396,6 @@ export function Section2DPanel({
+@@ -1391,6 +1405,6 @@ export function Section2DPanel({
          open={titleBlockEditorVisible}
          onOpenChange={setTitleBlockEditorVisible}
        />

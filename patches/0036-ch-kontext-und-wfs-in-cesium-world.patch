@@ -1,0 +1,34 @@
+diff --git a/apps/viewer/src/components/viewer/CesiumOverlay.tsx b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
+index 832ce1b..2ffc943 100644
+--- a/apps/viewer/src/components/viewer/CesiumOverlay.tsx
++++ b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
+@@ -34,6 +34,11 @@ import { useCesiumCameraSync } from './cesium/useCesiumCameraSync';
+ // ZUSAETZLICHE Primitive in derselben Szene. Warum nicht als weiterer Fall in
+ // addDataSourceLayer(): siehe cesium/useChCesiumTiles.ts.
+ import { useChCesiumTiles } from './cesium/useChCesiumTiles';
++// Trassia overlay (Paket V-KONTEXT) — die zuschaltbare swisstopo-Umgebung
++// (Gebaeude / Vegetation / Terrain), per Vorgabe AUS.
++import { useChSwisstopoUmgebung } from './cesium/useChSwisstopoUmgebung';
++// Trassia overlay (Paket V-WFS) — amtliche WFS-Ebenen als geklemmte Overlays.
++import { useChWfsLayers } from './cesium/useChWfsLayers';
+ 
+ export interface CesiumOverlayProps {
+   mapConversion?: MapConversion;
+@@ -399,6 +404,17 @@ export function CesiumOverlay({
+   // zerstoert. Der Haken rechnet damit.
+   useChCesiumTiles({ status, viewerRef });
+ 
++  // ─── Trassia: die swisstopo-Umgebung (Paket V-KONTEXT) ──────────────────
++  // Nach den Projektkacheln: erst das Projekt, dann der Kontext — auch in der
++  // Reihenfolge, in der aufgeraeumt wird. Alle drei Ebenen sind per Vorgabe
++  // aus und erzeugen erst nach einem Klick Verkehr.
++  useChSwisstopoUmgebung({ status, viewerRef });
++
++  // ─── Trassia: WFS-Ebenen (Paket V-WFS) ──────────────────────────────────
++  // Zuletzt: sie werden auf das Terrain geklemmt, das der Haken darueber
++  // setzt.
++  useChWfsLayers({ status, viewerRef });
++
+   if (!cesiumEnabled || !mapConversion || !projectedCRS) {
+     return null;
+   }

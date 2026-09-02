@@ -1,0 +1,82 @@
+diff --git a/apps/viewer/src/hooks/useDrawingGeneration.ts b/apps/viewer/src/hooks/useDrawingGeneration.ts
+--- a/apps/viewer/src/hooks/useDrawingGeneration.ts
++++ b/apps/viewer/src/hooks/useDrawingGeneration.ts
+@@ -43,6 +43,11 @@
+ import * as IfcWasm from '@ifc-lite/wasm';
+ import { customPlaneCenter } from '@/store';
+ import { buildModelViewIdFilter, selectModelMeshes } from '@/lib/type-view-visibility';
++// Trassia overlay (not upstream) — Querprofil-Ansicht, Paket V-QP.
++// Der Korridor begrenzt die ZEICHNUNG (siehe lib/ch/qp-corridor.ts), der
++// Vorfilter die Dreiecke, die ueberhaupt geschnitten werden.
++import { chQpShapeDrawing, useChQpView } from '@/lib/ch/qp-corridor';
++import { corridorPlanRect, narrowMeshesToCorridor } from '@/lib/ch/qp-prefilter';
+ import { isTypeVisible, type TypeVisibilityGate } from '@/store/typeVisibilityFilter';
+ 
+ // The winding-robust Rust `meshOutline2d` binding (issue #979) is gitignored →
+@@ -144,6 +149,9 @@
+   setDrawingProgress,
+   setDrawingError,
+ }: UseDrawingGenerationParams): UseDrawingGenerationResult {
++  // Trassia: Korridorbreite und Ueberhoehung. Als Abonnement, damit eine
++  // geaenderte Breite dieselbe Neuberechnung ausloest wie eine neue Station.
++  const chQp = useChQpView();
+   // Track if this is a regeneration (vs initial generation)
+   const isRegeneratingRef = useRef(false);
+ 
+@@ -522,6 +530,22 @@
+         );
+       }
+ 
++      // Trassia (Paket V-QP): raeumlicher Vorfilter auf den Querprofil-Korridor.
++      // Ohne ihn laeuft der CPU-Cutter je Station ueber jedes Dreieck des
++      // Gelaendes, obwohl der Korridor davon ein 60-m-Streifen ist; MIT ihm
++      // haengt der Preis eines Stationswechsels an der Korridorgroesse statt an
++      // der Modellgroesse. Kein Korridor oder keine eigene Ebene => unveraendert.
++      if (chQp.halfWidthM !== null && sectionPlane.custom) {
++        meshesToProcess = narrowMeshesToCorridor(
++          meshesToProcess,
++          corridorPlanRect(
++            sectionPlane.custom.pickedAt,
++            sectionPlane.custom.normal,
++            chQp.halfWidthM,
++          ),
++        );
++      }
++
+       // If all meshes were filtered out by visibility, clear the drawing
+       if (meshesToProcess.length === 0) {
+         setDrawing(null);
+@@ -843,9 +867,10 @@
+           },
+         };
+ 
+-        setDrawing(hybridDrawing);
++        // Trassia: Korridor + Ueberhoehung, unmittelbar vor dem Store.
++        setDrawing(chQpShapeDrawing(hybridDrawing, chQp, Boolean(sectionPlane.custom)));
+       } else {
+-        setDrawing(result);
++        setDrawing(chQpShapeDrawing(result, chQp, Boolean(sectionPlane.custom)));
+       }
+ 
+       // Always set status to ready (whether initial generation or regeneration)
+@@ -859,6 +884,7 @@
+       generator?.dispose();
+     }
+   }, [
++    chQp,
+     geometryResult,
+     ifcDataStore,
+     sectionPlane,
+@@ -937,8 +963,11 @@
+   // plane's normal+distance into a string we can compare cheaply — without
+   // it dragging the gizmo wouldn't trigger regeneration because the
+   // cardinal axis/position/flipped triple stays the same.
++  // Trassia: `chQp.key` haengt mit im Schluessel. Eine geaenderte Korridorbreite
++  // laesst die Ebene unveraendert — ohne diesen Anteil wuerde das Panel die alte
++  // Zeichnung behalten und der Regler waere wirkungslos.
+   const customKey = (sp: { custom?: { normal: [number, number, number]; distance: number } }) =>
+-    sp.custom ? `${sp.custom.normal.join(',')}|${sp.custom.distance}` : '';
++    (sp.custom ? `${sp.custom.normal.join(',')}|${sp.custom.distance}` : '') + `|${chQp.key}`;
+   const sectionRef = useRef({
+     axis: sectionPlane.axis,
+     position: sectionPlane.position,

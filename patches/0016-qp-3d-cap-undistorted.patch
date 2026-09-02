@@ -1,0 +1,31 @@
+diff --git a/apps/viewer/src/components/viewer/useRenderUpdates.ts b/apps/viewer/src/components/viewer/useRenderUpdates.ts
+--- a/apps/viewer/src/components/viewer/useRenderUpdates.ts
++++ b/apps/viewer/src/components/viewer/useRenderUpdates.ts
+@@ -17,6 +17,8 @@
+ import type { SectionPlane } from '@/store';
+ import { customPlaneCenter } from '@/store';
+ import { getThemeClearColor } from '../../utils/viewportUtils.js';
++// Trassia overlay (not upstream) — see overlay/apps/viewer/src/lib/ch/qp-corridor.ts
++import { chQpUndistorted } from '@/lib/ch/qp-corridor';
+ 
+ export interface UseRenderUpdatesParams {
+   rendererRef: MutableRefObject<Renderer | null>;
+@@ -73,11 +75,17 @@
+     coordinateInfo,
+     sectionPlaneRef,
+     sectionRangeRef,
+-    drawing2D,
++    drawing2D: drawing2DFromStore,
+     show3DOverlay,
+     showHiddenLines,
+   } = params;
+ 
++  // Trassia (Paket V-QP): die 3D-Kappe nimmt IMMER die unverzerrte Zeichnung.
++  // Die Hoehenueberhoehung des Querprofil-Panels ist eine Sache der ANZEIGE im
++  // 2D-Blatt; in den Raum gehoben waere sie eine Kappe, die neben ihrem eigenen
++  // Modell schwebt. Ohne Ueberhoehung ist das dasselbe Objekt.
++  const drawing2D = chQpUndistorted(drawing2DFromStore);
++
+   // Theme-aware clear color update
+   useEffect(() => {
+     clearColorRef.current = getThemeClearColor(theme as 'light' | 'dark' | 'colorful');

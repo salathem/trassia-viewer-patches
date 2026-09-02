@@ -30,6 +30,24 @@ const ACTIVITY_BAR_PX = 48; // w-12
 // Mirrors the clamp in sidebarSlice so the live drag matches what is persisted.
 const MIN_WIDTH_PCT = 14;
 const MAX_WIDTH_PCT = 60;
+// Trassia (Paket V-PFLEGE, Teil A): Pixelboden neben dem Prozentboden.
+//
+// Ein Prozentboden skaliert falsch herum — je breiter der Bildschirm, desto
+// breiter das erzwungene Minimum, obwohl der Platzbedarf des Inhalts in
+// Pixeln konstant ist. 14 % sind auf 1600 px 224 px, auf 2560 px aber 358 px
+// und auf 3440 px 482 px. Auf einem grossen Schirm liess sich die Leiste
+// dadurch nicht mehr schmal ziehen, ohne dass ein Grund sichtbar war (Marcos
+// Befund vom 2026-09-01).
+//
+// 240 px ist gemessen, nicht geraten: unterhalb davon laeuft im schmalsten
+// Upstream-Panel (Clash) die Knopfreihe aus dem Kasten — Protokoll
+// Business/tests/20260903_ui-dichte/audit-vorher.json.
+//
+// Der Boden ist das MINIMUM aus beiden Werten, nie das Maximum: auf schmalen
+// Fenstern bleibt alles wie bisher (dort sind 14 % ohnehin weniger als
+// 240 px), auf breiten wird der Prozentboden geloest. Diese Aenderung kann
+// den erlaubten Bereich also nur vergroessern, nie verkleinern.
+const MIN_WIDTH_PX = 240;
 
 export function SidebarDock() {
   const mode = useViewerStore((s) => s.sidebarMode);
@@ -68,7 +86,11 @@ export function SidebarDock() {
         // the store enforces so the pane doesn't rubber-band past the limits.
         const contentPx = rect.right - ACTIVITY_BAR_PX - ev.clientX;
         const pct = (contentPx / rect.width) * 100;
-        setDragPct(Math.max(MIN_WIDTH_PCT, Math.min(MAX_WIDTH_PCT, pct)));
+        // Trassia: der kleinere der beiden Boeden gewinnt (siehe MIN_WIDTH_PX).
+        const minPct = rect.width > 0
+          ? Math.min(MIN_WIDTH_PCT, (MIN_WIDTH_PX / rect.width) * 100)
+          : MIN_WIDTH_PCT;
+        setDragPct(Math.max(minPct, Math.min(MAX_WIDTH_PCT, pct)));
       };
       const teardown = () => {
         document.removeEventListener('mousemove', move);

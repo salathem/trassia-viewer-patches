@@ -1,0 +1,27 @@
+diff --git a/apps/viewer/src/components/viewer/Section2DPanel.tsx b/apps/viewer/src/components/viewer/Section2DPanel.tsx
+index f485f20..a33b437 100644
+--- a/apps/viewer/src/components/viewer/Section2DPanel.tsx
++++ b/apps/viewer/src/components/viewer/Section2DPanel.tsx
+@@ -74,6 +74,10 @@ import {
+ // Bestandsanalyse an der Station dieses Schnitts. Die Entscheidungen stehen
+ // im Haken, damit dieser Patch klein bleibt.
+ import { useChNpZeichnung } from '@/hooks/useChNpZeichnung';
++// Trassia overlay (not upstream) — Befund M-2: nach dem Ausdocken auf die
++// WIRKLICHE Groesse des Kindfensters einpassen, nicht auf die des Panels, das
++// gerade verschwunden ist.
++import { useChFitNachOrtswechsel } from '@/hooks/useChFitNachOrtswechsel';
+ 
+ interface Section2DPanelProps {
+   mergedGeometry?: GeometryResult | null;
+@@ -347,6 +351,11 @@ export function Section2DPanel({
+     reattachToken: chOrt,
+   });
+ 
++  // Trassia (Befund M-2): das Einpassen des Upstreams laeuft 50 ms nach dem
++  // Aufbau — im Kindfenster ist der Zeichenbereich dann noch der alte, kleine.
++  // Dieser Haken regelt nach, solange die Groesse sich noch setzt.
++  useChFitNachOrtswechsel(containerRef, chOrt, status === 'ready' && !!drawing, fitToView);
++
+   const measureHandlers = useMeasure2D({
+     drawing, viewTransform, setViewTransform, sectionAxis: sectionPlane.axis, containerRef,
+     measure2DMode, measure2DStart, measure2DCurrent,

@@ -12,6 +12,9 @@ import { oauthCallbackRoutes } from './vite-plugins/oauth-callback';
 // Same allowlist the production relay uses, so dev and prod cannot disagree
 // about which Dalux node a request reaches (#2792).
 import { daluxRelayRoute } from './vite-plugins/dalux-relay';
+// Trassia: Knockout (in CesiumJS) greift per eval nach dem globalen Objekt —
+// unter unserer CSP ein EvalError, der das ganze Cesium-Modul mitnimmt.
+import { chKnockoutCsp } from './vite-plugins/ch-knockout-csp';
 
 // --- Build-time changelog parser ---
 
@@ -250,6 +253,11 @@ export default defineConfig({
     // relay. Dev runs the SAME handler production does (#2792), rather than a
     // second proxy config that can drift from it.
     daluxRelayRoute(),
+    // Trassia (Paket CSP-WELTMODUS): schreibt Knockouts `this || (0,eval)("this")`
+    // auf `globalThis` um. Ohne das wirft `import('cesium')` unter unserer CSP
+    // (script-src ohne 'unsafe-eval') einen EvalError bei der Modulauswertung —
+    // der Weltmodus war in der Produktion tot. Begruendung und Tore im Plugin.
+    chKnockoutCsp(),
   ],
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),

@@ -1,0 +1,85 @@
+diff --git a/apps/viewer/src/store/slices/sidebarSlice.ts b/apps/viewer/src/store/slices/sidebarSlice.ts
+index a7a6145..27ad9b3 100644
+--- a/apps/viewer/src/store/slices/sidebarSlice.ts
++++ b/apps/viewer/src/store/slices/sidebarSlice.ts
+@@ -82,8 +82,48 @@ const DEFAULT_ORDER: WorkspacePanelId[] = (() => {
+   return ids.includes('hierarchy') ? ['hierarchy', ...rest] : rest;
+ })();
+ 
++// Trassia (Marco-Go 03.09.2026): die Vorgabebreite der Seitenleiste ist
++// 340 PIXEL, nicht 22 Prozent.
++//
++// Warum: ein Prozentwert skaliert mit dem Bildschirm, der Platzbedarf des
++// Inhalts nicht. 22 % sind auf 1600 px 352 px — aber auf einem 2560er Schirm
++// **563 px** und auf 3440 px 757 px. Die 563 px waren die „viel zu grosse"
++// Box aus Marcos Befund (gemessen 2026-09-01,
++// Business/tests/20260903_ui-dichte/leiste-*.json). 340 px ist die heutige
++// 1600-px-Breite, also der Wert, den bisher niemand beanstandet hat.
++//
++// Paket V-PFLEGE hat den ZIEHBODEN auf Pixel umgestellt (MIN_WIDTH_PX in
++// SidebarDock.tsx); dies hier ist das Gegenstueck fuer die VORGABE.
++const DEFAULT_WIDTH_PX = 340;
++
++/**
++ * Die Vorgabebreite als Prozentwert des aktuellen Fensters.
++ *
++ * Zwei Eigenschaften, beide beabsichtigt:
++ *
++ *  1. **Nie breiter als bisher.** Es gilt das Minimum aus 340 px und dem
++ *     alten Prozentwert. Auf einem schmalen Fenster (unter ~1545 px) sind
++ *     22 % weniger als 340 px — dort bleibt alles exakt wie vorher. Die
++ *     Aenderung kann die Vorgabe also nur verkleinern, nie vergroessern.
++ *  2. **Kein Ueberschreiben gespeicherter Werte.** Diese Funktion liefert nur
++ *     den FALLBACK. Wer die Leiste je gezogen hat, hat einen `widthPct` in
++ *     `localStorage`; der Zweig in `loadPersisted()` nimmt ihn unveraendert.
++ *     Die Vorgabe wird beim Start NICHT geschrieben (`persist` laeuft nur aus
++ *     Aktionen heraus) — ohne gespeicherten Wert wird sie darum bei jedem
++ *     Start neu aus der aktuellen Fensterbreite gerechnet und ergibt wieder
++ *     340 px, auf jedem Schirm.
++ *
++ * Ohne `window` (SSR, node:test) bleibt es beim alten Prozentwert.
++ */
++function defaultWidthPct(): number {
++  if (typeof window === 'undefined' || !(window.innerWidth > 0)) {
++    return SIDEBAR_DEFAULT_WIDTH_PCT;
++  }
++  return Math.min(SIDEBAR_DEFAULT_WIDTH_PCT, (DEFAULT_WIDTH_PX / window.innerWidth) * 100);
++}
++
+ function clampWidth(pct: number): number {
+-  if (!Number.isFinite(pct)) return SIDEBAR_DEFAULT_WIDTH_PCT;
++  if (!Number.isFinite(pct)) return defaultWidthPct();
+   return Math.max(MIN_WIDTH_PCT, Math.min(MAX_WIDTH_PCT, pct));
+ }
+ 
+@@ -141,7 +181,8 @@ function coerceMode(m: unknown, fallback: SidebarMode): SidebarMode {
+ function loadPersisted(): SidebarLayoutSnapshot {
+   const fallback: SidebarLayoutSnapshot = {
+     mode: 'expanded',
+-    widthPct: SIDEBAR_DEFAULT_WIDTH_PCT,
++    // Trassia: 340 px statt 22 % — siehe defaultWidthPct().
++    widthPct: defaultWidthPct(),
+     order: [...DEFAULT_ORDER],
+     hiddenIds: [],
+   };
+@@ -152,7 +193,9 @@ function loadPersisted(): SidebarLayoutSnapshot {
+     const parsed = JSON.parse(raw) as Partial<SidebarLayoutSnapshot>;
+     return {
+       mode: coerceMode(parsed?.mode, 'expanded'),
+-      widthPct: clampWidth(typeof parsed?.widthPct === 'number' ? parsed.widthPct : SIDEBAR_DEFAULT_WIDTH_PCT),
++      // Trassia: der GESPEICHERTE Wert gewinnt unveraendert; nur wenn keiner
++      // da ist (oder er kaputt ist), greift die 340-px-Vorgabe.
++      widthPct: clampWidth(typeof parsed?.widthPct === 'number' ? parsed.widthPct : defaultWidthPct()),
+       order: normalizeOrder(parsed?.order),
+       hiddenIds: normalizeHidden(parsed?.hiddenIds),
+     };
+@@ -298,7 +341,8 @@ export const createSidebarSlice: StateCreator<SidebarSlice, [], [], SidebarSlice
+     resetSidebarLayout: () => {
+       const snap: SidebarLayoutSnapshot = {
+         mode: 'expanded',
+-        widthPct: SIDEBAR_DEFAULT_WIDTH_PCT,
++        // Trassia: „Layout zuruecksetzen" gibt die neue Vorgabe, nicht die alte.
++        widthPct: defaultWidthPct(),
+         order: [...DEFAULT_ORDER],
+         hiddenIds: [],
+       };

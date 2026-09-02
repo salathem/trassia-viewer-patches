@@ -625,18 +625,24 @@ export function ViewportContainer() {
     // a dropped site plan must never replace or federate with the model.
     const allDropped0 = Array.from(e.dataTransfer.files);
     const { dxfFiles, modelFiles: allDropped } = splitDxfFiles(allDropped0);
-    // Trassia (Paket V-DRAPE v2): eine sehr grosse DXF wird NICHT als
-    // 2D-Unterlage gelesen — `importDxf` laeuft auf dem Hauptthread und in
-    // einem Zug, und bei 153 MB steht der Tab dabei trotz unseres Workers.
-    // Siehe `chDrapeUnderlayCandidates`; der Hinweis dazu steht im Toast.
-    const dxfFuerUnterlage = chDrapeUnderlayCandidates(dxfFiles);
-    if (dxfFuerUnterlage.length > 0) void ingestDxfFiles(dxfFuerUnterlage);
-    // Trassia (Paket V-DRAPE): dieselbe Datei ZUSAETZLICH auf das Gelaende
-    // legen. Die 2D-Unterlage oben bleibt fuer normal grosse Dateien, wie sie
-    // war — hier kommt nur eine 3D-Fassung dazu, die im Panel „Terrain drape"
-    // ein- und ausschaltbar ist. GeoJSON kommt nicht
-    // durch `splitDxfFiles`, also wird aus der vollen Liste gelesen.
-    chDrapeTakeDroppedFiles(allDropped0);
+    // Trassia (Paket V-DRAPE v2): dieselbe Datei ZUSAETZLICH auf das Gelaende
+    // legen. Die 2D-Unterlage bleibt fuer normal grosse Dateien, wie sie war —
+    // hier kommt nur eine 3D-Fassung dazu, die im Panel „Terrain drape" ein-
+    // und ausschaltbar ist. GeoJSON kommt nicht durch `splitDxfFiles`, also
+    // wird aus der vollen Liste gelesen.
+    //
+    // Die Unterlage kommt DANACH und nur fuer die Dateien, aus denen sie etwas
+    // machen kann (Befund M-2: sonst stehen „contains no drawable 2D entities"
+    // und „draped onto the terrain" nebeneinander). Sehr grosse DXF bleiben
+    // ganz draussen — `importDxf` laeuft auf dem Hauptthread und in einem Zug,
+    // und bei 153 MB steht der Tab dabei trotz unseres Workers
+    // (`chDrapeUnderlayCandidates`; der Hinweis dazu steht im Toast).
+    void chDrapeTakeDroppedFiles(allDropped0).then((fuerUnterlage) => {
+      const dxfFuerUnterlage = chDrapeUnderlayCandidates(
+        dxfFiles.filter((f) => fuerUnterlage.includes(f)),
+      );
+      if (dxfFuerUnterlage.length > 0) void ingestDxfFiles(dxfFuerUnterlage);
+    });
     if (allDropped.length === 0) return;
 
     // Filter to supported files (IFC, IFCX, GLB, point clouds)

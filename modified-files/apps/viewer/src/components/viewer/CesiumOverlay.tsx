@@ -34,6 +34,14 @@ import { useCesiumCameraSync } from './cesium/useCesiumCameraSync';
 // ZUSAETZLICHE Primitive in derselben Szene. Warum nicht als weiterer Fall in
 // addDataSourceLayer(): siehe cesium/useChCesiumTiles.ts.
 import { useChCesiumTiles } from './cesium/useChCesiumTiles';
+// Trassia overlay (Paket V-KONTEXT) — die zuschaltbare swisstopo-Umgebung
+// (Gebaeude / Vegetation / Terrain), per Vorgabe AUS.
+import { useChSwisstopoUmgebung } from './cesium/useChSwisstopoUmgebung';
+// Trassia overlay (Paket V-WFS) — amtliche WFS-Ebenen als geklemmte Overlays.
+import { useChWfsLayers } from './cesium/useChWfsLayers';
+// Trassia (V-WELT-FIX): warum die vier Basiskarten dieses Panels stillgelegt
+// sind und was an ihre Stelle getreten ist.
+import { CH_BASISKARTEN_VERFUEGBAR } from '@/lib/ch/kontext/basiskarten';
 
 export interface CesiumOverlayProps {
   mapConversion?: MapConversion;
@@ -185,7 +193,30 @@ export function CesiumOverlay({
         scene.globe.showGroundAtmosphere = false;
         scene.backgroundColor = Cesium.Color.TRANSPARENT;
         scene.globe.baseColor = Cesium.Color.TRANSPARENT;
-        if (dataSource === 'osm-map') {
+        // Trassia (V-WELT-FIX): fail-closed statt still scheitern.
+        //
+        // Keine der vier Basiskarten kann unter unserer CSP laden — drei
+        // brauchen Cesium ion (`api.cesium.com`), `osm-map` braucht
+        // `tile.openstreetmap.org`, `custom` einen frei eingetippten Host.
+        // Keiner davon steht in `docker/security-headers.conf`, und keiner
+        // soll dort hin (Kosten, Nutzungsbedingungen, kein Token im Bundle).
+        //
+        // Nur die Auswahl im Panel auszublenden haette NICHT gereicht: der
+        // gespeicherte Vorgabewert ist `google-photorealistic`, der Zweig
+        // unten ruft ungefragt Cesium ion, und der CSP-Verstoss waere
+        // geblieben. Fail-closed heisst, dass die Anfrage unterbleibt.
+        //
+        // Der Globus bleibt dabei SICHTBAR — anders als im `else`-Zweig
+        // unten, der ihn abstellt, weil Photorealistic seinen eigenen Boden
+        // mitbraechte. Ohne Basiskarte gibt es diesen Boden nicht, und das
+        // swisstopo-Terrain samt Orthofoto liegt genau darauf
+        // (`overlay/.../cesium/useChSwisstopoUmgebung.ts`).
+        //
+        // Begruendung und der Weg zurueck: `lib/ch/kontext/basiskarten.ts`.
+        if (!CH_BASISKARTEN_VERFUEGBAR) {
+          scene.globe.show = true;
+          scene.globe.shadows = Cesium.ShadowMode.RECEIVE_ONLY;
+        } else if (dataSource === 'osm-map') {
           // Plain OpenStreetMap slippy map: a simple, uncluttered flat base
           // map (no satellite imagery, no 3D massing) for users who find the
           // photorealistic globe overwhelming (#1744). The globe drapes the
@@ -399,6 +430,17 @@ export function CesiumOverlay({
   // zerstoert. Der Haken rechnet damit.
   useChCesiumTiles({ status, viewerRef });
 
+  // ─── Trassia: die swisstopo-Umgebung (Paket V-KONTEXT) ──────────────────
+  // Nach den Projektkacheln: erst das Projekt, dann der Kontext — auch in der
+  // Reihenfolge, in der aufgeraeumt wird. Alle drei Ebenen sind per Vorgabe
+  // aus und erzeugen erst nach einem Klick Verkehr.
+  useChSwisstopoUmgebung({ status, viewerRef });
+
+  // ─── Trassia: WFS-Ebenen (Paket V-WFS) ──────────────────────────────────
+  // Zuletzt: sie werden auf das Terrain geklemmt, das der Haken darueber
+  // setzt.
+  useChWfsLayers({ status, viewerRef });
+
   if (!cesiumEnabled || !mapConversion || !projectedCRS) {
     return null;
   }
@@ -457,6 +499,12 @@ async function addDataSourceLayer(
   dataSource: string,
   ionToken: string,
 ): Promise<InstanceType<typeof import('cesium').Cesium3DTileset> | null> {
+  // Trassia (V-WELT-FIX): die zweite Haelfte des fail-closed-Riegels. Ohne
+  // diese Zeile liefe der `default`-Zweig unten in
+  // `createGooglePhotorealistic3DTileset()` und damit in eine ion-Anfrage,
+  // die die CSP abweist — ein Verstoss in der Konsole fuer eine Karte, die
+  // niemand mehr waehlen kann. Siehe `lib/ch/kontext/basiskarten.ts`.
+  if (!CH_BASISKARTEN_VERFUEGBAR) return null;
   try {
     switch (dataSource) {
       case 'osm-map':

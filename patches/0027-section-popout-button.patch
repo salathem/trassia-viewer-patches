@@ -1,26 +1,35 @@
 diff --git a/apps/viewer/src/components/viewer/Section2DPanel.tsx b/apps/viewer/src/components/viewer/Section2DPanel.tsx
+index 634345d..cf7249c 100644
 --- a/apps/viewer/src/components/viewer/Section2DPanel.tsx
 +++ b/apps/viewer/src/components/viewer/Section2DPanel.tsx
-@@ -47,6 +47,10 @@
+@@ -47,6 +47,18 @@ import type { CachedSheetTransform } from '@/lib/drawing/sheet-geometry-key';
  // Trassia overlay (not upstream) — Beschriftung der Querprofil-Ansicht,
  // siehe overlay/apps/viewer/src/components/viewer/ChQpStamp.tsx
  import { ChQpStamp, ChQpSheetTitle } from '@/components/viewer/ChQpStamp';
-+// Trassia overlay (not upstream) — Paket V-UX (P1): die 2D-Ansicht in ein
-+// eigenes Browserfenster ausdocken. Alles daran (Kanal, Nutzlast, Popup-Blocker)
-+// liegt im Overlay; hier steht nur der Knopf.
-+import { ChSectionPopout } from '@/components/viewer/ChSectionPopout';
++// Trassia overlay (not upstream) — die 2D-Ansicht in ein eigenes Browserfenster
++// ausdocken. Alles daran liegt im Overlay; hier steht nur der Knopf.
++//
++// Seit Paket QP-AUSDOCK steht hier der PORTAL-Weg (`ChAusdockRahmen2D`): das
++// Kindfenster zeigt DIESES Panel, nicht eine nachgebaute Ansicht davon, und
++// damit alle Werkzeuge seiner Kopfleiste. Der fruehere Weg (`ChSectionPopout`,
++// eigene Seite, Zeichnung ueber einen Kanal geschickt) bleibt im Quellcode und
++// behaelt seinen Zweck — er ueberlebt ein Neuladen des Hauptfensters, was ein
++// Portal nie kann. Zwei Fensterknoepfe nebeneinander waeren aber keine Auswahl,
++// sondern eine Frage, die niemand beantworten kann; darum ersetzt der eine den
++// anderen, statt sich danebenzustellen.
++import { ChAusdockRahmen2D } from '@/components/viewer/ChAusdockRahmen2D';
  
  interface Section2DPanelProps {
    mergedGeometry?: GeometryResult | null;
-@@ -1107,6 +1111,12 @@
+@@ -1107,6 +1119,12 @@ export function Section2DPanel({
              </>
            )}
  
-+          {/* Trassia (Paket V-UX, P1): ausdocken. Steht ABSICHTLICH ausserhalb
++          {/* Trassia (Paket QP-AUSDOCK): ausdocken. Steht ABSICHTLICH ausserhalb
 +              des `!isNarrow`-Blocks und ist damit immer sichtbar — gerade im
 +              schmalen Panel ist das eigene Fenster am meisten wert, und
 +              genau dort verschwinden sonst alle Knoepfe ins Ueberlaufmenue. */}
-+          <ChSectionPopout />
++          <ChAusdockRahmen2D />
 +
            {/* Close button always visible */}
            <Button variant="ghost" size="icon-sm" onClick={handleClose} title="Close">

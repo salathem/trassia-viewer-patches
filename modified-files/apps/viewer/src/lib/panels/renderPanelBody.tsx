@@ -34,6 +34,15 @@ import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
 // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT, siehe
 // ChLaengsschnittPanel.tsx.
 import { ChLaengsschnittPanel } from '@/components/viewer/ChLaengsschnittPanel';
+// Trassia overlay (not upstream) — Trassierungs-Spike S0. Der EINZIGE Weg zu
+// den schweren Modulen des Spikes (Normalprofil, Korridor, Befunde) fuehrt
+// ueber diesen dynamischen Import, und der Fall `entwurf` ist ohne
+// `?entwurf=1` nicht erreichbar: die Registratur fuehrt den Eintrag dann gar
+// nicht. Ein STATISCHER Import hier zoege den Spike ins Startbuendel und die
+// Flagge waere eine Sichtbarkeits-, keine Ladefrage.
+const ChEntwurfPanel = lazy(() =>
+  import('@/components/viewer/ChEntwurfPanel').then((m) => ({ default: m.ChEntwurfPanel })),
+);
 // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
 // dynamic chunk keeps it out of the initial bundle until first opened.
 const LayersPanel = lazy(() =>
@@ -73,6 +82,14 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
     case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
     // Trassia (Paket V-LAENGSSCHNITT).
     case 'laengsschnitt': return <ChLaengsschnittPanel onClose={onClose} />;
+    // Trassia (Trassierungs-Spike S0, nur bei `?entwurf=1`).
+    case 'entwurf': return (
+      <ChunkErrorBoundary label="Alignment design panel">
+        <Suspense fallback={null}>
+          <ChEntwurfPanel onClose={onClose} />
+        </Suspense>
+      </ChunkErrorBoundary>
+    );
     case 'layers': return (
       <ChunkErrorBoundary label="Layers panel">
         <Suspense fallback={null}>

@@ -14,8 +14,8 @@ diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/sr
 +import { ChPanelStackKeeper } from './ChPanelStackKeeper';
  import { chReadProjectParam } from '@/lib/ch/project-manifest';
  import { EntityContextMenu } from './EntityContextMenu';
- import { useDuplicateShortcut } from './useDuplicateShortcut';
-@@ -438,6 +445,17 @@ export function ViewerLayout() {
+ import { AnonymizedExportDialog } from './anonymized-export/AnonymizedExportDialog';
+@@ -432,6 +439,17 @@ export function ViewerLayout() {
              files hang in. */}
          <ChProjectBanner />
  

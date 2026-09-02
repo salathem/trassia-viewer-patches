@@ -1,0 +1,211 @@
+diff --git a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
+index 6ffdd6f..6223880 100644
+--- a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
++++ b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
+@@ -460,8 +460,15 @@ export function Drawing2DCanvas({
+     const ctx = canvas.getContext('2d');
+     if (!ctx) return;
+ 
+-    // Set canvas size using tracked dimensions
+-    const dpr = window.devicePixelRatio || 1;
++    // Set canvas size using tracked dimensions.
++    // Trassia (Paket QP-AUSDOCK): die Bildpunktdichte des Fensters, in dem
++    // diese Leinwand WIRKLICH steht — nicht die des Hauptfensters. Seit das
++    // 2D-Panel in ein eigenes Fenster ausgedockt werden kann, sind das zwei
++    // verschiedene Zahlen, sobald das zweite Fenster auf einem Bildschirm mit
++    // anderer Skalierung liegt (in der Schweiz der Regelfall: Notebook 150 %,
++    // externer Bildschirm 100 %). Mit dem falschen Wert ist das Querprofil
++    // entweder unscharf oder um den Faktor der Abweichung zu gross.
++    const dpr = canvas.ownerDocument.defaultView?.devicePixelRatio || 1;
+     canvas.width = canvasSize.width * dpr;
+     canvas.height = canvasSize.height * dpr;
+     ctx.scale(dpr, dpr);
+diff --git a/apps/viewer/src/components/viewer/Section2DPanel.tsx b/apps/viewer/src/components/viewer/Section2DPanel.tsx
+index 5322110..e94687b 100644
+--- a/apps/viewer/src/components/viewer/Section2DPanel.tsx
++++ b/apps/viewer/src/components/viewer/Section2DPanel.tsx
+@@ -65,6 +65,11 @@ import { ChAusdockRahmen2D } from '@/components/viewer/ChAusdockRahmen2D';
+ // kommt der dritte Ort dazu: das eigene Fenster.
+ import { ChPanelFrame } from '@/components/viewer/ChPanelFrame';
+ import { useChHeaderDrag } from '@/hooks/useChPanelChrome';
++// Trassia overlay (Paket QP-AUSDOCK) — die WIRKLICHE Breite dieses Panels,
++// gemessen dort, wo sein Ortswechsel ankommt.
++import {
++  chPanelBreite, chPanelIstSchmal, chPanelOrt, useChPanelBreiten, useChPanelOrte,
++} from '@/lib/ch/panel-breite';
+ 
+ interface Section2DPanelProps {
+   mergedGeometry?: GeometryResult | null;
+@@ -228,9 +233,21 @@ export function Section2DPanel({
+   const cachedSheetTransformRef = useRef<CachedSheetTransform | null>(null);
+ 
+   // Track panel width for responsive header
++  //
++  // Trassia (Paket QP-AUSDOCK): GEMESSEN schlaegt gewuenscht. `panelSize` ist
++  // der Wunsch des schwebenden Kastens und aendert sich nur, wenn jemand an
++  // seinem Rand zieht — die Startwerte (400 x 300) bleiben sonst stehen. Im
++  // eigenen Fenster (1180 px) haette die Kopfleiste damit weiter die schmale
++  // Fassung gezeigt und zwanzig Werkzeuge in einem Ueberlaufmenue versteckt.
++  // Gemessen wird in `ChPanelFrame`, weil nur dort der Ortswechsel ankommt;
++  // die ganze Begruendung steht in `lib/ch/panel-breite.ts`.
++  const chBreiten = useChPanelBreiten();
++  const chGemessen = chPanelBreite(chBreiten, 'drawing2d');
++  // Wechselt, sobald das Wurzelelement ausgetauscht wurde (Ortswechsel).
++  const chOrt = chPanelOrt(useChPanelOrte(), 'drawing2d');
+   useEffect(() => {
+-    setIsNarrow(panelSize.width < 480);
+-  }, [panelSize.width]);
++    setIsNarrow(chPanelIstSchmal(chGemessen, panelSize.width));
++  }, [chGemessen, panelSize.width]);
+ 
+   // ═══════════════════════════════════════════════════════════════════════════
+   // MEMOIZED VALUES
+@@ -319,6 +336,9 @@ export function Section2DPanel({
+     drawing, sectionPlane, containerRef,
+     panelVisible, status, sheetEnabled, activeSheet,
+     isPinned, cachedSheetTransformRef,
++    // Trassia (Paket QP-AUSDOCK): nach einem Ortswechsel zeigt `containerRef`
++    // auf einen neuen Knoten — der Radzoom muss dorthin umziehen.
++    reattachToken: chOrt,
+   });
+ 
+   const measureHandlers = useMeasure2D({
+diff --git a/apps/viewer/src/hooks/useAnnotation2D.ts b/apps/viewer/src/hooks/useAnnotation2D.ts
+index ab09319..cfed053 100644
+--- a/apps/viewer/src/hooks/useAnnotation2D.ts
++++ b/apps/viewer/src/hooks/useAnnotation2D.ts
+@@ -333,7 +333,13 @@ export function useAnnotation2D({
+         if (storeRef.current.selectedAnnotation2D) setSelectedAnnotation2D(null);
+       }
+       if ((e.key === 'Delete' || e.key === 'Backspace') && storeRef.current.selectedAnnotation2D) {
+-        const activeEl = document.activeElement;
++        // Trassia (Paket QP-AUSDOCK): das Dokument fragen, in dem das Panel
++        // steht. Im ausgedockten Fenster sitzt der Schreibcursor in einem
++        // Eingabefeld des KINDdokuments — `document.activeElement` des
++        // Hauptfensters wuesste davon nichts und `Entf` wuerde die ausgewaehlte
++        // Beschriftung loeschen, waehrend der Benutzer Text tippt.
++        const doc = containerRef.current?.ownerDocument ?? document;
++        const activeEl = doc.activeElement;
+         if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) return;
+         e.preventDefault();
+         deleteSelectedAnnotation2D();
+@@ -344,14 +350,18 @@ export function useAnnotation2D({
+       if (e.key === 'Shift') shiftHeldRef.current = false;
+     };
+ 
+-    window.addEventListener('keydown', handleKeyDown);
+-    window.addEventListener('keyup', handleKeyUp);
++    // Trassia (Paket QP-AUSDOCK): an dem Fenster horchen, in dem das Panel
++    // WIRKLICH steht — sonst sind Entf, Esc und Umschalt im ausgedockten
++    // Fenster wirkungslos. Ohne Ausdocken ist das buchstaeblich `window`.
++    const ziel = containerRef.current?.ownerDocument.defaultView ?? window;
++    ziel.addEventListener('keydown', handleKeyDown);
++    ziel.addEventListener('keyup', handleKeyUp);
+     return () => {
+-      window.removeEventListener('keydown', handleKeyDown);
+-      window.removeEventListener('keyup', handleKeyUp);
++      ziel.removeEventListener('keydown', handleKeyDown);
++      ziel.removeEventListener('keyup', handleKeyUp);
+     };
+   }, [activeTool, setActiveTool, cancelPolygonArea2D, cancelCloudAnnotation2D,
+-    setTextAnnotation2DEditing, setSelectedAnnotation2D, deleteSelectedAnnotation2D]);
++    setTextAnnotation2DEditing, setSelectedAnnotation2D, deleteSelectedAnnotation2D, containerRef]);
+ 
+   // ── Mouse handlers ────────────────────────────────────────────────────
+ 
+diff --git a/apps/viewer/src/hooks/useMeasure2D.ts b/apps/viewer/src/hooks/useMeasure2D.ts
+index 58605e2..1a77f81 100644
+--- a/apps/viewer/src/hooks/useMeasure2D.ts
++++ b/apps/viewer/src/hooks/useMeasure2D.ts
+@@ -227,14 +227,22 @@ export function useMeasure2D({
+       }
+     };
+ 
+-    window.addEventListener('keydown', handleKeyDown);
+-    window.addEventListener('keyup', handleKeyUp);
++    // Trassia (Paket QP-AUSDOCK): an dem Fenster horchen, in dem das Panel
++    // WIRKLICH steht. `containerRef` zeigt auf den Zeichenbereich; ist der seit
++    // dem Ausdocken in ein Kinddokument gewandert, liegt die Tastatur dort —
++    // `window` waere dann das Hauptfenster, in dem gerade niemand tippt.
++    // Umschalt (Rechtwinkelsperre) und Esc (abbrechen) waeren im ausgedockten
++    // Fenster sonst tot. Ohne Ausdocken ergibt der Ausdruck buchstaeblich
++    // `window`; das eingebettete Verhalten bleibt unberuehrt.
++    const ziel = containerRef.current?.ownerDocument.defaultView ?? window;
++    ziel.addEventListener('keydown', handleKeyDown);
++    ziel.addEventListener('keyup', handleKeyUp);
+ 
+     return () => {
+-      window.removeEventListener('keydown', handleKeyDown);
+-      window.removeEventListener('keyup', handleKeyUp);
++      ziel.removeEventListener('keydown', handleKeyDown);
++      ziel.removeEventListener('keyup', handleKeyUp);
+     };
+-  }, [measure2DMode, measure2DStart, measure2DCurrent, measure2DShiftLocked, setMeasure2DShiftLocked, cancelMeasure2D]);
++  }, [measure2DMode, measure2DStart, measure2DCurrent, measure2DShiftLocked, setMeasure2DShiftLocked, cancelMeasure2D, containerRef]);
+ 
+   // Global mouseup handler to cancel measurement if released outside panel
+   useEffect(() => {
+@@ -248,11 +256,14 @@ export function useMeasure2D({
+       isMouseButtonDown.current = false;
+     };
+ 
+-    window.addEventListener('mouseup', handleGlobalMouseUp);
++    // Trassia (Paket QP-AUSDOCK): dasselbe fuer das Loslassen ausserhalb des
++    // Panels — im ausgedockten Fenster faellt diese Maustaste im Kinddokument.
++    const ziel = containerRef.current?.ownerDocument.defaultView ?? window;
++    ziel.addEventListener('mouseup', handleGlobalMouseUp);
+     return () => {
+-      window.removeEventListener('mouseup', handleGlobalMouseUp);
++      ziel.removeEventListener('mouseup', handleGlobalMouseUp);
+     };
+-  }, [measure2DMode, measure2DStart, cancelMeasure2D]);
++  }, [measure2DMode, measure2DStart, cancelMeasure2D, containerRef]);
+ 
+   // ═══════════════════════════════════════════════════════════════════════
+   // PAN / MEASURE HANDLERS
+diff --git a/apps/viewer/src/hooks/useViewControls.ts b/apps/viewer/src/hooks/useViewControls.ts
+index 224203f..12bae48 100644
+--- a/apps/viewer/src/hooks/useViewControls.ts
++++ b/apps/viewer/src/hooks/useViewControls.ts
+@@ -17,6 +17,22 @@ interface UseViewControlsParams {
+   activeSheet: DrawingSheet | null;
+   isPinned: boolean;
+   cachedSheetTransformRef: React.MutableRefObject<CachedSheetTransform | null>;
++  /**
++   * Trassia (Paket QP-AUSDOCK): eine Zahl, die sich aendert, sobald
++   * `containerRef.current` auf einen ANDEREN Knoten zeigt.
++   *
++   * Der Radzoom haengt an `containerRef.current` — an einem DOM-Knoten also,
++   * nicht am Verweisobjekt. Wird das Panel in ein eigenes Fenster verlegt, baut
++   * `ChPanelFrame` seinen Rumpf neu auf, und der alte Knoten ist fort. Die
++   * Liste am Ende des Effekts (`panelVisible`, `status`) merkt davon nichts:
++   * ein `RefObject` bleibt beim Wechsel dasselbe Objekt. Ohne dieses Feld
++   * horcht der Zoom danach an einem Knoten, den niemand mehr sieht — im
++   * ausgedockten Fenster bewegte das Mausrad nichts (gemessen 2026-08-30, in
++   * beide Richtungen, waehrend die Zoomknoepfe daneben wirkten).
++   *
++   * Optional: wer es weglaesst, bekommt genau das bisherige Verhalten.
++   */
++  reattachToken?: number;
+ }
+ 
+ interface UseViewControlsResult {
+@@ -37,6 +53,7 @@ function useViewControls({
+   activeSheet,
+   isPinned,
+   cachedSheetTransformRef,
++  reattachToken,
+ }: UseViewControlsParams): UseViewControlsResult {
+   const [viewTransform, setViewTransform] = useState({ x: 0, y: 0, scale: 1 });
+   const [needsFit, setNeedsFit] = useState(true); // Force fit on first open and axis change
+@@ -78,7 +95,9 @@ function useViewControls({
+     return () => {
+       container.removeEventListener('wheel', wheelHandler);
+     };
+-  }, [panelVisible, status]); // Re-run when panel visibility or status changes to ensure container is ready
++    // Trassia (Paket QP-AUSDOCK): `reattachToken` steht mit in der Liste, damit
++    // der Horcher nach einem Ortswechsel auf den NEUEN Zeichenbereich umzieht.
++  }, [panelVisible, status, reattachToken]); // Re-run when panel visibility or status changes to ensure container is ready
+ 
+   // Zoom controls - unlimited zoom
+   const zoomIn = useCallback(() => {
