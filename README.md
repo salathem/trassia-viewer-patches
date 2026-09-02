@@ -9,7 +9,7 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0046`) applied, in numeric order, on top of
+- `patches/` — the exact patches (`0001`–`0047`) applied, in numeric order, on top of
   upstream commit `49dfc3090425569095622ca567715d017c4cf166` (tag `@ifc-lite/wasm@6.1.1`)
 - `modified-files/` — the forty-six modified files in full source form
   (base commit + all patches applied):
@@ -196,6 +196,9 @@ All files in this repository are licensed under the **MPL-2.0**.
   Sun & Sky panel into their own "Surroundings" button and panel next to
   World/Lighting — the Sun & Sky panel is pure lighting again. Touches five
   files: two mount removals, three one-to-two-line mount insertions.
+- `0047` — status-bar spacing: one gap for the whole footer (`gap-3` on the
+  root and the stats block) and the same vertical separator before "FPS" as
+  between FPS, WebGPU and the flavor indicator. Three class/JSX lines, no logic.
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil
