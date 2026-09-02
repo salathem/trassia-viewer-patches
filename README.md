@@ -9,9 +9,9 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0045`) applied, in numeric order, on top of
+- `patches/` — the exact patches (`0001`–`0046`) applied, in numeric order, on top of
   upstream commit `49dfc3090425569095622ca567715d017c4cf166` (tag `@ifc-lite/wasm@6.1.1`)
-- `modified-files/` — the forty-four modified files in full source form
+- `modified-files/` — the forty-six modified files in full source form
   (base commit + all patches applied):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/Drawing2DCanvas.tsx`
@@ -19,6 +19,7 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/LensPanel.tsx`
   - `apps/viewer/src/components/viewer/PropertiesPanel.tsx`
   - `apps/viewer/src/components/viewer/Section2DPanel.tsx`
+  - `apps/viewer/src/components/viewer/StatusBar.tsx`
   - `apps/viewer/src/components/viewer/SunSkyPanel.tsx`
   - `apps/viewer/src/components/viewer/ViewerLayout.tsx`
   - `apps/viewer/src/components/viewer/Viewport.tsx`
@@ -27,6 +28,7 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx`
   - `apps/viewer/src/components/viewer/properties/ModelMetadataPanel.tsx`
   - `apps/viewer/src/components/viewer/properties/PropertySetCard.tsx`
+  - `apps/viewer/src/components/viewer/ribbon/tabs/ViewTab.tsx`
   - `apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurePanel.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx`
@@ -185,6 +187,15 @@ All files in this repository are licensed under the **MPL-2.0**.
   (`0044`); the DEFAULT width becomes `min(340 px, 22 %)` via
   `defaultWidthPct()`, applied at first start, broken stored value and layout
   reset only — a saved user width is never overwritten (`0045`).
+- `0046` — header cleanup: the two Trassia header strips above the ribbon
+  (project-loading strip, saved-views row) are unmounted from the layout; the
+  project status moves into the left section of the status bar and the saved
+  views become a "Saved views" ribbon group in the View tab (both new hosts
+  are overlay components). The Swiss surroundings switches (swisstopo
+  buildings/vegetation/terrain and official WFS layers) move out of the
+  Sun & Sky panel into their own "Surroundings" button and panel next to
+  World/Lighting — the Sun & Sky panel is pure lighting again. Touches five
+  files: two mount removals, three one-to-two-line mount insertions.
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil

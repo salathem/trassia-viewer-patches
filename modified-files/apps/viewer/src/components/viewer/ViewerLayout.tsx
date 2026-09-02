@@ -34,13 +34,14 @@ import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
 // Trassia overlay (Phase 1.1) — `?project=<slug>` opens a curated set of
 // models from a manifest instead of one file. See hooks/useChProjectLoader.ts.
 import { useChProjectLoader } from '@/hooks/useChProjectLoader';
-import { ChProjectBanner } from './ChProjectBanner';
 import { ChLensEngine } from './ChLensEngine';
-// Trassia overlay (not upstream) — Paket V-UX: die Zeile der benannten
-// Ansichten (U3), der Hinweis auf schmalen Schirmen (P6/U4) und der
-// Beobachter, der ein verdraengtes Werkzeugpanel in den zweiten Stapelplatz
-// legt statt es hinauszuwerfen (P4).
-import { ChViewsBar } from './ChViewsBar';
+// Trassia overlay (not upstream) — Paket V-UX: der Hinweis auf schmalen
+// Schirmen (P6/U4) und der Beobachter, der ein verdraengtes Werkzeugpanel in
+// den zweiten Stapelplatz legt statt es hinauszuwerfen (P4).
+// Seit Paket UX-KOPF (Marco-Befund 2026-09-02: zwei Kopfzeilen ohne Mehrwert
+// kosteten Bildflaeche) wohnen der Projektstreifen in der Fusszeile
+// (StatusBar -> ChProjektFuss) und die benannten Ansichten im View-Tab des
+// Ribbons (ChViewsGroup) — hier haengt beides nicht mehr.
 import { ChMobileHint } from './ChMobileHint';
 import { ChPanelStackKeeper } from './ChPanelStackKeeper';
 import { chReadProjectParam } from '@/lib/ch/project-manifest';
@@ -434,15 +435,6 @@ export function ViewerLayout() {
             </span>
           </div>
         )}
-        {/* Trassia: which project is loading, how far it is, and what it had
-            to skip. Above the file-level notice, because it is the frame the
-            files hang in. */}
-        <ChProjectBanner />
-
-        {/* Trassia: benannte Ansichten dieser Mappe (U3). Nur bei `?project=`,
-            weil die Ablage am Mappen-Slug haengt. */}
-        <ChViewsBar />
-
         {/* Trassia: unter 30 rem blendet die Anwendung ihre Werkzeuge aus.
             Das darf sie — aber nicht stumm (U4). */}
         <ChMobileHint />

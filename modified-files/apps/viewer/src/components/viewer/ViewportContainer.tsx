@@ -26,6 +26,8 @@ import { BCFOverlay } from './bcf/BCFOverlay';
 import { CesiumOverlay } from './CesiumOverlay';
 import { CesiumPlacementEditor } from './CesiumPlacementEditor';
 import { SunSkyPanel } from './SunSkyPanel';
+// Trassia overlay (Paket UX-KOPF): eigenes Panel fuer die Schweizer Umgebung.
+import { ChUmgebungPanel } from './ChUmgebungPanel';
 import { SpaceMousePanel } from './SpaceMousePanel';
 import { useSolarEnvironment } from '@/hooks/useSolarEnvironment';
 import { useSolarSweep } from '@/hooks/useSolarSweep';
@@ -1507,6 +1509,10 @@ export function ViewportContainer() {
           Self-anchored below the ViewCube (top-6 right-6 cube) at top-32 right-4
           so it never covers navigation; draggable from its header (#1107). */}
       <SunSkyPanel />
+      {/* Trassia (UX-KOPF): Schweizer Umgebung (swisstopo-Gebaeude/Vegetation/
+          Terrain + amtliche WFS-Ebenen) — eigenes kleines Panel, gleicher
+          Ankerbereich; geoeffnet ueber den Umgebungs-Knopf im View-Tab. */}
+      <ChUmgebungPanel />
       {/* SpaceMouse panel — WebHID 3D mouse connection + sensitivity (#1677).
           Anchored below the Sun & Sky spot so both can be open; draggable. */}
       <SpaceMousePanel />

@@ -25,12 +25,11 @@ import { useDraggablePanel } from '@/hooks/useDraggablePanel';
 import { cn } from '@/lib/utils';
 import type { CesiumDataSource } from '@/store/slices/cesiumSlice';
 import { CustomBasemapEditor } from './CustomBasemapEditor';
-// Trassia overlay (Pakete V-KONTEXT / V-WFS) — die zuschaltbare
-// swisstopo-Umgebung und die amtlichen WFS-Ebenen. Beide gehoeren in den
-// Weltmodus-Zweig dieses Panels: dort steht schon die verwandte Entscheidung
-// (Basiskarte), und beide Bauteile rendern nichts, was den Upstream stoert.
-import { ChUmgebungSchalter } from './ChUmgebungSchalter';
-import { ChWfsLayers } from './ChWfsLayers';
+// Trassia (V-WELT-FIX): die Basiskartenwahl haengt hinter
+// CH_BASISKARTEN_VERFUEGBAR (siehe unten). Die swisstopo-Umgebung und die
+// WFS-Ebenen wohnen seit Paket UX-KOPF (Marco-Befund 2026-09-02) im eigenen
+// Umgebungs-Panel (ChUmgebungPanel) — unter dem Blitz-Symbol dieses Panels
+// suchte sie niemand. Hier blieb die reine Beleuchtung.
 import { CH_BASISKARTEN_VERFUEGBAR } from '@/lib/ch/kontext/basiskarten';
 import type { SolarSweepMode } from '@/store/slices/solarSlice';
 import { LIGHTING_PRESETS, LIGHTING_PRESET_ORDER, isLightingPresetId } from '@/lib/lighting-presets';
@@ -162,9 +161,9 @@ export function SunSkyPanel() {
                   (api.cesium.com), eine einen frei eingetippten Fremdhost.
                   Der Tester-Befund dazu war „schwarze Kugel". Ein Knopf, der
                   nachweislich nichts tun kann, ist schlimmer als kein Knopf.
-                  An seiner Stelle steht das SWISSIMAGE-Orthofoto in
-                  <ChUmgebungSchalter />. Begruendung und der Weg zurueck:
-                  lib/ch/kontext/basiskarten.ts. */}
+                  An seiner Stelle steht das SWISSIMAGE-Orthofoto im
+                  Umgebungs-Panel (ChUmgebungPanel). Begruendung und der Weg
+                  zurueck: lib/ch/kontext/basiskarten.ts. */}
               {CH_BASISKARTEN_VERFUEGBAR && (
                 <>
                   <label className="flex flex-col gap-0.5">
@@ -184,12 +183,6 @@ export function SunSkyPanel() {
                   {dataSource === 'custom' && <CustomBasemapEditor />}
                 </>
               )}
-              {/* Trassia: swisstopo-Umgebung (Gebaeude/Vegetation/Terrain),
-                  per Vorgabe aus, mit Quellenangabe. */}
-              <ChUmgebungSchalter />
-              {/* Trassia: amtliche WFS-Ebenen, auf den Kartenausschnitt
-                  zugeschnitten. Zugeklappt, bis jemand sie braucht. */}
-              <ChWfsLayers />
             </>
           ) : (
             <label className="flex flex-col gap-0.5">
