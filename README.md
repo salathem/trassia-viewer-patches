@@ -9,7 +9,7 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0050`) applied, in numeric order, on top of
+- `patches/` — the exact patches (`0001`–`0055`) applied, in numeric order, on top of
   upstream commit `49dfc3090425569095622ca567715d017c4cf166` (tag `@ifc-lite/wasm@6.1.1`)
 - `modified-files/` — the forty-nine modified files in full source form
   (base commit + all patches applied):
@@ -228,6 +228,26 @@ All files in this repository are licensed under the **MPL-2.0**.
   the upstream accumulator applied per model and summed; unchanged when no
   federated model is registered), three `stats.` -> `gesamt.` expressions and
   a `title` with the exact count on the two stats. Upstream accumulator kept.
+- `0051` — "Trassia mode" for the rail and the ribbon: one condition in the
+  activity bar's visible-panel filter (rail shows hierarchy, information, lens,
+  drape and cut/fill unless `?voll=1`), a `filter` on the ribbon tab list (File,
+  Home, View, Elements; Analyze and Author only with `?voll=1`), the ribbon
+  switch notice and the File tab's "Cloud sources" button only in full mode.
+  The mode switch and the lists are an overlay module (`lib/ch/modus.ts`);
+  nothing is removed or unloaded.
+- `0052` — the same mode on the welcome screen and the status bar: "Open from
+  cloud", "Drive with any LLM", the tour invite, the Layers demo card and the
+  "New here? ifclite.dev" chip render only in full mode; the status-bar link
+  points to trassia.ch in Trassia mode and to ifclite.dev in full mode.
+- `0053` — the three Trassia panel registry entries (from `0019`/`0021`/`0024`)
+  get German titles/short labels and the cut/fill icon changes from `Ruler` to
+  `ArrowUpDown`. Upstream entries untouched.
+- `0054` — ribbon tab fallback: when the contextual tab driver selects a tab
+  the current mode does not offer (Start blank -> Author in Trassia mode), one
+  `useEffect` falls back to Home. No effect in full mode.
+- `0055` — "Start blank" arms the wall tool (`setActiveTool('addElement')`)
+  only in full mode; in Trassia mode the blank project stays in select mode,
+  because the Author tab and the add-element panel are not offered there.
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil

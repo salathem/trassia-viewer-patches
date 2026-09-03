@@ -57,6 +57,10 @@ import { toast } from '@/components/ui/toast';
 // Trassia overlay (not upstream) — Paket V-DRAPE, siehe lib/ch/drape-ingest.ts.
 import { chDrapeTakeDroppedFiles, chDrapeUnderlayCandidates } from '@/lib/ch/drape-ingest';
 import { TourInvite } from '@/components/tours/TourInvite';
+// Trassia overlay (not upstream) — Paket U2: das Startbild traegt im
+// Trassia-Modus keine fremde Werbung (LLM/MCP, Cloud, Tour, Layers-Demo,
+// ifclite.dev); im Vollmodus (?voll=1) bleibt alles. Siehe lib/ch/modus.ts.
+import { chVollmodus } from '@/lib/ch/modus';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
 import { describeUnsupportedFormat } from '@/hooks/ingest/pointCloudIngest';
 import { Upload, Command, AlertTriangle, ChevronDown, ExternalLink, Plus, Clock3, Sparkles, ArrowUpRight, PackagePlus, Cloud, GitMerge } from 'lucide-react';
@@ -741,7 +745,11 @@ export function ViewportContainer() {
     // resets activeTool back to 'select'. Setting addElement before that
     // races and leaves the user in select mode despite the click.
     await loadFile(file);
-    setActiveTool('addElement');
+    // Trassia (U2, Tester M3): im Trassia-Modus bleibt das leere Projekt im
+    // Auswahlwerkzeug — Author-Reiter und Add-element-Panel werden dort nicht
+    // angeboten, ein unsichtbar scharfes Wandwerkzeug zeichnete beim ersten
+    // Klick in die Szene eine Wand. Im Vollmodus wie Upstream.
+    if (chVollmodus()) setActiveTool('addElement');
   }, [webgpu.supported, loadFile, setActiveTool]);
 
   // Issue #540 "Merge Multilayer Walls" reload. The setting changes the produced
@@ -1342,6 +1350,7 @@ export function ViewportContainer() {
                 <PackagePlus className="h-3 w-3 transition-transform group-enabled:group-hover:-translate-y-0.5" />
                 <span>Start blank</span>
               </button>
+              {chVollmodus() && (
               <button
                 type="button"
                 onClick={() => useViewerStore.getState().openPanelInHome('sources')}
@@ -1358,6 +1367,8 @@ export function ViewportContainer() {
                     front door stopped being accurate at the second provider. */}
                 <span>Open from cloud</span>
               </button>
+              )}
+              {chVollmodus() && (
               <a
                 href="/mcp"
                 className="group inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-[11px] border border-dashed border-zinc-300 dark:border-[#3b4261] text-zinc-500 dark:text-[#7a82a5] hover:border-primary hover:text-primary transition-all cursor-pointer"
@@ -1366,15 +1377,16 @@ export function ViewportContainer() {
                 <span>Drive with any LLM</span>
                 <ArrowUpRight className="h-2.5 w-2.5 opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
               </a>
+              )}
             </div>
 
             <p className="mt-1.5 text-[10px] font-mono text-center text-zinc-400 dark:text-[#565f89]">
-              new untitled project · or LLM via MCP
+              {chVollmodus() ? 'new untitled project · or LLM via MCP' : 'new untitled project'}
             </p>
 
             {/* First-run tour invite — needs loadFile, so it shares the
                 WebGPU gate of every other action on this card. */}
-            {webgpu.supported && !webgpu.checking && <TourInvite />}
+            {chVollmodus() && webgpu.supported && !webgpu.checking && <TourInvite />}
 
             {recentFiles.length > 0 && (
               <div className="mt-6 w-full border-t border-zinc-200 dark:border-[#3b4261] pt-4">
@@ -1413,7 +1425,9 @@ export function ViewportContainer() {
               action, and its height pushed the welcome card off-screen. */}
 
           {/* Moonshot callout (#1717): Layer PRs are brand new - nobody knows
-              to multi-drop .ifcx files, so the welcome screen sells the demo. */}
+              to multi-drop .ifcx files, so the welcome screen sells the demo.
+              Trassia (U2): nur im Vollmodus. */}
+          {chVollmodus() && (
           <button
             type="button"
             onClick={() => {
@@ -1439,13 +1453,17 @@ export function ViewportContainer() {
               Try the demo stack &rarr;
             </span>
           </button>
+          )}
 
           {/* Footer chips - left: discovery link to the marketing site for first-time
               visitors, right: shortcuts cue for power users. Both desktop-only.
               IN FLOW, not absolute: the welcome column scrolls on short
               viewports, and absolutely-anchored chips ride the scroll and
-              land on top of the content (#1736 follow-up). */}
+              land on top of the content (#1736 follow-up).
+              Trassia (U2): der Marketing-Chip nur im Vollmodus; die Shortcuts
+              bleiben. */}
           <div className="mt-10 hidden w-full max-w-3xl items-center justify-between gap-4 md:flex">
+            {chVollmodus() ? (
             <a
               href="https://ifclite.dev"
               target="_blank"
@@ -1455,6 +1473,7 @@ export function ViewportContainer() {
               <span>New here?</span>
               <span className="font-bold text-primary group-hover:translate-x-0.5 transition-transform">ifclite.dev →</span>
             </a>
+            ) : <span />}
             <div className="flex items-center gap-2 text-xs font-mono px-3 py-1.5 bg-zinc-100 dark:bg-[#1f2335] border border-zinc-300 dark:border-[#3b4261] text-zinc-500 dark:text-[#565f89]">
               <Command className="h-3 w-3" />
               <span>SHORTCUTS</span>

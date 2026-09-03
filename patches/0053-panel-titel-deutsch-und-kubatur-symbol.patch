@@ -1,0 +1,41 @@
+diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
+index 98f633f..041cbb3 100644
+--- a/apps/viewer/src/lib/panels/registry.ts
++++ b/apps/viewer/src/lib/panels/registry.ts
+@@ -35,8 +35,9 @@ import {
+   Box,
+   // Trassia overlay (not upstream) — Paket V-DRAPE.
+   Mountain,
+-  // Trassia overlay (not upstream) — Paket V-KUBATUR.
+-  Ruler,
++  // Trassia overlay (not upstream) — Paket V-KUBATUR; Symbol seit U4
++  // Auf/Ab statt Lineal (Review B5: das Lineal sagte «Messen»).
++  ArrowUpDown,
+   // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
+   ChartSpline,
+   // Trassia overlay (not upstream) — Trassierungs-Spike S0 (Paket ENTWURF).
+@@ -136,11 +137,13 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   // Gelaendeoberflaeche legen. ANGEHAENGT, damit die eingefrorene
+   // Alt+1..0-Zuordnung der ersten zehn Eintraege unberuehrt bleibt — dieses
+   // Panel bekommt keine Ziffer und ist ueber die Leiste erreichbar.
+-  { id: 'drape', title: 'Terrain drape', short: 'Drape', Icon: Mountain, group: 'author', region: 'side' },
++  // U4 (Review B5): eigene Flaechen deutsch — Titel = Tooltip in der Leiste
++  // und Kopfzeile des Panels; Upstream-Eintraege bleiben englisch.
++  { id: 'drape', title: 'Drape auf Gelände (DXF, GeoJSON, WFS)', short: 'Drape', Icon: Mountain, group: 'author', region: 'side' },
+   // Trassia (Paket V-KUBATUR): Auftrag/Abtrag zwischen zwei Modellen entlang
+   // einer Achse. ANGEHAENGT, aus demselben Grund wie `drape` — keine Ziffer,
+   // erreichbar ueber die Leiste.
+-  { id: 'kubatur', title: 'Cut and fill', short: 'Cut/fill', Icon: Ruler, group: 'author', region: 'side' },
++  { id: 'kubatur', title: 'Auftrag / Abtrag (Kubatur)', short: 'Auftrag/Abtrag', Icon: ArrowUpDown, group: 'author', region: 'side' },
+   // Trassia (Paket V-LAENGSSCHNITT): Hoehenprofil entlang einer Achse.
+   // ANGEHAENGT wie `drape` und `kubatur` — keine Ziffer, erreichbar ueber die
+   // Leiste. `prefersWide`, weil eine Profilzeichnung Breite braucht: ein
+@@ -149,7 +152,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   // Seitenleiste wirkt das Feld nicht — `SIDEBAR_WIDE_WIDTH_PCT` steht
+   // zwar unten in dieser Datei, wird aber nirgends gelesen (geprueft im
+   // Pin 989da893: einzige Fundstelle ist die Deklaration selbst).
+-  { id: 'laengsschnitt', title: 'Longitudinal profile', short: 'Profile', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
++  { id: 'laengsschnitt', title: 'Längsprofil', short: 'Längsprofil', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
+   // Trassia (Trassierungs-Spike S0): Achse und Gradiente entwerfen, Korridor,
+   // Massen und Normbefunde. **Nur bei `?entwurf=1`** — ohne die Flagge steht
+   // der Eintrag gar nicht in der Registratur, also gibt es kein Symbol in der

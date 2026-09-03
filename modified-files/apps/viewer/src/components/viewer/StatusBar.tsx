@@ -20,6 +20,8 @@ import { ChProjektFuss } from './ChProjektFuss';
 // Modelle — der Upstream zaehlt nur das aktive (Tester-Blocker B1 2026-09-02:
 // 155 statt 11'574 bei 14 Modellen). Exakte Zahl im Tooltip.
 import { useChGesamtStatistik, chZahlExakt } from '@/lib/ch/gesamt-statistik';
+// Trassia overlay (Paket U2): Fusszeilen-Link je Modus. Siehe lib/ch/modus.ts.
+import { chVollmodus } from '@/lib/ch/modus';
 
 export function StatusBar() {
   const { loading, geometryResult, ifcDataStore } = useIfc();
@@ -214,6 +216,9 @@ export function StatusBar() {
 
         <Separator orientation="vertical" className="h-3.5" />
 
+        {/* Trassia (U2): im Trassia-Modus fuehrt der Fusszeilen-Link zu
+            trassia.ch; der Upstream-Link bleibt im Vollmodus (?voll=1). */}
+        {chVollmodus() ? (
         <a
           href="https://ifclite.dev"
           target="_blank"
@@ -223,6 +228,17 @@ export function StatusBar() {
         >
           ifclite.dev →
         </a>
+        ) : (
+        <a
+          href="https://trassia.ch"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="opacity-60 hover:opacity-100 hover:text-primary transition-opacity"
+          aria-label="trassia.ch — Trassia Web-Viewer"
+        >
+          trassia.ch →
+        </a>
+        )}
       </div>
 
       <FlavorDialog open={flavorDialogOpen} onClose={() => setFlavorDialogOpen(false)} />

@@ -1,0 +1,19 @@
+diff --git a/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx b/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
+index 53e22c0..3b4341c 100644
+--- a/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
++++ b/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
+@@ -66,6 +66,14 @@ export function RibbonToolbar({ onShowShortcuts }: RibbonToolbarProps = {} as Ri
+ 
+   useRibbonContextualTab();
+ 
++  // Trassia (U2, Tester M2): der kontextuelle Wechsel kann auf einen Reiter
++  // zeigen, den dieser Modus nicht anbietet («Start blank» -> Author). Ohne
++  // Rueckfall stuende das Band mit fremdem Inhalt da und kein Reiter waere
++  // markiert. Im Vollmodus zeigt chRibbonZeigt immer true — kein Eingriff.
++  React.useEffect(() => {
++    if (!chRibbonZeigt(activeTab)) setActiveTab('home');
++  }, [activeTab, setActiveTab]);
++
+   // Shared command surface — registers the global load listeners and the
+   // hidden file inputs exactly once for this toolbar style.
+   const fileCommands = useFileCommands();

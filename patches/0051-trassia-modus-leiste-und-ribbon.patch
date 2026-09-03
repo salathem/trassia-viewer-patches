@@ -1,0 +1,93 @@
+diff --git a/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx b/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
+index d4b8cb2..53e22c0 100644
+--- a/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
++++ b/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
+@@ -39,6 +39,9 @@ import { AnalyzeTab } from './tabs/AnalyzeTab';
+ import { AuthorTab } from './tabs/AuthorTab';
+ import { RibbonSwitchNotice } from './RibbonSwitchNotice';
+ import { useRibbonContextualTab } from './useRibbonContextualTab';
++// Trassia overlay (not upstream) — Paket U2: vier Reiter im Trassia-Modus, kein
++// Umstellungs-Banner; Vollmodus (?voll=1) zeigt alles. Siehe lib/ch/modus.ts.
++import { chRibbonZeigt, chVollmodus } from '@/lib/ch/modus';
+ 
+ const RIBBON_TABS: { id: RibbonTabId; label: string }[] = [
+   { id: 'file', label: 'File' },
+@@ -90,7 +93,7 @@ export function RibbonToolbar({ onShowShortcuts }: RibbonToolbarProps = {} as Ri
+           className="flex h-full items-end gap-0.5"
+           {...tourAnchor(TOUR_ANCHORS.ribbonTabs)}
+         >
+-          {RIBBON_TABS.map((tab) => {
++          {RIBBON_TABS.filter((tab) => chRibbonZeigt(tab.id)).map((tab) => {
+             const isActive = tab.id === activeTab;
+             return (
+               <button
+@@ -235,8 +238,10 @@ export function RibbonToolbar({ onShowShortcuts }: RibbonToolbarProps = {} as Ri
+       )}
+ 
+       {/* One-time "the toolbar changed" line, with the way back. Sits under
+-          the band so it never displaces a command the user is reaching for. */}
+-      <RibbonSwitchNotice />
++          the band so it never displaces a command the user is reaching for.
++          Trassia (U2): nur im Vollmodus — ein Kunde hat nie eine andere Leiste
++          gekannt, fuer ihn ist die Zeile Werbung fuer ein fremdes Produkt. */}
++      {chVollmodus() && <RibbonSwitchNotice />}
+     </div>
+   );
+ }
+diff --git a/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx b/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx
+index c60388d..e1fd5dc 100644
+--- a/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx
++++ b/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx
+@@ -16,6 +16,8 @@ import type { FileCommands } from '../../toolbar/useFileCommands';
+ import { useWorkspacePanelControls } from '../../toolbar/useWorkspacePanelControls';
+ import { RibbonExportGroup } from './RibbonExportGroup';
+ import { RIBBON_EXPORT_ICONS } from './ribbon-export-icons';
++// Trassia overlay (not upstream) — Paket U2. Siehe lib/ch/modus.ts.
++import { chVollmodus } from '@/lib/ch/modus';
+ import {
+   RibbonGroup,
+   RibbonGroupDivider,
+@@ -55,6 +57,9 @@ export function FileTab({ fileCommands }: { fileCommands: FileCommands }) {
+           className={loading ? '[&_svg]:animate-spin' : undefined}
+           onClick={() => { void handleOpenClick(); }}
+         />
++        {/* Trassia (U2): Cloud-Anbindungen nur im Vollmodus — die Leiste
++            bietet das Panel im Trassia-Modus nicht an. */}
++        {chVollmodus() && (
+         <RibbonLargeButton
+           icon={CloudSources}
+           label="Cloud sources"
+@@ -62,6 +67,7 @@ export function FileTab({ fileCommands }: { fileCommands: FileCommands }) {
+           active={activeWorkspacePanels.has('sources')}
+           onClick={() => handleToggleRightPanel('sources')}
+         />
++        )}
+         <RibbonSmallStack>
+           <RibbonSmallButton
+             icon={AddFile}
+diff --git a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
+index d61d0fa..c2b3052 100644
+--- a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
++++ b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
+@@ -41,6 +41,9 @@ import { isCollabEnabled } from '@/lib/collab/config';
+ import { pendingCompositionMutations } from '@/lib/layers/pending';
+ import { activityAnchor, tourAnchor } from '@/lib/tours/anchors';
+ import { CustomizeSidebar } from './CustomizeSidebar';
++// Trassia overlay (not upstream) — Paket U2: im Trassia-Modus zeigt die Leiste
++// fuenf Symbole, im Vollmodus (?voll=1) alle. Siehe lib/ch/modus.ts.
++import { chLeisteZeigt } from '@/lib/ch/modus';
+ 
+ /** Alt+N hint per panel, by registry index (frozen since #1200): 1-9, then 0.
+  *  Only the first ten registry entries get a shortcut; later additions (e.g.
+@@ -83,7 +86,10 @@ export function ActivityBar() {
+   const visibleIds = order.filter(
+     (id) =>
+       (!hidden.has(id) || id === 'properties') &&
+-      (id !== 'collab' || isCollabEnabled()),
++      (id !== 'collab' || isCollabEnabled()) &&
++      // Trassia (Paket U2): die Kundenleiste. Nichts wird entfernt — Alt+N und
++      // der Anpassen-Dialog erreichen die uebrigen Panels weiterhin.
++      chLeisteZeigt(id),
+   );
+ 
+   const onIconClick = (id: WorkspacePanelId) => {
