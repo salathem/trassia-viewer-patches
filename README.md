@@ -9,7 +9,7 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0048`) applied, in numeric order, on top of
+- `patches/` — the exact patches (`0001`–`0050`) applied, in numeric order, on top of
   upstream commit `49dfc3090425569095622ca567715d017c4cf166` (tag `@ifc-lite/wasm@6.1.1`)
 - `modified-files/` — the forty-nine modified files in full source form
   (base commit + all patches applied):
@@ -212,6 +212,22 @@ All files in this repository are licensed under the **MPL-2.0**.
   `closePanel` now closes side panels that have no visibility flag of their
   own (upstream's Zones and the Trassia panels) — their header close button
   was a no-op before.
+- `0049` — two tabs in the section panel, "Querprofil" (cross-section: the
+  unchanged upstream content plus the Trassia station/axis blocks) and
+  "Längsprofil" (the existing longitudinal-profile panel, embedded). Two
+  imports, one hook call, the tab strip in the panel header next to the
+  collapse toggle (title and cut readout show only while collapsed), and an
+  opening/closing tab-content element around the upstream content; both tabs
+  stay mounted and are only hidden.
+  No upstream line removed. The tab components and the tab store are overlay
+  files (`ChProfilTabs.tsx`, `lib/ch/profil-tab.ts`).
+- `0050` — status-bar counts over all loaded models: upstream derives
+  "N elements / N tris" from the single active model's geometry result, so a
+  federated project with 14 models showed the numbers of model 1. One import,
+  one hook call (`useChGesamtStatistik`, overlay `lib/ch/gesamt-statistik.ts`:
+  the upstream accumulator applied per model and summed; unchanged when no
+  federated model is registered), three `stats.` -> `gesamt.` expressions and
+  a `title` with the exact count on the two stats. Upstream accumulator kept.
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil

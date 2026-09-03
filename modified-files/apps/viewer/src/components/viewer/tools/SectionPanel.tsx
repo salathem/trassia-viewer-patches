@@ -28,6 +28,10 @@ import { ChDockButton } from '@/components/viewer/ChDockButton';
 import { useChHeaderDrag } from '@/hooks/useChPanelChrome';
 import { chPeekProjectSection } from '@/lib/ch/ch-project-section';
 import { useChSectionPanelAutoCollapse } from '@/hooks/useChNarrowPanels';
+// Trassia overlay (not upstream) — Paket PROFIL: zwei Reiter im Schnittpanel,
+// Querprofil (der Inhalt unten, unveraendert) und Laengsprofil (eingebettet).
+import { ChProfilTabLeiste, ChProfilInhalt, ChProfilLaengs } from './ChProfilTabs';
+import { useChProfilTab } from '@/lib/ch/profil-tab';
 
 export function SectionOverlay() {
   const sectionPlane = useViewerStore((s) => s.sectionPlane);
@@ -165,6 +169,8 @@ export function SectionOverlay() {
   // Trassia (Paket V-UX, P3): die GANZE Kopfleiste zieht. Bisher zog nur das
   // 12x20-px-Griffsymbol; die Kopfleiste selbst bewegte im Audit 0 px.
   const chHeaderDrag = useChHeaderDrag(drag.onDragStart);
+  // Trassia (Paket PROFIL): die Kopfzeile nennt den offenen Reiter.
+  const chProfilTab = useChProfilTab();
 
   return (
     <>
@@ -197,8 +203,13 @@ export function SectionOverlay() {
               className="flex items-center gap-2 hover:bg-accent/50 rounded px-2 py-1 transition-colors min-w-0"
             >
             <Slice className="h-4 w-4 text-primary" />
-            <span className="font-medium text-sm">Section</span>
-            {sectionPlane.enabled && (
+            {/* Trassia (Paket PROFIL): ausgeklappt tragen die Reiter den Namen;
+                Titel und Schnittangabe stehen nur im eingeklappten Zustand —
+                sonst kostete die Reiterleiste im Inhalt 28 px (Tester M1). */}
+            {isPanelCollapsed && (
+              <span className="font-medium text-sm">{chProfilTab === 'laengsprofil' ? 'Profile' : 'Section'}</span>
+            )}
+            {sectionPlane.enabled && isPanelCollapsed && chProfilTab === 'querprofil' && (
               <span className="text-xs text-primary font-mono">
                 {isCustom
                   ? <>Custom <span className="inline-block w-16 text-right tabular-nums">{sectionPlane.custom!.distance.toFixed(2)}m</span></>
@@ -208,6 +219,7 @@ export function SectionOverlay() {
             )}
             <ChevronDown className={`h-3 w-3 transition-transform ${isPanelCollapsed ? '-rotate-90' : ''}`} />
             </button>
+            {!isPanelCollapsed && <ChProfilTabLeiste />}
           </div>
           <div className="flex items-center gap-1">
             {/* Only show 2D button when panel is closed */}
@@ -228,6 +240,10 @@ export function SectionOverlay() {
         {/* Expandable content */}
         {!isPanelCollapsed && (
           <div className="border-t px-3 pb-3 min-w-72 min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {/* Trassia (Paket PROFIL): Reiter Querprofil | Laengsprofil (Leiste
+                in der Kopfzeile). Alles bis zum schliessenden ChProfilInhalt ist
+                der unveraenderte Querprofil-Inhalt; der Laengsprofil-Reiter folgt. */}
+            <ChProfilInhalt tab="querprofil">
             {/* Direction Selection. "Pick face" is the primary affordance —
                 face-pick auto-arms on tool open (issue #243 follow-up) and
                 matches Bonsai/Revit point-and-cut UX. Cardinal presets are
@@ -378,6 +394,10 @@ export function SectionOverlay() {
                 </Button>
               </div>
             )}
+            </ChProfilInhalt>
+            <ChProfilInhalt tab="laengsprofil">
+              <ChProfilLaengs />
+            </ChProfilInhalt>
           </div>
         )}
       </ChPanelFrame>

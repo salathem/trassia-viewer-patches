@@ -16,6 +16,10 @@ import { createStatusBarStatsAccumulator } from './statusBarStats.js';
 // Projektmappe wohnt in der halb leeren Fusszeile statt in einer eigenen
 // Kopfzeile ueber dem Bild.
 import { ChProjektFuss } from './ChProjektFuss';
+// Trassia overlay (Paket ZAHL, TODO #28): die Zahlen ueber ALLE geladenen
+// Modelle — der Upstream zaehlt nur das aktive (Tester-Blocker B1 2026-09-02:
+// 155 statt 11'574 bei 14 Modellen). Exakte Zahl im Tooltip.
+import { useChGesamtStatistik, chZahlExakt } from '@/lib/ch/gesamt-statistik';
 
 export function StatusBar() {
   const { loading, geometryResult, ifcDataStore } = useIfc();
@@ -95,10 +99,12 @@ export function StatusBar() {
     () => statsAccRef.current.update(geometryResult),
     [geometryResult],
   );
+  // Trassia (ZAHL): Summe ueber alle Modelle; ohne foederierte Modelle = stats.
+  const gesamt = useChGesamtStatistik(stats, geometryResult);
 
   const visibleElements = useMemo(() => {
     if (selectedStoreys.size === 0 || !ifcDataStore?.spatialHierarchy) {
-      return stats.elements;
+      return gesamt.elements;
     }
     // Count elements from all selected storeys
     let count = 0;
@@ -108,8 +114,8 @@ export function StatusBar() {
         count += storeyElements.length;
       }
     }
-    return count || stats.elements;
-  }, [selectedStoreys, ifcDataStore, stats.elements]);
+    return count || gesamt.elements;
+  }, [selectedStoreys, ifcDataStore, gesamt.elements]);
 
   // Trassia (UX-KOPF-Nachschliff, Marco 2026-09-02): gap-3 auf dem Root,
   // damit Statistik- und Perf-Block denselben Abstand tragen wie die
@@ -148,12 +154,12 @@ export function StatusBar() {
       {/* Center: Model Stats */}
       {/* Trassia: gap-4 -> gap-3, ein Abstand fuer die ganze Zeile. */}
       <div className="flex shrink-0 items-center gap-3">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5" title={`${chZahlExakt(visibleElements)} elements${gesamt.modelle > 1 ? ` in ${gesamt.modelle} models` : ''}`}>
           <Boxes className="h-3.5 w-3.5" />
           <span>
             {formatNumber(visibleElements)}
-            {selectedStoreys.size > 0 && stats.elements !== visibleElements && (
-              <span className="opacity-60"> / {formatNumber(stats.elements)}</span>
+            {selectedStoreys.size > 0 && gesamt.elements !== visibleElements && (
+              <span className="opacity-60"> / {formatNumber(gesamt.elements)}</span>
             )}
             {' '}elements
           </span>
@@ -161,9 +167,9 @@ export function StatusBar() {
 
         <Separator orientation="vertical" className="h-3.5" />
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5" title={`${chZahlExakt(gesamt.triangles)} triangles`}>
           <Triangle className="h-3.5 w-3.5" />
-          <span>{formatNumber(stats.triangles)} tris</span>
+          <span>{formatNumber(gesamt.triangles)} tris</span>
         </div>
       </div>
 
