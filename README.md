@@ -9,7 +9,7 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0055`) applied, in numeric order, on top of
+- `patches/` — the exact patches (`0001`–`0057`) applied, in numeric order, on top of
   upstream commit `49dfc3090425569095622ca567715d017c4cf166` (tag `@ifc-lite/wasm@6.1.1`)
 - `modified-files/` — the forty-nine modified files in full source form
   (base commit + all patches applied):
@@ -248,6 +248,17 @@ All files in this repository are licensed under the **MPL-2.0**.
 - `0055` — "Start blank" arms the wall tool (`setActiveTool('addElement')`)
   only in full mode; in Trassia mode the blank project stays in select mode,
   because the Author tab and the add-element panel are not offered there.
+- `0056` — Trassia mode, consistently: the Alt+digit shortcut opens a panel
+  only if the rail offers it in the current mode, and the sidebar customizer
+  lists only those panels. Two one-line conditions plus imports; `?voll=1`
+  keeps everything.
+- `0057` — Trassia welcome card: in Trassia mode the welcome card's logo,
+  title, subtitle and action area are replaced by an overlay component
+  (`ChStartkarte.tsx`: logo, subtitle, three actions, legal links); one
+  import and one conditional wrapper, upstream content kept verbatim for
+  `?voll=1`. Recent files and the shortcuts chip stay upstream. The logo
+  files under `apps/viewer/public/marke/` are trademarks of Trassia, not
+  MPL-licensed code.
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil

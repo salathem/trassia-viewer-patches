@@ -1,0 +1,52 @@
+diff --git a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
+index 9bd8520..89a8cb0 100644
+--- a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
++++ b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
+@@ -23,6 +23,10 @@ import { GripVertical, Eye, EyeOff, RotateCcw, Lock, ChevronUp, ChevronDown, Plu
+ import { cn } from '@/lib/utils';
+ import { useViewerStore } from '@/store';
+ import { getPanelDef, type WorkspacePanelId } from '@/lib/panels/registry';
++// Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
++// 2026-09-03): der Anpassen-Dialog listet im Trassia-Modus nur die Panels, die
++// die Leiste auch anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
++import { chLeisteZeigt } from '@/lib/ch/modus';
+ 
+ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+   const order = useViewerStore((s) => s.sidebarOrder);
+@@ -38,8 +42,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+   const [overId, setOverId] = useState<string | null>(null);
+ 
+   // Shown panels keep their rail order; hidden ones live in their own section.
+-  const shownIds = order.filter((id) => !hidden.has(id));
+-  const hiddenList = order.filter((id) => hidden.has(id));
++  const shownIds = order.filter((id) => !hidden.has(id) && chLeisteZeigt(id));
++  const hiddenList = order.filter((id) => hidden.has(id) && chLeisteZeigt(id));
+ 
+   // Move focus into the popover on open and restore it to the trigger on close.
+   useEffect(() => {
+diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
+index 7735205..e07030c 100644
+--- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
++++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
+@@ -10,6 +10,10 @@ import { useEffect, useCallback, useRef } from 'react';
+ import { useViewerStore } from '@/store';
+ import { resetVisibilityForHomeFromStore } from '@/store/homeView';
+ import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
++// Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
++// 2026-09-03): Alt+Ziffer oeffnet im Trassia-Modus nur Panels, die die Leiste
++// anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
++import { chLeisteZeigt } from '@/lib/ch/modus';
+ import { closeAllPanelWindows } from '@/services/panel-windows';
+ import { eventKey, isTextEntryTarget } from '@/lib/keyboard-event';
+ import {
+@@ -124,7 +128,9 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+     // (Alt+1 = ¡ on macOS). 1-9 map to the first nine; 0 maps to the tenth.
+     if (e.altKey && !ctrl) {
+       const shortcutPanel = workspacePanelForShortcutCode(e.code);
+-      if (shortcutPanel) {
++      // Trassia (TODO #36): ein nicht angebotenes Panel bleibt zu; die Taste
++      // faellt durch wie eine unbelegte (kein preventDefault).
++      if (shortcutPanel && chLeisteZeigt(shortcutPanel)) {
+         e.preventDefault();
+         useViewerStore.getState().openPanelInHome(shortcutPanel);
+         return;
