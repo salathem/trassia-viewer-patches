@@ -15,6 +15,10 @@ import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
 // Panels, die in der Leiste stehen (nicht versteckt — der Nutzer kann sie im
 // Anpassen-Dialog einblenden); ?voll=1 wie Upstream. Siehe lib/ch/modus.ts.
 import { chVollmodus } from '@/lib/ch/modus';
+// Trassia overlay (Paket U3-klein, Marco E21 2026-09-04): die Leertaste
+// schaltet die Sichtbarkeit der gewaehlten Struktur-Zeilen um — je Zeile nach
+// eigenem Zustand; ohne Zeilen-Auswahl je gewaehltem Element nach Zustand.
+import { chElementePlan, chPlanAusfuehren, chZeilenAuswahl, chZeilenAuswahlLeeren, chZeilenSichtbarkeitUmschalten } from '@/lib/ch/zeilen-auswahl';
 import { closeAllPanelWindows } from '@/services/panel-windows';
 import { eventKey, isTextEntryTarget } from '@/lib/keyboard-event';
 import {
@@ -245,13 +249,32 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
       const ids = getAllSelectedGlobalIds();
       hideEntities(ids);
     }
-    // Space to hide — skip when focused on buttons/selects/links where Space has native behavior
-    if (key === ' ' && !ctrl && !shift && selectedEntityId) {
+    // Space toggles visibility — skip when focused on buttons/selects/links where Space has native behavior
+    // Trassia (U3-klein, Marco E21): nicht mehr nur verstecken, sondern je
+    // Zeile/Element nach eigenem Zustand umschalten; gewaehlte Struktur-Zeilen
+    // (Modell, Gruppe, Typ, Element gemischt) vor der Store-Auswahl. Derselbe
+    // Riegel wie bei Escape: nie in Menues und Dialogen.
+    if (key === ' ' && !ctrl && !shift) {
       const tag = document.activeElement?.tagName;
-      if (tag !== 'BUTTON' && tag !== 'SELECT' && tag !== 'A') {
-        e.preventDefault();
-        const ids = getAllSelectedGlobalIds();
-        hideEntities(ids);
+      const ziel = e.target as HTMLElement | null;
+      const imMenue = !!ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]');
+      // Tester U3 B-1/B-2: steht eine Zeilen-Auswahl, gehoert die Leertaste
+      // ihr — auch wenn zuletzt ein Reiter oder Aufklapp-Pfeil fokussiert war
+      // (der Knopf bekommt dann keinen Klick). Ohne Zeilen-Auswahl wie Upstream.
+      const zeilenGewaehlt = chZeilenAuswahl().size > 0;
+      if ((zeilenGewaehlt || (tag !== 'BUTTON' && tag !== 'SELECT' && tag !== 'A')) && !imMenue) {
+        const s = useViewerStore.getState();
+        const aktionen = { hideEntities: s.hideEntities, showEntities: s.showEntities, setModelVisibility: s.setModelVisibility };
+        let schritte = chZeilenSichtbarkeitUmschalten(
+          { versteckt: s.hiddenEntities, modellSichtbar: (id) => s.models.get(id)?.visible },
+          aktionen,
+        );
+        if (schritte === 0) {
+          const plan = chElementePlan(getAllSelectedGlobalIds(), s.hiddenEntities);
+          chPlanAusfuehren(plan, aktionen);
+          schritte = plan.length;
+        }
+        if (schritte > 0) e.preventDefault();
       }
     }
     if (key === 'a' && !ctrl && !shift) {
@@ -394,6 +417,8 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
       // sich selbst per Escape) gehoert dazu.
       if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return;
       e.preventDefault();
+      // Trassia (U3-klein): Escape leert auch die Zeilen-Auswahl der Struktur-Ansicht.
+      chZeilenAuswahlLeeren();
       const now = Date.now();
       const timeSinceLastEscape = now - lastEscapeRef.current;
       lastEscapeRef.current = now;
@@ -486,7 +511,9 @@ export const KEYBOARD_SHORTCUTS = [
   { key: '−', description: 'Remove current context from basket', category: 'Visibility' },
   { key: 'D', description: 'Toggle basket presentation dock', category: 'Visibility' },
   { key: 'B', description: 'Save basket as presentation view', category: 'Visibility' },
-  { key: 'Del / Space', description: 'Hide selection', category: 'Visibility' },
+  { key: 'Del', description: 'Hide selection', category: 'Visibility' },
+  // Trassia (U3-klein): die Leertaste schaltet um, je Zeile nach eigenem Zustand.
+  { key: 'Space', description: 'Toggle visibility of the selected tree rows (Ctrl-click rows of any level to select them) or of the selected elements — each by its own state; a partly visible group hides, a second press brings it back', category: 'Visibility' },
   { key: 'A', description: 'Show all (clear filters and basket)', category: 'Visibility' },
   { key: 'H', description: 'Home (isometric + reset visibility)', category: 'Camera' },
   { key: 'Z', description: 'Fit all (zoom extents)', category: 'Camera' },

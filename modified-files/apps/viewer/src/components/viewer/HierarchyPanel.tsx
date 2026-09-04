@@ -39,6 +39,12 @@ import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
 // Trassia overlay (Paket V-TILES) — die Kachelsaetze der Projektmappe stehen
 // ueber der Modellliste. Ohne Kachelsatz rendert die Komponente nichts.
 import { ChTileLayers } from './ChTileLayers';
+// Trassia overlay (Paket U3-klein, Marco E21 2026-09-04): Zeilen-Auswahl ueber
+// alle Zeilentypen (Ctrl-Klick) und die Leertaste als Sichtbarkeits-Umschalter.
+// Das Panel meldet dem Modul nur, welche Elemente eine Zeile hat.
+import { chRegistriereZeilenAufloeser, chZeilenKlick } from '@/lib/ch/zeilen-auswahl';
+import { chNachkommenElemente, type ChRaumKnoten } from '@/lib/ch/container-elemente';
+import { collectAggregatedDescendants, type AggregationRelationships } from '@/utils/aggregation';
 
 export function HierarchyPanel() {
   const {
@@ -276,6 +282,33 @@ export function HierarchyPanel() {
     }
   }, [getNodeElements, hiddenEntities, hideEntities, showEntities, selectedEntityId, clearSelection]);
 
+  // Trassia (U3-klein): die Leertaste (useKeyboardShortcuts) braucht die
+  // Elemente einer gewaehlten Zeile — nur dieses Panel kennt sie.
+  useEffect(() => {
+    chRegistriereZeilenAufloeser({
+      elementeVon: (node) => {
+        const direkt = getNodeElements(node);
+        // Tester U3 B-3: Container-Zeilen (Site, Gebaeude, Facility …) liefern
+        // im Upstream [] — fuer die Leertaste zaehlen alle Elemente darunter.
+        if (direkt.length > 0 || !isSpatialContainer(node.type) || node.expressIds.length === 0) return direkt;
+        const modelId = node.modelIds[0] ?? 'legacy';
+        const store = modelId === 'legacy' ? ifcDataStore : models.get(modelId)?.ifcDataStore;
+        const wurzel = store?.spatialHierarchy?.project;
+        if (!wurzel) return [];
+        const lokal = chNachkommenElemente([wurzel as unknown as ChRaumKnoten], node.expressIds[0]);
+        // Tester N-1: direkt enthaltene Baugruppen (IfcElementAssembly & Co.) tragen
+        // keine Geometrie — ihre Teile (IfcRelAggregates) muessen mit, wie beim
+        // Element-Fall des Upstreams (#1133).
+        const rel = store?.relationships as AggregationRelationships | undefined;
+        const alle = new Set<number>(lokal);
+        if (rel) for (const id of lokal) for (const teil of collectAggregatedDescendants(rel, id)) alle.add(teil);
+        const ids = [...alle];
+        return modelId === 'legacy' ? ids : ids.map((id) => toGlobalId(modelId, id));
+      },
+    });
+    return () => chRegistriereZeilenAufloeser(null);
+  }, [getNodeElements, models, ifcDataStore, toGlobalId]);
+
   // Handle model visibility toggle
   const handleModelVisibilityToggle = useCallback((modelId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -359,6 +392,11 @@ export function HierarchyPanel() {
 
   // Handle node click - for selection/isolation or expand/collapse
   const handleNodeClick = useCallback((node: TreeNode, e: React.MouseEvent) => {
+    // Trassia (U3-klein): Ctrl-Klick nimmt JEDE Zeile in die Zeilen-Auswahl
+    // (Leertaste); bei Nicht-Element-Zeilen ersetzt das den Upstream-Klick,
+    // der sonst isolieren oder solo schalten wuerde. Einfacher Klick: Auswahl
+    // = diese Zeile, Upstream unveraendert.
+    if (!chZeilenKlick(node, e)) return;
     if (node.type === 'model-header' && node.id !== 'models-header') {
       // Model header click handled by its own onClick (expand/collapse)
       return;
@@ -1057,9 +1095,10 @@ export function HierarchyPanel() {
             </div>
           </div>
         ) : (
-          <div className="p-2 border-t-2 border-zinc-200 dark:border-zinc-800 text-[10px] uppercase tracking-wide text-zinc-500 dark:text-zinc-500 text-center bg-zinc-50 dark:bg-black font-mono">
-            {models.size} models · Drag divider to resize
-          </div>
+          // Trassia (U3-klein, Marco E21): kein Fussbalken «n models · Drag
+          // divider to resize» — die Modellzahl steht im Abschnittskopf, der
+          // Ziehgriff erklaert sich selbst.
+          null
         )}
       </div>
     );

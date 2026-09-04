@@ -9,7 +9,7 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0059`) applied, in numeric order, on top of
+- `patches/` — the exact patches (`0001`–`0060`) applied, in numeric order, on top of
   upstream commit `49dfc3090425569095622ca567715d017c4cf166` (tag `@ifc-lite/wasm@6.1.1`)
 - `modified-files/` — the forty-nine modified files in full source form
   (base commit + all patches applied):
@@ -275,6 +275,15 @@ All files in this repository are licensed under the **MPL-2.0**.
   customize popover drop the hard filters from `0051`/`0056`, so every panel
   is listed under "Hidden" and can be shown again; Alt+digit follows the
   hidden set.
+- `0060` — hierarchy panel, small improvements: Ctrl-click selects tree rows
+  of any level (model, storey, type group, element) into an overlay row
+  selection (one call at the top of `handleNodeClick`, one on the model
+  header, a highlight class on both row kinds); Space toggles the visibility
+  of those rows — each by its own state, a partly visible group hides — and,
+  without a row selection, of the selected elements (previously Space could
+  only hide); the "n models · Drag divider to resize" footer is removed
+  (divider kept); the per-row counts become small grey text with a tooltip
+  that names what is counted (the model row counts all IFC entities).
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil

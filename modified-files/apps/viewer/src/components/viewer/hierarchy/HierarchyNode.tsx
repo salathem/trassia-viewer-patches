@@ -16,6 +16,9 @@ import { cn } from '@/lib/utils';
 import type { TreeNode } from './types';
 import { isSpatialContainer } from './types';
 import { IFC_ICON_CODEPOINTS, IFC_ICON_DEFAULT } from './ifc-icons';
+// Trassia overlay (Paket U3-klein): Zeilen-Auswahl fuer die Leertaste —
+// Hervorhebung gewaehlter Zeilen und Ctrl-Klick auf der Modellzeile.
+import { chZeilenKlick, useChZeileGewaehlt } from '@/lib/ch/zeilen-auswahl';
 
 /**
  * Resolve the Material Symbols code point for a given IFC type string.
@@ -73,6 +76,8 @@ export function HierarchyNode({
   // Use Lucide icon for non-IFC structural nodes, Material Symbols for IFC classes
   const LucideIcon = NODE_TYPE_ICONS[node.type];
   const iconCodepoint = getIfcIconCodepoint(resolvedType);
+  // Trassia (U3-klein): steht die Zeile in der Zeilen-Auswahl (Leertaste)?
+  const chGewaehlt = useChZeileGewaehlt(node.id);
 
   // Spatial containers, storeys, spaces, and grouping headers get the emphasized
   // label treatment; element rows stay lighter.
@@ -106,14 +111,19 @@ export function HierarchyNode({
       >
         <div
           className={cn(
-            'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group',
+            'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group ch-zeile',
             'hover:bg-zinc-50 dark:hover:bg-zinc-900',
             'border-transparent',
             !modelVisible && 'opacity-50',
-            node.hasChildren && 'cursor-pointer'
+            node.hasChildren && 'cursor-pointer',
+            chGewaehlt && 'ch-zeile-gewaehlt'
           )}
           style={{ paddingLeft: '8px' }}
-          onClick={() => onModelHeaderClick(modelId, node.id, node.hasChildren)}
+          onClick={(e) => {
+            // Trassia (U3-klein): Ctrl-Klick = Zeile in die Auswahl, sonst Upstream.
+            if (!chZeilenKlick(node, e)) return;
+            onModelHeaderClick(modelId, node.id, node.hasChildren);
+          }}
         >
           {/* Expand/collapse chevron */}
           {node.hasChildren ? (
@@ -128,14 +138,26 @@ export function HierarchyNode({
           )}
 
           <FileBox className="h-3.5 w-3.5 text-primary shrink-0" />
-          <span className="flex-1 text-sm truncate ml-1.5 text-zinc-900 dark:text-zinc-100">
+          <span className="flex-1 min-w-0 text-sm truncate ml-1.5 text-zinc-900 dark:text-zinc-100">
             {node.name}
           </span>
 
           {node.elementCount !== undefined && (
-            <span className="text-[10px] font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-zinc-500 dark:text-zinc-400 rounded-none">
-              {node.elementCount.toLocaleString()}
-            </span>
+            // Trassia (U3-klein, TODO #29): klein und grau, mit Zaehlweise im
+            // Tooltip — die Zahl der Modellzeile sind ALLE IFC-Entitaeten.
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {/* Tester U3 M-1/N-2/N-4: eine Zahl darf weder den Namen auf 0 px druecken noch gekuerzt
+                    werden (eine Ziffer ohne Auslassung ist eine falsche Zahl). Sie faellt weg, wenn die
+                    ZEILE schmal ist (Container-Query in ch-dichte.css Regel 10) — nicht das Fenster. */}
+                <span className="ch-zeilenzahl text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500 px-1 shrink-0">
+                  {node.elementCount.toLocaleString()}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">{node.elementCount.toLocaleString()} IFC entities in this model (all entity types, not only building elements)</p>
+              </TooltipContent>
+            </Tooltip>
           )}
 
           <Tooltip>
@@ -233,7 +255,7 @@ export function HierarchyNode({
     >
       <div
         className={cn(
-          'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group hierarchy-item',
+          'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group hierarchy-item ch-zeile',
           // No selection styling for spatial containers in multi-model mode
           isMultiModel && isSpatialContainer(node.type)
             ? 'border-transparent cursor-default'
@@ -241,7 +263,8 @@ export function HierarchyNode({
                 'cursor-pointer',
                 isSelected ? 'border-l-primary font-medium selected' : 'border-transparent'
               ),
-          nodeHidden && 'opacity-50 grayscale'
+          nodeHidden && 'opacity-50 grayscale',
+          chGewaehlt && 'ch-zeile-gewaehlt'
         )}
         style={{
           paddingLeft: `${node.depth * 16 + 8}px`,
@@ -378,12 +401,18 @@ export function HierarchyNode({
         {node.elementCount !== undefined && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-[10px] font-mono bg-zinc-100 dark:bg-zinc-950 px-1.5 py-0.5 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-none">
+              {/* Trassia (U3-klein, TODO #29): klein und grau statt Kasten mit Rahmen; in schmalen Zeilen weg statt gekuerzt (Tester N-2/N-4, Container-Query). */}
+              <span className="ch-zeilenzahl text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500 px-1 shrink-0">
                 {node.elementCount.toLocaleString()}
               </span>
             </TooltipTrigger>
             <TooltipContent>
-              <p className="text-xs">{node.elementCount.toLocaleString()} {node.elementCount === 1 ? 'element' : 'elements'}</p>
+              {/* Tester U3 M-2: auf Container-Zeilen zaehlt der Upstream die direkten Eintraege, nicht die Elemente darunter. */}
+              <p className="text-xs">
+                {isSpatialContainer(node.type) || node.type === 'element'
+                  ? `${node.elementCount.toLocaleString()} direct ${node.elementCount === 1 ? 'entry' : 'entries'} under this row (not the elements further down)`
+                  : `${node.elementCount.toLocaleString()} ${node.elementCount === 1 ? 'element' : 'elements'} in this row`}
+              </p>
             </TooltipContent>
           </Tooltip>
         )}
