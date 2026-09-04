@@ -1,0 +1,184 @@
+diff --git a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
+index c2b3052..cdef392 100644
+--- a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
++++ b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
+@@ -41,9 +41,9 @@ import { isCollabEnabled } from '@/lib/collab/config';
+ import { pendingCompositionMutations } from '@/lib/layers/pending';
+ import { activityAnchor, tourAnchor } from '@/lib/tours/anchors';
+ import { CustomizeSidebar } from './CustomizeSidebar';
+-// Trassia overlay (not upstream) — Paket U2: im Trassia-Modus zeigt die Leiste
+-// fuenf Symbole, im Vollmodus (?voll=1) alle. Siehe lib/ch/modus.ts.
+-import { chLeisteZeigt } from '@/lib/ch/modus';
++// Trassia (Paket U2, seit dem Reste-Paket): die Kundenleiste ist nur noch die
++// VORGABE der Verstecktliste (store/slices/sidebarSlice.ts, lib/ch/modus.ts) —
++// hier wird nichts mehr gefiltert, der Nutzer blendet im Anpassen-Dialog ein.
+ 
+ /** Alt+N hint per panel, by registry index (frozen since #1200): 1-9, then 0.
+  *  Only the first ten registry entries get a shortcut; later additions (e.g.
+@@ -86,10 +86,7 @@ export function ActivityBar() {
+   const visibleIds = order.filter(
+     (id) =>
+       (!hidden.has(id) || id === 'properties') &&
+-      (id !== 'collab' || isCollabEnabled()) &&
+-      // Trassia (Paket U2): die Kundenleiste. Nichts wird entfernt — Alt+N und
+-      // der Anpassen-Dialog erreichen die uebrigen Panels weiterhin.
+-      chLeisteZeigt(id),
++      (id !== 'collab' || isCollabEnabled()),
+   );
+ 
+   const onIconClick = (id: WorkspacePanelId) => {
+diff --git a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
+index 89a8cb0..0617a56 100644
+--- a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
++++ b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
+@@ -23,10 +23,10 @@ import { GripVertical, Eye, EyeOff, RotateCcw, Lock, ChevronUp, ChevronDown, Plu
+ import { cn } from '@/lib/utils';
+ import { useViewerStore } from '@/store';
+ import { getPanelDef, type WorkspacePanelId } from '@/lib/panels/registry';
+-// Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
+-// 2026-09-03): der Anpassen-Dialog listet im Trassia-Modus nur die Panels, die
+-// die Leiste auch anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
+-import { chLeisteZeigt } from '@/lib/ch/modus';
++// Trassia (Paket U2/TODO #36, seit dem Reste-Paket, Marco 2026-09-04): der
++// Anpassen-Dialog listet ALLE Panels — die Kundenleiste ist nur die Vorgabe der
++// Verstecktliste (store/slices/sidebarSlice.ts); «Hidden» ist der Weg, ein
++// Panel einzublenden. Siehe lib/ch/modus.ts.
+ 
+ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+   const order = useViewerStore((s) => s.sidebarOrder);
+@@ -42,8 +42,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+   const [overId, setOverId] = useState<string | null>(null);
+ 
+   // Shown panels keep their rail order; hidden ones live in their own section.
+-  const shownIds = order.filter((id) => !hidden.has(id) && chLeisteZeigt(id));
+-  const hiddenList = order.filter((id) => hidden.has(id) && chLeisteZeigt(id));
++  const shownIds = order.filter((id) => !hidden.has(id));
++  const hiddenList = order.filter((id) => hidden.has(id));
+ 
+   // Move focus into the popover on open and restore it to the trigger on close.
+   useEffect(() => {
+diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
+index 7ef20c6..2d66b87 100644
+--- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
++++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
+@@ -11,9 +11,10 @@ import { useViewerStore } from '@/store';
+ import { resetVisibilityForHomeFromStore } from '@/store/homeView';
+ import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
+ // Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
+-// 2026-09-03): Alt+Ziffer oeffnet im Trassia-Modus nur Panels, die die Leiste
+-// anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
+-import { chLeisteZeigt } from '@/lib/ch/modus';
++// 2026-09-03), seit dem Reste-Paket: Alt+Ziffer oeffnet im Trassia-Modus nur
++// Panels, die in der Leiste stehen (nicht versteckt — der Nutzer kann sie im
++// Anpassen-Dialog einblenden); ?voll=1 wie Upstream. Siehe lib/ch/modus.ts.
++import { chVollmodus } from '@/lib/ch/modus';
+ import { closeAllPanelWindows } from '@/services/panel-windows';
+ import { eventKey, isTextEntryTarget } from '@/lib/keyboard-event';
+ import {
+@@ -130,7 +131,7 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+       const shortcutPanel = workspacePanelForShortcutCode(e.code);
+       // Trassia (TODO #36): ein nicht angebotenes Panel bleibt zu; die Taste
+       // faellt durch wie eine unbelegte (kein preventDefault).
+-      if (shortcutPanel && chLeisteZeigt(shortcutPanel)) {
++      if (shortcutPanel && (chVollmodus() || !useViewerStore.getState().sidebarHiddenIds.includes(shortcutPanel))) {
+         e.preventDefault();
+         useViewerStore.getState().openPanelInHome(shortcutPanel);
+         return;
+@@ -389,7 +390,9 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+       // Dialog gehoert dem Menue (Radix schliesst es selbst) — sonst schloss
+       // ein Escape im Export-Menue des 2D-Panels das ganze Schnittwerkzeug.
+       const ziel = e.target as HTMLElement | null;
+-      if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content]')) return;
++      // Tester M-3 (04.09.): auch der Anpassen-Dialog der Leiste (schliesst
++      // sich selbst per Escape) gehoert dazu.
++      if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return;
+       e.preventDefault();
+       const now = Date.now();
+       const timeSinceLastEscape = now - lastEscapeRef.current;
+diff --git a/apps/viewer/src/store/slices/sidebarSlice.ts b/apps/viewer/src/store/slices/sidebarSlice.ts
+index 27ad9b3..ab1238d 100644
+--- a/apps/viewer/src/store/slices/sidebarSlice.ts
++++ b/apps/viewer/src/store/slices/sidebarSlice.ts
+@@ -28,6 +28,10 @@ import {
+   SIDEBAR_DEFAULT_WIDTH_PCT,
+   type WorkspacePanelId,
+ } from '@/lib/panels/registry';
++// Trassia overlay (not upstream) — Reste-Paket (Marco 2026-09-04): im
++// Trassia-Modus sind die Panels ausserhalb der Kundenleiste per VORGABE
++// versteckt und im Anpassen-Dialog einblendbar. Siehe lib/ch/modus.ts.
++import { chLeisteSpeicherSchluessel, chLeisteStandardVersteckt, chLeisteUeberfuehren } from '@/lib/ch/modus';
+ 
+ /** Clamp the docked-split ratio so neither half can collapse to nothing. */
+ const MIN_SPLIT_RATIO = 0.2;
+@@ -57,6 +61,11 @@ export interface SidebarLayoutSnapshot {
+ }
+ 
+ const STORAGE_KEY = 'ifc-lite:sidebar-layout-v1';
++// Trassia: der Trassia-Modus speichert sein Leisten-Layout unter einem EIGENEN
++// Schluessel (`…:trassia`), der Vollmodus (?voll=1) unter dem Upstream-Schluessel
++// — Tester-Nachlauf 3 (04.09.): mit einem gemeinsamen Schluessel ueberschrieb ein
++// «Reset» im einen Modus die Leiste des anderen (17 statt 5 bzw. 5 statt 17).
++const chSpeicherSchluessel = (): string => chLeisteSpeicherSchluessel(STORAGE_KEY);
+ // Trassia (Paket V-PFLEGE, Teil A): von 14 auf 6 gesenkt.
+ //
+ // Diese Klemme ist die PERSISTENZ-Schranke — sie faengt kaputte oder
+@@ -184,21 +193,35 @@ function loadPersisted(): SidebarLayoutSnapshot {
+     // Trassia: 340 px statt 22 % — siehe defaultWidthPct().
+     widthPct: defaultWidthPct(),
+     order: [...DEFAULT_ORDER],
+-    hiddenIds: [],
++    // Trassia: im Trassia-Modus per Vorgabe nur die Kundenleiste; alles
++    // andere steht im Anpassen-Dialog unter «Hidden» und ist einblendbar.
++    hiddenIds: chLeisteStandardVersteckt(DEFAULT_ORDER),
+   };
+   if (typeof window === 'undefined') return fallback;
+   try {
+-    const raw = window.localStorage.getItem(STORAGE_KEY);
++    const eigener = chSpeicherSchluessel();
++    let raw = window.localStorage.getItem(eigener);
++    // Trassia: gibt es unter dem eigenen Schluessel noch nichts, wird EINMAL
++    // das Upstream-Layout von vor dem Reste-Paket uebernommen — die Vorgabe
++    // kommt dazu, was der Nutzer selbst versteckt hatte, bleibt versteckt —
++    // und sofort unter dem eigenen Schluessel abgelegt. Danach gilt allein,
++    // was der Nutzer im Anpassen-Dialog waehlt.
++    const uebernommen = raw === null && eigener !== STORAGE_KEY;
++    if (uebernommen) raw = window.localStorage.getItem(STORAGE_KEY);
+     if (!raw) return fallback;
+     const parsed = JSON.parse(raw) as Partial<SidebarLayoutSnapshot>;
+-    return {
++    const snap: SidebarLayoutSnapshot = {
+       mode: coerceMode(parsed?.mode, 'expanded'),
+       // Trassia: der GESPEICHERTE Wert gewinnt unveraendert; nur wenn keiner
+       // da ist (oder er kaputt ist), greift die 340-px-Vorgabe.
+       widthPct: clampWidth(typeof parsed?.widthPct === 'number' ? parsed.widthPct : defaultWidthPct()),
+       order: normalizeOrder(parsed?.order),
+-      hiddenIds: normalizeHidden(parsed?.hiddenIds),
++      hiddenIds: uebernommen
++        ? chLeisteUeberfuehren(normalizeHidden(parsed?.hiddenIds), DEFAULT_ORDER)
++        : normalizeHidden(parsed?.hiddenIds),
+     };
++    if (uebernommen) persist(snap);
++    return snap;
+   } catch (error) {
+     console.warn('[sidebar] ignoring malformed persisted layout:', error);
+     return fallback;
+@@ -208,7 +231,8 @@ function loadPersisted(): SidebarLayoutSnapshot {
+ function persist(snap: SidebarLayoutSnapshot): void {
+   if (typeof window === 'undefined') return;
+   try {
+-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
++    // Trassia: je Modus ein eigener Schluessel (siehe chSpeicherSchluessel).
++    window.localStorage.setItem(chSpeicherSchluessel(), JSON.stringify(snap));
+   } catch (error) {
+     // Quota / private mode — the layout just won't persist this session.
+     console.warn('[sidebar] failed to persist layout:', error);
+@@ -344,7 +368,8 @@ export const createSidebarSlice: StateCreator<SidebarSlice, [], [], SidebarSlice
+         // Trassia: „Layout zuruecksetzen" gibt die neue Vorgabe, nicht die alte.
+         widthPct: defaultWidthPct(),
+         order: [...DEFAULT_ORDER],
+-        hiddenIds: [],
++        // Trassia: Reset = Kundenleiste (Vollmodus: alles), nicht «show all».
++        hiddenIds: chLeisteStandardVersteckt(DEFAULT_ORDER),
+       };
+       set({
+         sidebarMode: snap.mode,

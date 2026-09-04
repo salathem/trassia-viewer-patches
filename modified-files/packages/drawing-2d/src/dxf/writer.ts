@@ -181,7 +181,15 @@ export class DxfWriter {
   private warnedNonFinite = false;
 
   constructor(options: DxfWriterOptions = {}) {
-    this.headerComment = sanitizeDxfComment(options.headerComment ?? DEFAULT_HEADER_COMMENT);
+    // Trassia (Reste-Paket, Zeichner-Befund A3): a multi-line comment becomes
+    // one `999` group PER LINE in toString() — a single 999 value must stay
+    // short for R12 readers with a 255-char limit. Each line is sanitized on
+    // its own; empty lines are dropped.
+    this.headerComment = (options.headerComment ?? DEFAULT_HEADER_COMMENT)
+      .split('\n')
+      .map(sanitizeDxfComment)
+      .filter((line) => line.length > 0)
+      .join('\n');
   }
 
   private extend(p: Point2D): void {
@@ -417,8 +425,14 @@ export class DxfWriter {
     if (!this.layers.has('0')) {
       this.layers.set('0', { name: '0', aci: 7, linetype: 'CONTINUOUS' });
     }
+    // One `999` group per header line (see constructor): a single-line
+    // comment is written exactly as before.
+    const comments = this.headerComment
+      .split('\n')
+      .map((line) => '999\n' + line + '\n')
+      .join('');
     return (
-      '999\n' + this.headerComment + '\n' +
+      comments +
       this.buildHeader() + this.buildTables() + this.buildEntities() + '0\nEOF\n'
     );
   }

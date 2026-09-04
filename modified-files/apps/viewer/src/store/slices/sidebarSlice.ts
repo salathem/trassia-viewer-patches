@@ -28,6 +28,10 @@ import {
   SIDEBAR_DEFAULT_WIDTH_PCT,
   type WorkspacePanelId,
 } from '@/lib/panels/registry';
+// Trassia overlay (not upstream) — Reste-Paket (Marco 2026-09-04): im
+// Trassia-Modus sind die Panels ausserhalb der Kundenleiste per VORGABE
+// versteckt und im Anpassen-Dialog einblendbar. Siehe lib/ch/modus.ts.
+import { chLeisteSpeicherSchluessel, chLeisteStandardVersteckt, chLeisteUeberfuehren } from '@/lib/ch/modus';
 
 /** Clamp the docked-split ratio so neither half can collapse to nothing. */
 const MIN_SPLIT_RATIO = 0.2;
@@ -57,6 +61,11 @@ export interface SidebarLayoutSnapshot {
 }
 
 const STORAGE_KEY = 'ifc-lite:sidebar-layout-v1';
+// Trassia: der Trassia-Modus speichert sein Leisten-Layout unter einem EIGENEN
+// Schluessel (`…:trassia`), der Vollmodus (?voll=1) unter dem Upstream-Schluessel
+// — Tester-Nachlauf 3 (04.09.): mit einem gemeinsamen Schluessel ueberschrieb ein
+// «Reset» im einen Modus die Leiste des anderen (17 statt 5 bzw. 5 statt 17).
+const chSpeicherSchluessel = (): string => chLeisteSpeicherSchluessel(STORAGE_KEY);
 // Trassia (Paket V-PFLEGE, Teil A): von 14 auf 6 gesenkt.
 //
 // Diese Klemme ist die PERSISTENZ-Schranke — sie faengt kaputte oder
@@ -184,21 +193,35 @@ function loadPersisted(): SidebarLayoutSnapshot {
     // Trassia: 340 px statt 22 % — siehe defaultWidthPct().
     widthPct: defaultWidthPct(),
     order: [...DEFAULT_ORDER],
-    hiddenIds: [],
+    // Trassia: im Trassia-Modus per Vorgabe nur die Kundenleiste; alles
+    // andere steht im Anpassen-Dialog unter «Hidden» und ist einblendbar.
+    hiddenIds: chLeisteStandardVersteckt(DEFAULT_ORDER),
   };
   if (typeof window === 'undefined') return fallback;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const eigener = chSpeicherSchluessel();
+    let raw = window.localStorage.getItem(eigener);
+    // Trassia: gibt es unter dem eigenen Schluessel noch nichts, wird EINMAL
+    // das Upstream-Layout von vor dem Reste-Paket uebernommen — die Vorgabe
+    // kommt dazu, was der Nutzer selbst versteckt hatte, bleibt versteckt —
+    // und sofort unter dem eigenen Schluessel abgelegt. Danach gilt allein,
+    // was der Nutzer im Anpassen-Dialog waehlt.
+    const uebernommen = raw === null && eigener !== STORAGE_KEY;
+    if (uebernommen) raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<SidebarLayoutSnapshot>;
-    return {
+    const snap: SidebarLayoutSnapshot = {
       mode: coerceMode(parsed?.mode, 'expanded'),
       // Trassia: der GESPEICHERTE Wert gewinnt unveraendert; nur wenn keiner
       // da ist (oder er kaputt ist), greift die 340-px-Vorgabe.
       widthPct: clampWidth(typeof parsed?.widthPct === 'number' ? parsed.widthPct : defaultWidthPct()),
       order: normalizeOrder(parsed?.order),
-      hiddenIds: normalizeHidden(parsed?.hiddenIds),
+      hiddenIds: uebernommen
+        ? chLeisteUeberfuehren(normalizeHidden(parsed?.hiddenIds), DEFAULT_ORDER)
+        : normalizeHidden(parsed?.hiddenIds),
     };
+    if (uebernommen) persist(snap);
+    return snap;
   } catch (error) {
     console.warn('[sidebar] ignoring malformed persisted layout:', error);
     return fallback;
@@ -208,7 +231,8 @@ function loadPersisted(): SidebarLayoutSnapshot {
 function persist(snap: SidebarLayoutSnapshot): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
+    // Trassia: je Modus ein eigener Schluessel (siehe chSpeicherSchluessel).
+    window.localStorage.setItem(chSpeicherSchluessel(), JSON.stringify(snap));
   } catch (error) {
     // Quota / private mode — the layout just won't persist this session.
     console.warn('[sidebar] failed to persist layout:', error);
@@ -344,7 +368,8 @@ export const createSidebarSlice: StateCreator<SidebarSlice, [], [], SidebarSlice
         // Trassia: „Layout zuruecksetzen" gibt die neue Vorgabe, nicht die alte.
         widthPct: defaultWidthPct(),
         order: [...DEFAULT_ORDER],
-        hiddenIds: [],
+        // Trassia: Reset = Kundenleiste (Vollmodus: alles), nicht «show all».
+        hiddenIds: chLeisteStandardVersteckt(DEFAULT_ORDER),
       };
       set({
         sidebarMode: snap.mode,

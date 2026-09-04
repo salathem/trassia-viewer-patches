@@ -9,7 +9,7 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0057`) applied, in numeric order, on top of
+- `patches/` — the exact patches (`0001`–`0059`) applied, in numeric order, on top of
   upstream commit `49dfc3090425569095622ca567715d017c4cf166` (tag `@ifc-lite/wasm@6.1.1`)
 - `modified-files/` — the forty-nine modified files in full source form
   (base commit + all patches applied):
@@ -259,6 +259,22 @@ All files in this repository are licensed under the **MPL-2.0**.
   `?voll=1`. Recent files and the shortcuts chip stay upstream. The logo
   files under `apps/viewer/public/marke/` are trademarks of Trassia, not
   MPL-licensed code.
+- `0058` — leftovers package: (a) `main.tsx` imports the overlay favicon
+  switch; (b) Escape no longer closes the active tool when the key is meant
+  for an open menu or dialog (one condition); (c) `DxfWriter` writes a
+  multi-line header comment as one `999` group per line (single-line
+  comments are byte-identical to before); (d) the section DXF export always
+  writes the unit line and, for an axis/line cut, appends one `999` line per
+  statement (axis, station, LV95, `zero at H`, corridor, created) from an
+  overlay helper.
+- `0059` — Trassia rail as a default, not a filter: the sidebar slice seeds
+  (and resets) the hidden set with the panels outside the Trassia rail in
+  Trassia mode (empty in full mode, as upstream), keeps the Trassia layout
+  under its own localStorage key (`…:trassia`, so `?voll=1` stays pure
+  upstream) and imports a pre-existing upstream layout once; the activity bar and the
+  customize popover drop the hard filters from `0051`/`0056`, so every panel
+  is listed under "Hidden" and can be shown again; Alt+digit follows the
+  hidden set.
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil

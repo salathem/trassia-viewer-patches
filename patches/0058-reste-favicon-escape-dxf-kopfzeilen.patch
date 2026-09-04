@@ -1,0 +1,96 @@
+diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
+index dd60286..b7b4413 100644
+--- a/apps/viewer/src/hooks/useDrawingExport.ts
++++ b/apps/viewer/src/hooks/useDrawingExport.ts
+@@ -40,6 +40,7 @@ import type { GeometryResult } from '@ifc-lite/geometry';
+ import type { IfcDataStore } from '@ifc-lite/parser';
+ import { useViewerStore } from '@/store';
+ import { buildDxfExportTransform, resolveDxfExportGeoreference } from '@/hooks/dxfExportGeoref';
++import { chQpKopfzeilen } from '@/lib/ch/qp-kopfzeilen';
+ import { DEFAULT_SCAN_SVG_CAP, type ScanBandPoint } from '@/hooks/scanSectionMath';
+ import { computeSvgExportViewport, svgExportMmToWorld } from '@/hooks/svgExportViewport';
+ 
+@@ -1035,9 +1036,13 @@ function useDrawingExport({
+     // R12 has no $INSUNITS (see dxf/writer.ts); state the unit — and the
+     // target CRS when the export is actually map-projected — in the 999
+     // comment every DXF reader shows a human but none need to parse.
+-    const metadataComment = isGeoreferenced
++    // Trassia (Reste-Paket, TODO #41): the unit line is always written, and an
++    // axis/station cut appends one 999 line per statement (axis, station,
++    // LV95, `zero at H`, corridor, created) — see lib/ch/qp-kopfzeilen.ts.
++    const chUnitLine = isGeoreferenced
+       ? `ifc-lite section export - units: metres, CRS: ${georeference!.projectedCRS.name || 'unknown'}`
+-      : undefined;
++      : 'ifc-lite section export - units: metres';
++    const metadataComment = [chUnitLine, ...chQpKopfzeilen()].join('\n');
+     const dxf = exportToDXF(drawing, {
+       showHiddenLines: displayOptions.showHiddenLines,
+       coordinateTransform,
+diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
+index e07030c..7ef20c6 100644
+--- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
++++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
+@@ -385,6 +385,11 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+ 
+     // Escape: first press clears selection/tool, double-press closes all panels
+     if (key === 'escape') {
++      // Trassia (TODO #40, Tester 03.09.): Escape in einem offenen Menue oder
++      // Dialog gehoert dem Menue (Radix schliesst es selbst) — sonst schloss
++      // ein Escape im Export-Menue des 2D-Panels das ganze Schnittwerkzeug.
++      const ziel = e.target as HTMLElement | null;
++      if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content]')) return;
+       e.preventDefault();
+       const now = Date.now();
+       const timeSinceLastEscape = now - lastEscapeRef.current;
+diff --git a/apps/viewer/src/main.tsx b/apps/viewer/src/main.tsx
+index 95dd799..c7b7680 100644
+--- a/apps/viewer/src/main.tsx
++++ b/apps/viewer/src/main.tsx
+@@ -32,6 +32,10 @@ import './index.css';
+ // Spezifitaet gewinnt das spaeter geladene Blatt. Begruendung je Regel steht
+ // in der Datei selbst (overlay/apps/viewer/src/ch-dichte.css).
+ import './ch-dichte.css';
++// Trassia (U1-Nachzug): das Trassia-Favicon im Trassia-Modus — reiner
++// Nebeneffekt-Import, tauscht die Icon-Links von index.html einmal beim Start
++// (Begruendung in overlay/apps/viewer/src/lib/ch/favicon.ts).
++import './lib/ch/favicon';
+ import 'maplibre-gl/dist/maplibre-gl.css';
+ // Wire the placement-edit helpers' parser-backed source reader. Pure
+ // side-effect import; keeps `@ifc-lite/parser` out of placement-edit
+diff --git a/packages/drawing-2d/src/dxf/writer.ts b/packages/drawing-2d/src/dxf/writer.ts
+index e97195a..812aad7 100644
+--- a/packages/drawing-2d/src/dxf/writer.ts
++++ b/packages/drawing-2d/src/dxf/writer.ts
+@@ -181,7 +181,15 @@ export class DxfWriter {
+   private warnedNonFinite = false;
+ 
+   constructor(options: DxfWriterOptions = {}) {
+-    this.headerComment = sanitizeDxfComment(options.headerComment ?? DEFAULT_HEADER_COMMENT);
++    // Trassia (Reste-Paket, Zeichner-Befund A3): a multi-line comment becomes
++    // one `999` group PER LINE in toString() — a single 999 value must stay
++    // short for R12 readers with a 255-char limit. Each line is sanitized on
++    // its own; empty lines are dropped.
++    this.headerComment = (options.headerComment ?? DEFAULT_HEADER_COMMENT)
++      .split('\n')
++      .map(sanitizeDxfComment)
++      .filter((line) => line.length > 0)
++      .join('\n');
+   }
+ 
+   private extend(p: Point2D): void {
+@@ -417,8 +425,14 @@ export class DxfWriter {
+     if (!this.layers.has('0')) {
+       this.layers.set('0', { name: '0', aci: 7, linetype: 'CONTINUOUS' });
+     }
++    // One `999` group per header line (see constructor): a single-line
++    // comment is written exactly as before.
++    const comments = this.headerComment
++      .split('\n')
++      .map((line) => '999\n' + line + '\n')
++      .join('');
+     return (
+-      '999\n' + this.headerComment + '\n' +
++      comments +
+       this.buildHeader() + this.buildTables() + this.buildEntities() + '0\nEOF\n'
+     );
+   }

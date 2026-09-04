@@ -32,6 +32,10 @@ import './index.css';
 // Spezifitaet gewinnt das spaeter geladene Blatt. Begruendung je Regel steht
 // in der Datei selbst (overlay/apps/viewer/src/ch-dichte.css).
 import './ch-dichte.css';
+// Trassia (U1-Nachzug): das Trassia-Favicon im Trassia-Modus — reiner
+// Nebeneffekt-Import, tauscht die Icon-Links von index.html einmal beim Start
+// (Begruendung in overlay/apps/viewer/src/lib/ch/favicon.ts).
+import './lib/ch/favicon';
 import 'maplibre-gl/dist/maplibre-gl.css';
 // Wire the placement-edit helpers' parser-backed source reader. Pure
 // side-effect import; keeps `@ifc-lite/parser` out of placement-edit

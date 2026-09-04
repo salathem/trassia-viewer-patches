@@ -23,10 +23,10 @@ import { GripVertical, Eye, EyeOff, RotateCcw, Lock, ChevronUp, ChevronDown, Plu
 import { cn } from '@/lib/utils';
 import { useViewerStore } from '@/store';
 import { getPanelDef, type WorkspacePanelId } from '@/lib/panels/registry';
-// Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
-// 2026-09-03): der Anpassen-Dialog listet im Trassia-Modus nur die Panels, die
-// die Leiste auch anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
-import { chLeisteZeigt } from '@/lib/ch/modus';
+// Trassia (Paket U2/TODO #36, seit dem Reste-Paket, Marco 2026-09-04): der
+// Anpassen-Dialog listet ALLE Panels — die Kundenleiste ist nur die Vorgabe der
+// Verstecktliste (store/slices/sidebarSlice.ts); «Hidden» ist der Weg, ein
+// Panel einzublenden. Siehe lib/ch/modus.ts.
 
 export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
   const order = useViewerStore((s) => s.sidebarOrder);
@@ -42,8 +42,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
   const [overId, setOverId] = useState<string | null>(null);
 
   // Shown panels keep their rail order; hidden ones live in their own section.
-  const shownIds = order.filter((id) => !hidden.has(id) && chLeisteZeigt(id));
-  const hiddenList = order.filter((id) => hidden.has(id) && chLeisteZeigt(id));
+  const shownIds = order.filter((id) => !hidden.has(id));
+  const hiddenList = order.filter((id) => hidden.has(id));
 
   // Move focus into the popover on open and restore it to the trigger on close.
   useEffect(() => {

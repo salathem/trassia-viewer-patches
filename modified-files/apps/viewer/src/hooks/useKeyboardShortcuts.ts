@@ -11,9 +11,10 @@ import { useViewerStore } from '@/store';
 import { resetVisibilityForHomeFromStore } from '@/store/homeView';
 import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
 // Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
-// 2026-09-03): Alt+Ziffer oeffnet im Trassia-Modus nur Panels, die die Leiste
-// anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
-import { chLeisteZeigt } from '@/lib/ch/modus';
+// 2026-09-03), seit dem Reste-Paket: Alt+Ziffer oeffnet im Trassia-Modus nur
+// Panels, die in der Leiste stehen (nicht versteckt — der Nutzer kann sie im
+// Anpassen-Dialog einblenden); ?voll=1 wie Upstream. Siehe lib/ch/modus.ts.
+import { chVollmodus } from '@/lib/ch/modus';
 import { closeAllPanelWindows } from '@/services/panel-windows';
 import { eventKey, isTextEntryTarget } from '@/lib/keyboard-event';
 import {
@@ -130,7 +131,7 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
       const shortcutPanel = workspacePanelForShortcutCode(e.code);
       // Trassia (TODO #36): ein nicht angebotenes Panel bleibt zu; die Taste
       // faellt durch wie eine unbelegte (kein preventDefault).
-      if (shortcutPanel && chLeisteZeigt(shortcutPanel)) {
+      if (shortcutPanel && (chVollmodus() || !useViewerStore.getState().sidebarHiddenIds.includes(shortcutPanel))) {
         e.preventDefault();
         useViewerStore.getState().openPanelInHome(shortcutPanel);
         return;
@@ -385,6 +386,13 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
 
     // Escape: first press clears selection/tool, double-press closes all panels
     if (key === 'escape') {
+      // Trassia (TODO #40, Tester 03.09.): Escape in einem offenen Menue oder
+      // Dialog gehoert dem Menue (Radix schliesst es selbst) — sonst schloss
+      // ein Escape im Export-Menue des 2D-Panels das ganze Schnittwerkzeug.
+      const ziel = e.target as HTMLElement | null;
+      // Tester M-3 (04.09.): auch der Anpassen-Dialog der Leiste (schliesst
+      // sich selbst per Escape) gehoert dazu.
+      if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return;
       e.preventDefault();
       const now = Date.now();
       const timeSinceLastEscape = now - lastEscapeRef.current;

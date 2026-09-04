@@ -41,9 +41,9 @@ import { isCollabEnabled } from '@/lib/collab/config';
 import { pendingCompositionMutations } from '@/lib/layers/pending';
 import { activityAnchor, tourAnchor } from '@/lib/tours/anchors';
 import { CustomizeSidebar } from './CustomizeSidebar';
-// Trassia overlay (not upstream) — Paket U2: im Trassia-Modus zeigt die Leiste
-// fuenf Symbole, im Vollmodus (?voll=1) alle. Siehe lib/ch/modus.ts.
-import { chLeisteZeigt } from '@/lib/ch/modus';
+// Trassia (Paket U2, seit dem Reste-Paket): die Kundenleiste ist nur noch die
+// VORGABE der Verstecktliste (store/slices/sidebarSlice.ts, lib/ch/modus.ts) —
+// hier wird nichts mehr gefiltert, der Nutzer blendet im Anpassen-Dialog ein.
 
 /** Alt+N hint per panel, by registry index (frozen since #1200): 1-9, then 0.
  *  Only the first ten registry entries get a shortcut; later additions (e.g.
@@ -86,10 +86,7 @@ export function ActivityBar() {
   const visibleIds = order.filter(
     (id) =>
       (!hidden.has(id) || id === 'properties') &&
-      (id !== 'collab' || isCollabEnabled()) &&
-      // Trassia (Paket U2): die Kundenleiste. Nichts wird entfernt — Alt+N und
-      // der Anpassen-Dialog erreichen die uebrigen Panels weiterhin.
-      chLeisteZeigt(id),
+      (id !== 'collab' || isCollabEnabled()),
   );
 
   const onIconClick = (id: WorkspacePanelId) => {

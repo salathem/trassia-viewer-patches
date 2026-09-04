@@ -40,6 +40,7 @@ import type { GeometryResult } from '@ifc-lite/geometry';
 import type { IfcDataStore } from '@ifc-lite/parser';
 import { useViewerStore } from '@/store';
 import { buildDxfExportTransform, resolveDxfExportGeoreference } from '@/hooks/dxfExportGeoref';
+import { chQpKopfzeilen } from '@/lib/ch/qp-kopfzeilen';
 import { DEFAULT_SCAN_SVG_CAP, type ScanBandPoint } from '@/hooks/scanSectionMath';
 import { computeSvgExportViewport, svgExportMmToWorld } from '@/hooks/svgExportViewport';
 
@@ -1035,9 +1036,13 @@ function useDrawingExport({
     // R12 has no $INSUNITS (see dxf/writer.ts); state the unit — and the
     // target CRS when the export is actually map-projected — in the 999
     // comment every DXF reader shows a human but none need to parse.
-    const metadataComment = isGeoreferenced
+    // Trassia (Reste-Paket, TODO #41): the unit line is always written, and an
+    // axis/station cut appends one 999 line per statement (axis, station,
+    // LV95, `zero at H`, corridor, created) — see lib/ch/qp-kopfzeilen.ts.
+    const chUnitLine = isGeoreferenced
       ? `ifc-lite section export - units: metres, CRS: ${georeference!.projectedCRS.name || 'unknown'}`
-      : undefined;
+      : 'ifc-lite section export - units: metres';
+    const metadataComment = [chUnitLine, ...chQpKopfzeilen()].join('\n');
     const dxf = exportToDXF(drawing, {
       showHiddenLines: displayOptions.showHiddenLines,
       coordinateTransform,
