@@ -27,6 +27,7 @@ import { getPanelDef, type WorkspacePanelId } from '@/lib/panels/registry';
 // Anpassen-Dialog listet ALLE Panels — die Kundenleiste ist nur die Vorgabe der
 // Verstecktliste (store/slices/sidebarSlice.ts); «Hidden» ist der Weg, ein
 // Panel einzublenden. Siehe lib/ch/modus.ts.
+import { CH_HIDE_NACHHALTEN_MS, chAnpassenZeilen } from '@/lib/ch/leiste-anpassen';
 
 export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
   const order = useViewerStore((s) => s.sidebarOrder);
@@ -41,9 +42,25 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
 
+  // Trassia (UPSTREAM-RESTE, TODO #50, Tester M5-1 04.09.): ein Doppelklick auf
+  // «Hide» versteckte ZWEI Panels — nach dem ersten Klick rueckte die Liste nach,
+  // der zweite Klick traf an derselben Stelle die naechste Zeile (auch bei 150 ms
+  // Abstand). Die soeben versteckte Zeile bleibt darum CH_HIDE_NACHHALTEN_MS an
+  // Ort, abgeblendet und ohne Klickflaeche; erst danach wandert sie nach «Hidden».
+  // Die Listenlogik dazu ist reine Funktion (lib/ch/leiste-anpassen.ts, getestet).
+  const [nachhalten, setNachhalten] = useState<WorkspacePanelId | null>(null);
+  useEffect(() => {
+    if (nachhalten === null) return;
+    const t = window.setTimeout(() => setNachhalten(null), CH_HIDE_NACHHALTEN_MS);
+    return () => window.clearTimeout(t);
+  }, [nachhalten]);
+  const verstecken = (id: WorkspacePanelId) => {
+    setShown(id, false);
+    setNachhalten(id);
+  };
+
   // Shown panels keep their rail order; hidden ones live in their own section.
-  const shownIds = order.filter((id) => !hidden.has(id));
-  const hiddenList = order.filter((id) => hidden.has(id));
+  const { shown: shownIds, hiddenList } = chAnpassenZeilen(order, hidden, nachhalten);
 
   // Move focus into the popover on open and restore it to the trigger on close.
   useEffect(() => {
@@ -113,12 +130,14 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
           if (!def) return null;
           const Icon = def.Icon;
           const locked = id === 'properties';
+          const nachgehalten = id === nachhalten;
           const prevShown = shownIds[index - 1];
           const nextShown = shownIds[index + 1];
           return (
             <div
               key={id}
-              draggable
+              data-ch-nachgehalten={nachgehalten || undefined}
+              draggable={!nachgehalten}
               onDragStart={() => setDragId(id)}
               onDragEnd={() => {
                 setDragId(null);
@@ -136,6 +155,7 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
               className={cn(
                 'group flex items-center gap-1.5 px-2 py-1.5 mx-1 rounded-md cursor-grab active:cursor-grabbing',
                 dragId === id && 'opacity-40',
+                nachgehalten && 'opacity-40 pointer-events-none',
                 overId === id && dragId && dragId !== id && 'ring-1 ring-primary/60',
               )}
             >
@@ -162,8 +182,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
               </button>
               <button
                 type="button"
-                disabled={locked}
-                onClick={() => setShown(id, false)}
+                disabled={locked || nachgehalten}
+                onClick={() => verstecken(id)}
                 aria-label={locked ? `${def.title} is always shown` : `Hide ${def.title}`}
                 title={locked ? 'Always shown' : 'Hide from sidebar'}
                 className={cn(

@@ -497,10 +497,19 @@ export function ViewerLayout() {
               <div className="flex-1 min-w-0">
                 <PanelGroup orientation="horizontal" className="h-full">
                   {/* Left Panel - Hierarchy */}
+                  {/* Trassia (UPSTREAM-RESTE, TODO #52, Tester N-4a 05.09.): react-resizable-panels 4
+                      liest NACKTE Zahlen als PIXEL (README 4.12: «Numbers are interpreted as pixels»),
+                      der Upstream meint hier noch die Prozente der Version 3. Beim Start rettet die
+                      Normierung (22:78 fuellt die Zeile), aber der Doppelklick auf die Trennlinie
+                      «setzt auf die Vorgabe zurueck» — auf 22 PIXEL — und der Ziehboden lag bei 10 px:
+                      Modellzeilen liefen ueber, Auge und X waren unbedienbar. Darum ausdrueckliche
+                      Einheiten: Vorgabe 22 %, Boden 120 px (die Modellzeile braucht fuer Auge und X
+                      ~100 px, gemessen N-4a; 120 px ist zugleich die Vorgabe bei 768 px Fenster).
+                      Der Doppelklick stellt damit die Vorgabebreite her. */}
                   <Panel
                     id="left-panel"
-                    defaultSize={22}
-                    minSize={10}
+                    defaultSize="22%"
+                    minSize="120px"
                     collapsible
                     collapsedSize={0}
                     panelRef={leftPanelRef}
@@ -522,7 +531,8 @@ export function ViewerLayout() {
                   <PanelResizeHandle className="w-1.5 bg-border hover:bg-primary/50 active:bg-primary/70 transition-colors cursor-col-resize" />
 
                   {/* Center - Viewport */}
-                  <Panel id="viewport-panel" defaultSize={78} minSize={30}>
+                  {/* Trassia (TODO #52): dieselben Einheiten wie links, sonst mischen sich 78 px und 22 %. */}
+                  <Panel id="viewport-panel" defaultSize="78%" minSize="30%">
                     {/* data-floating-snap-bounds: edge-docked floating panels
                         (#1201) snap to THIS region, not the whole window, so a
                         dock never hides under the toolbar (its own close control

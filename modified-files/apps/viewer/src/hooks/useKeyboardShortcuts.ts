@@ -413,6 +413,11 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
       // Dialog gehoert dem Menue (Radix schliesst es selbst) — sonst schloss
       // ein Escape im Export-Menue des 2D-Panels das ganze Schnittwerkzeug.
       const ziel = e.target as HTMLElement | null;
+      // Tester M-4 (04.09., TODO #47): eine Ueberlagerung, die sich selbst per
+      // Escape schliesst, meldet das mit `preventDefault` (DrawingSettingsPanel,
+      // Radix-Schichten) — die Taste ist dann verbraucht, unabhaengig davon, wo
+      // der Fokus stand.
+      if (e.defaultPrevented) return;
       // Tester M-3 (04.09.): auch der Anpassen-Dialog der Leiste (schliesst
       // sich selbst per Escape) gehoert dazu.
       if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return;

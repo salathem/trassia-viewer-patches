@@ -9,12 +9,13 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0060`) applied, in numeric order, on top of
+- `patches/` — the exact patches (`0001`–`0061`) applied, in numeric order, on top of
   upstream commit `49dfc3090425569095622ca567715d017c4cf166` (tag `@ifc-lite/wasm@6.1.1`)
-- `modified-files/` — the forty-nine modified files in full source form
+- `modified-files/` — the fifty modified files in full source form
   (base commit + all patches applied):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/Drawing2DCanvas.tsx`
+  - `apps/viewer/src/components/viewer/DrawingSettingsPanel.tsx`
   - `apps/viewer/src/components/viewer/HierarchyPanel.tsx`
   - `apps/viewer/src/components/viewer/LensPanel.tsx`
   - `apps/viewer/src/components/viewer/PropertiesPanel.tsx`
@@ -284,6 +285,17 @@ All files in this repository are licensed under the **MPL-2.0**.
   only hide); the "n models · Drag divider to resize" footer is removed
   (divider kept); the per-row counts become small grey text with a tooltip
   that names what is counted (the model row counts all IFC entities).
+- `0061` — layout and dialog leftovers: (a) the left hierarchy panel and the
+  viewport panel get explicit units (`"22%"`/`"120px"` and `"78%"`/`"30%"`)
+  because `react-resizable-panels` 4 reads bare numbers as pixels — the
+  upstream's `22`/`10` made the divider's double-click reset the panel to
+  22 px; (b) the Drawing Settings box becomes a `role="dialog"` that takes
+  focus on open and closes itself on Escape (marking the key as handled), and
+  the global Escape shortcut skips a key another layer already handled
+  (`e.defaultPrevented`); (c) in the sidebar customizer a row just hidden
+  stays in place for 500 ms, dimmed and inert, before it moves to "Hidden" —
+  so a double-click on "Hide" no longer hides two panels (list split in an
+  overlay helper, `lib/ch/leiste-anpassen.ts`).
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil

@@ -1,0 +1,180 @@
+diff --git a/apps/viewer/src/components/viewer/DrawingSettingsPanel.tsx b/apps/viewer/src/components/viewer/DrawingSettingsPanel.tsx
+index 9ceef27..d7be6ae 100644
+--- a/apps/viewer/src/components/viewer/DrawingSettingsPanel.tsx
++++ b/apps/viewer/src/components/viewer/DrawingSettingsPanel.tsx
+@@ -11,7 +11,7 @@
+  * - Color, line weight, hatch controls
+  */
+ 
+-import React, { useCallback, useState, useMemo } from 'react';
++import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+ import { X, Palette, Plus, Trash2, ChevronDown, ChevronRight, GripVertical, Eye, EyeOff, Check, Copy, PenTool, Flame, Building2, Wrench, Printer, type LucideIcon } from 'lucide-react';
+ import { Button } from '@/components/ui/button';
+ import { Input } from '@/components/ui/input';
+@@ -139,8 +139,38 @@ export function DrawingSettingsPanel({ onClose }: DrawingSettingsPanelProps) {
+     setCustomRulesOpen(true);
+   }, [activePreset, customOverrideRules.length, addCustomRule, setActivePreset]);
+ 
++  // Trassia (UPSTREAM-RESTE, TODO #47, Tester M-4 04.09.): dieses Fenster ist
++  // ein eigener schwebender Kasten ohne Escape-Weg — Escape lief durch bis zum
++  // globalen Kuerzel, schaltete das Schnittwerkzeug ab, und das Fenster blieb
++  // stehen. Wie der Anpassen-Dialog der Leiste (CustomizeSidebar): Fokus beim
++  // Oeffnen hinein (einmal), Escape schliesst NUR dieses Fenster und markiert
++  // die Taste per `preventDefault` als verbraucht (Riegel in
++  // useKeyboardShortcuts). Ein offenes Radix-Aufklappfeld (Select) im Fenster
++  // behaelt sein Escape: Radix schliesst zuerst und setzt `defaultPrevented`.
++  const wurzelRef = useRef<HTMLDivElement>(null);
++  useEffect(() => {
++    wurzelRef.current?.focus();
++  }, []);
++  useEffect(() => {
++    const onKey = (e: KeyboardEvent) => {
++      if (e.key !== 'Escape' || e.defaultPrevented) return;
++      const ziel = e.target as HTMLElement | null;
++      if (ziel?.closest?.('[data-radix-popper-content-wrapper], [role="listbox"], [role="menu"]')) return;
++      e.preventDefault();
++      onClose();
++    };
++    document.addEventListener('keydown', onKey);
++    return () => document.removeEventListener('keydown', onKey);
++  }, [onClose]);
++
+   return (
+-    <div className="flex flex-col h-full bg-background border-l">
++    <div
++      ref={wurzelRef}
++      role="dialog"
++      aria-label="Drawing Settings"
++      tabIndex={-1}
++      className="flex flex-col h-full bg-background border-l outline-none"
++    >
+       {/* Header */}
+       <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50">
+         <div className="flex items-center gap-2">
+diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
+index 0b7272e..11dcc1f 100644
+--- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
++++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
+@@ -497,10 +497,19 @@ export function ViewerLayout() {
+               <div className="flex-1 min-w-0">
+                 <PanelGroup orientation="horizontal" className="h-full">
+                   {/* Left Panel - Hierarchy */}
++                  {/* Trassia (UPSTREAM-RESTE, TODO #52, Tester N-4a 05.09.): react-resizable-panels 4
++                      liest NACKTE Zahlen als PIXEL (README 4.12: «Numbers are interpreted as pixels»),
++                      der Upstream meint hier noch die Prozente der Version 3. Beim Start rettet die
++                      Normierung (22:78 fuellt die Zeile), aber der Doppelklick auf die Trennlinie
++                      «setzt auf die Vorgabe zurueck» — auf 22 PIXEL — und der Ziehboden lag bei 10 px:
++                      Modellzeilen liefen ueber, Auge und X waren unbedienbar. Darum ausdrueckliche
++                      Einheiten: Vorgabe 22 %, Boden 120 px (die Modellzeile braucht fuer Auge und X
++                      ~100 px, gemessen N-4a; 120 px ist zugleich die Vorgabe bei 768 px Fenster).
++                      Der Doppelklick stellt damit die Vorgabebreite her. */}
+                   <Panel
+                     id="left-panel"
+-                    defaultSize={22}
+-                    minSize={10}
++                    defaultSize="22%"
++                    minSize="120px"
+                     collapsible
+                     collapsedSize={0}
+                     panelRef={leftPanelRef}
+@@ -522,7 +531,8 @@ export function ViewerLayout() {
+                   <PanelResizeHandle className="w-1.5 bg-border hover:bg-primary/50 active:bg-primary/70 transition-colors cursor-col-resize" />
+ 
+                   {/* Center - Viewport */}
+-                  <Panel id="viewport-panel" defaultSize={78} minSize={30}>
++                  {/* Trassia (TODO #52): dieselben Einheiten wie links, sonst mischen sich 78 px und 22 %. */}
++                  <Panel id="viewport-panel" defaultSize="78%" minSize="30%">
+                     {/* data-floating-snap-bounds: edge-docked floating panels
+                         (#1201) snap to THIS region, not the whole window, so a
+                         dock never hides under the toolbar (its own close control
+diff --git a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
+index 0617a56..b28ca75 100644
+--- a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
++++ b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
+@@ -27,6 +27,7 @@ import { getPanelDef, type WorkspacePanelId } from '@/lib/panels/registry';
+ // Anpassen-Dialog listet ALLE Panels — die Kundenleiste ist nur die Vorgabe der
+ // Verstecktliste (store/slices/sidebarSlice.ts); «Hidden» ist der Weg, ein
+ // Panel einzublenden. Siehe lib/ch/modus.ts.
++import { CH_HIDE_NACHHALTEN_MS, chAnpassenZeilen } from '@/lib/ch/leiste-anpassen';
+ 
+ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+   const order = useViewerStore((s) => s.sidebarOrder);
+@@ -41,9 +42,25 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+   const [dragId, setDragId] = useState<string | null>(null);
+   const [overId, setOverId] = useState<string | null>(null);
+ 
++  // Trassia (UPSTREAM-RESTE, TODO #50, Tester M5-1 04.09.): ein Doppelklick auf
++  // «Hide» versteckte ZWEI Panels — nach dem ersten Klick rueckte die Liste nach,
++  // der zweite Klick traf an derselben Stelle die naechste Zeile (auch bei 150 ms
++  // Abstand). Die soeben versteckte Zeile bleibt darum CH_HIDE_NACHHALTEN_MS an
++  // Ort, abgeblendet und ohne Klickflaeche; erst danach wandert sie nach «Hidden».
++  // Die Listenlogik dazu ist reine Funktion (lib/ch/leiste-anpassen.ts, getestet).
++  const [nachhalten, setNachhalten] = useState<WorkspacePanelId | null>(null);
++  useEffect(() => {
++    if (nachhalten === null) return;
++    const t = window.setTimeout(() => setNachhalten(null), CH_HIDE_NACHHALTEN_MS);
++    return () => window.clearTimeout(t);
++  }, [nachhalten]);
++  const verstecken = (id: WorkspacePanelId) => {
++    setShown(id, false);
++    setNachhalten(id);
++  };
++
+   // Shown panels keep their rail order; hidden ones live in their own section.
+-  const shownIds = order.filter((id) => !hidden.has(id));
+-  const hiddenList = order.filter((id) => hidden.has(id));
++  const { shown: shownIds, hiddenList } = chAnpassenZeilen(order, hidden, nachhalten);
+ 
+   // Move focus into the popover on open and restore it to the trigger on close.
+   useEffect(() => {
+@@ -113,12 +130,14 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+           if (!def) return null;
+           const Icon = def.Icon;
+           const locked = id === 'properties';
++          const nachgehalten = id === nachhalten;
+           const prevShown = shownIds[index - 1];
+           const nextShown = shownIds[index + 1];
+           return (
+             <div
+               key={id}
+-              draggable
++              data-ch-nachgehalten={nachgehalten || undefined}
++              draggable={!nachgehalten}
+               onDragStart={() => setDragId(id)}
+               onDragEnd={() => {
+                 setDragId(null);
+@@ -136,6 +155,7 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+               className={cn(
+                 'group flex items-center gap-1.5 px-2 py-1.5 mx-1 rounded-md cursor-grab active:cursor-grabbing',
+                 dragId === id && 'opacity-40',
++                nachgehalten && 'opacity-40 pointer-events-none',
+                 overId === id && dragId && dragId !== id && 'ring-1 ring-primary/60',
+               )}
+             >
+@@ -162,8 +182,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+               </button>
+               <button
+                 type="button"
+-                disabled={locked}
+-                onClick={() => setShown(id, false)}
++                disabled={locked || nachgehalten}
++                onClick={() => verstecken(id)}
+                 aria-label={locked ? `${def.title} is always shown` : `Hide ${def.title}`}
+                 title={locked ? 'Always shown' : 'Hide from sidebar'}
+                 className={cn(
+diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
+index f956108..c8d3d7d 100644
+--- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
++++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
+@@ -413,6 +413,11 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+       // Dialog gehoert dem Menue (Radix schliesst es selbst) — sonst schloss
+       // ein Escape im Export-Menue des 2D-Panels das ganze Schnittwerkzeug.
+       const ziel = e.target as HTMLElement | null;
++      // Tester M-4 (04.09., TODO #47): eine Ueberlagerung, die sich selbst per
++      // Escape schliesst, meldet das mit `preventDefault` (DrawingSettingsPanel,
++      // Radix-Schichten) — die Taste ist dann verbraucht, unabhaengig davon, wo
++      // der Fokus stand.
++      if (e.defaultPrevented) return;
+       // Tester M-3 (04.09.): auch der Anpassen-Dialog der Leiste (schliesst
+       // sich selbst per Escape) gehoert dazu.
+       if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return;
