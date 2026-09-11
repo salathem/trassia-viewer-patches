@@ -1,0 +1,43 @@
+diff --git a/apps/viewer/src/store/slices/sidebarSlice.ts b/apps/viewer/src/store/slices/sidebarSlice.ts
+index ab1238d..9be646b 100644
+--- a/apps/viewer/src/store/slices/sidebarSlice.ts
++++ b/apps/viewer/src/store/slices/sidebarSlice.ts
+@@ -31,7 +31,7 @@ import {
+ // Trassia overlay (not upstream) — Reste-Paket (Marco 2026-09-04): im
+ // Trassia-Modus sind die Panels ausserhalb der Kundenleiste per VORGABE
+ // versteckt und im Anpassen-Dialog einblendbar. Siehe lib/ch/modus.ts.
+-import { chLeisteSpeicherSchluessel, chLeisteStandardVersteckt, chLeisteUeberfuehren } from '@/lib/ch/modus';
++import { chLeisteSpeicherSchluessel, chLeisteStandardVersteckt, chLeisteUeberfuehren, chLeisteNeueVerstecken } from '@/lib/ch/modus';
+ 
+ /** Clamp the docked-split ratio so neither half can collapse to nothing. */
+ const MIN_SPLIT_RATIO = 0.2;
+@@ -218,9 +218,16 @@ function loadPersisted(): SidebarLayoutSnapshot {
+       order: normalizeOrder(parsed?.order),
+       hiddenIds: uebernommen
+         ? chLeisteUeberfuehren(normalizeHidden(parsed?.hiddenIds), DEFAULT_ORDER)
+-        : normalizeHidden(parsed?.hiddenIds),
++        // Trassia (Pin-Bump 6.5.0, Tester M1): Panels, die der Upstream seit dem
++        // letzten Speichern angehaengt hat, kennt die Positivliste nicht —
++        // sie werden versteckt, alles vom Nutzer Gewaehlte bleibt. Welche Ids
++        // das Layout kannte, steht im Feld `chBekannt` (siehe persist()).
++        : chLeisteNeueVerstecken(normalizeHidden(parsed?.hiddenIds), (parsed as { chBekannt?: unknown }).chBekannt, DEFAULT_ORDER),
+     };
+-    if (uebernommen) persist(snap);
++    // Trassia: nach einer Uebernahme oder wenn die Registratur seit dem letzten
++    // Speichern gewachsen ist, sofort mit aktuellem `chBekannt` ablegen.
++    const bekanntVeraltet = JSON.stringify((parsed as { chBekannt?: unknown }).chBekannt ?? null) !== JSON.stringify(DEFAULT_ORDER);
++    if (uebernommen || bekanntVeraltet) persist(snap);
+     return snap;
+   } catch (error) {
+     console.warn('[sidebar] ignoring malformed persisted layout:', error);
+@@ -232,7 +239,9 @@ function persist(snap: SidebarLayoutSnapshot): void {
+   if (typeof window === 'undefined') return;
+   try {
+     // Trassia: je Modus ein eigener Schluessel (siehe chSpeicherSchluessel).
+-    window.localStorage.setItem(chSpeicherSchluessel(), JSON.stringify(snap));
++    // `chBekannt` = die Registratur zum Speicherzeitpunkt, damit loadPersisted()
++    // spaeter angehaengte Upstream-Panels erkennen kann (Pin-Bump 6.5.0, M1).
++    window.localStorage.setItem(chSpeicherSchluessel(), JSON.stringify({ ...snap, chBekannt: DEFAULT_ORDER }));
+   } catch (error) {
+     // Quota / private mode — the layout just won't persist this session.
+     console.warn('[sidebar] failed to persist layout:', error);
