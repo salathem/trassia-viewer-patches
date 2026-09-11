@@ -27,6 +27,7 @@ import {
   type SectionConfig,
   type ProfileEntry,
 } from '@ifc-lite/drawing-2d';
+import { createDrawingRequestQueue } from './drawingRequestQueue.js';
 import { createMeshOutlineProvider, type MeshOutline2dFn } from './meshOutlineProvider.js';
 import { type GeometryResult } from '@ifc-lite/geometry';
 import {
@@ -34,14 +35,16 @@ import {
   parseProfilesFlat,
   parseSymbolicFlat,
 } from '@/lib/overlay-parse/index.js';
-import { buildProfileEntries } from '@/lib/overlay-parse/profile-entries.js';
+import { placedConstructionProfiles } from '@/lib/model-placement/construction-profiles';
+import { buildProfileEntries, warnAboutSkippedProfiles } from '@/lib/overlay-parse/profile-entries.js';
 import {
   buildSymbolicDrawingLines,
   type SymbolicDrawingLine,
 } from '@/lib/overlay-parse/symbolic-drawing-lines.js';
 import type { SpatialHierarchy } from '@ifc-lite/data';
 import * as IfcWasm from '@ifc-lite/wasm';
-import { customPlaneCenter } from '@/store';
+import { customPlaneCenter, useViewerStore } from '@/store';
+import { notifyDrawing2DSectionConfig, consumeRestoredSectionConfig } from './useDrawing2DPersistence.js';
 import { buildModelViewIdFilter, selectModelMeshes } from '@/lib/type-view-visibility';
 // Trassia overlay (not upstream) — Querprofil-Ansicht, Paket V-QP.
 // Der Korridor begrenzt die ZEICHNUNG (siehe lib/ch/qp-corridor.ts), der
@@ -62,6 +65,15 @@ export const AXIS_MAP: Record<'down' | 'front' | 'side', 'x' | 'y' | 'z'> = {
   down: 'y',
   front: 'z',
   side: 'x',
+};
+
+/** Inverse of {@link AXIS_MAP} — restoring a persisted `SectionConfig`
+ * (world-space `x`/`y`/`z`) back into the store's semantic `sectionPlane`
+ * (issue #4153 gap) needs the reverse lookup. */
+const AXIS_MAP_REVERSE: Record<'x' | 'y' | 'z', 'down' | 'front' | 'side'> = {
+  y: 'down',
+  z: 'front',
+  x: 'side',
 };
 
 // Depth of the slab IN FRONT of the section plane (in shifted-world
@@ -118,6 +130,7 @@ interface UseDrawingGenerationParams {
   computedIsolatedIds?: Set<number> | null;
   models: Map<string, { id: string; visible: boolean; idOffset?: number }>;
   panelVisible: boolean;
+  activeTool: string;
   drawing: Drawing2D | null;
   // Store actions
   setDrawing: (d: Drawing2D | null) => void;
@@ -143,6 +156,7 @@ export function useDrawingGeneration({
   computedIsolatedIds,
   models,
   panelVisible,
+  activeTool,
   drawing,
   setDrawing,
   setDrawingStatus,
@@ -152,8 +166,6 @@ export function useDrawingGeneration({
   // Trassia: Korridorbreite und Ueberhoehung. Als Abonnement, damit eine
   // geaenderte Breite dieselbe Neuberechnung ausloest wie eine neue Station.
   const chQp = useChQpView();
-  // Track if this is a regeneration (vs initial generation)
-  const isRegeneratingRef = useRef(false);
 
   // Cache for symbolic representations - these don't change with section position
   // Only re-parse when model or display options change
@@ -176,16 +188,17 @@ export function useDrawingGeneration({
   } | null>(null);
 
   // Cache for per-storey floor levels used to scope construction projection to
-  // the current floor (issue #979 follow-up). Derived from mesh-Y, so it only
-  // changes when the model/visibility set changes — keyed on the same
-  // `modelCacheKey` as the profile cache.
-  const storeyFloorsCacheRef = useRef<{
+  // the current floor. Unlike source profiles, these are DISPLAYED mesh-Y
+  // values: a placement or geometry edit invalidates them even if the model
+  // identity stays unchanged (#4332). Weak keys must not keep an unloaded
+  // model's mesh buffers alive while the hidden drawing panel stays mounted.
+  const storeyFloorsCacheRef = useRef(new WeakMap<GeometryResult, {
     floors: number[];
-    sourceId: string | null;
-  } | null>(null);
+    elementToStorey: ReadonlyMap<number, number>;
+  }>());
 
   // Generate drawing when panel opens
-  const generateDrawing = useCallback(async (isRegenerate = false) => {
+  const computeDrawing = useCallback(async (isRegenerate = false, isCurrent: () => boolean = () => true) => {
     if (!geometryResult?.meshes || geometryResult.meshes.length === 0) {
       // Clear the drawing when no geometry is available (e.g., all models hidden)
       setDrawing(null);
@@ -215,7 +228,6 @@ export function useDrawingGeneration({
       setDrawingStatus('generating');
       setDrawingProgress(0, 'Initializing...');
     }
-    isRegeneratingRef.current = isRegenerate;
 
     // Parse symbolic representations if enabled (for hybrid mode)
     // OPTIMIZATION: Cache symbolic data - it doesn't change with section position
@@ -338,13 +350,12 @@ export function useDrawingGeneration({
           // `coordinateInfo` is main-thread state the worker cannot see.
           const ci = geometryResult.coordinateInfo;
           const rtc = ci.wasmRtcOffset;
-          const shift = rtc
-            ? { x: rtc.x, y: rtc.z, z: -rtc.y }
-            : ci.originShift;
+          const shift = rtc ? { x: rtc.x, y: rtc.z, z: -rtc.y } : ci.originShift;
           // Single-model (legacy) mode, so model index is always 0. Multi-model
           // profile extraction would require iterating over each model separately.
           profiles = buildProfileEntries(flat, shift, 0);
           profileCacheRef.current = { profiles, sourceId: modelCacheKey };
+          warnAboutSkippedProfiles(flat); // #3691-class silent-drop signal, one layer over
         } catch (error) {
           // Degrade gracefully: the drawing still renders without projection.
           console.warn('Profile extraction failed:', error);
@@ -358,10 +369,13 @@ export function useDrawingGeneration({
       profileCacheRef.current = null;
     }
 
+    profiles = placedConstructionProfiles(profiles, ifcDataStore);
+
     let generator: Drawing2DGenerator | null = null;
     try {
       generator = new Drawing2DGenerator();
       await generator.initialize();
+      if (!isCurrent()) return;
 
       // Convert semantic axis to geometric
       const axis = AXIS_MAP[sectionPlane.axis];
@@ -413,13 +427,11 @@ export function useDrawingGeneration({
         sh !== undefined &&
         sh.byBuilding.size <= 1;
       if (canScopeFloor && sh) {
-        const cached = storeyFloorsCacheRef.current;
-        const floors =
-          cached && cached.sourceId === modelCacheKey
-            ? cached.floors
-            : storeyFloorsFromMeshes(modelMeshes, sh.elementToStorey);
-        if (!cached || cached.sourceId !== modelCacheKey) {
-          storeyFloorsCacheRef.current = { floors, sourceId: modelCacheKey };
+        const cached = storeyFloorsCacheRef.current.get(geometryResult);
+        const floorsCurrent = cached?.elementToStorey === sh.elementToStorey;
+        const floors = floorsCurrent ? cached.floors : storeyFloorsFromMeshes(modelMeshes, sh.elementToStorey);
+        if (!floorsCurrent) {
+          storeyFloorsCacheRef.current.set(geometryResult, { floors, elementToStorey: sh.elementToStorey });
         }
         // Need ≥2 storeys to scope: with 0/1 storey there is no "other floor"
         // to exclude, and full extent keeps an overhead roof projecting.
@@ -614,6 +626,8 @@ export function useDrawingGeneration({
         },
         projectionOn ? projectionProfiles : undefined,
       );
+
+      if (!isCurrent()) return;
 
       // If we have symbolic representations, create a hybrid drawing
       if (symbolicLines.length > 0 && entitiesWithSymbols.size > 0) {
@@ -873,12 +887,17 @@ export function useDrawingGeneration({
         setDrawing(chQpShapeDrawing(result, chQp, Boolean(sectionPlane.custom)));
       }
 
+      // Remember the SectionConfig that produced this view so the markup
+      // persistence bridge (issue #4153) can save it alongside the results —
+      // `drawing2D` itself is derived output and is never persisted.
+      const generatedForModelId = useViewerStore.getState().activeModelId;
+      if (generatedForModelId) notifyDrawing2DSectionConfig(generatedForModelId, config);
+
       // Always set status to ready (whether initial generation or regeneration)
       setDrawingStatus('ready');
-      isRegeneratingRef.current = false;
     } catch (error) {
       console.error('Drawing generation failed:', error);
-      setDrawingError(error instanceof Error ? error.message : 'Generation failed');
+      if (isCurrent()) setDrawingError(error instanceof Error ? error.message : 'Generation failed');
     } finally {
       // Always cleanup generator to prevent resource leaks
       generator?.dispose();
@@ -900,160 +919,133 @@ export function useDrawingGeneration({
     setDrawingError,
   ]);
 
-  // Track panel visibility and geometry for detecting changes
-  const prevPanelVisibleRef = useRef(false);
-  const prevOverlayEnabledRef = useRef(false);
-  const prevMeshCountRef = useRef(0);
-  const prevTypeVisibilityRef = useRef(typeVisibility);
-
-  // Auto-generate when panel opens (or 3D overlay is enabled) and no drawing exists
-  // Also regenerate when geometry changes significantly (e.g., models hidden/shown)
-  useEffect(() => {
-    const wasVisible = prevPanelVisibleRef.current;
-    const wasOverlayEnabled = prevOverlayEnabledRef.current;
-    const prevMeshCount = prevMeshCountRef.current;
-    const currentMeshCount = geometryResult?.meshes?.length ?? 0;
-    const hasGeometry = currentMeshCount > 0;
-
-    // Track panel visibility separately from overlay
-    const panelJustOpened = panelVisible && !wasVisible;
-    const overlayJustEnabled = displayOptions.show3DOverlay && !wasOverlayEnabled;
-    const isNowActive = panelVisible || displayOptions.show3DOverlay;
-    const geometryChanged = currentMeshCount !== prevMeshCount;
-    // Flipping a class toggle changes the drawing's input without changing the
-    // mesh count, so `geometryChanged` never fires for it (issue #2060). The
-    // store replaces the whole `typeVisibility` object on every toggle, so an
-    // identity compare is enough — this hook's own tests can't prove that on
-    // their own, since they pass their own object literals; it's pinned by
-    // `visibilitySlice.test.ts`'s "replaces the typeVisibility object identity
-    // on every toggle" case, which fails if `toggleTypeVisibility` is
-    // refactored to structural sharing (#2070 review).
-    const typeVisibilityChanged = prevTypeVisibilityRef.current !== typeVisibility;
-
-    // Always update refs
-    prevPanelVisibleRef.current = panelVisible;
-    prevOverlayEnabledRef.current = displayOptions.show3DOverlay;
-    prevMeshCountRef.current = currentMeshCount;
-    prevTypeVisibilityRef.current = typeVisibility;
-
-    if (isNowActive) {
-      if (!hasGeometry) {
-        // No geometry available - clear the drawing
-        if (drawing) {
-          setDrawing(null);
-          setDrawingStatus('idle');
-        }
-      } else if (panelJustOpened || overlayJustEnabled || !drawing || geometryChanged || typeVisibilityChanged) {
-        // Generate if:
-        // 1. Panel just opened, OR
-        // 2. Overlay just enabled, OR
-        // 3. No drawing exists, OR
-        // 4. Geometry changed significantly (models hidden/shown), OR
-        // 5. A class-visibility toggle flipped (issue #2060)
-        generateDrawing();
-      }
-    }
-  }, [panelVisible, displayOptions.show3DOverlay, drawing, geometryResult, typeVisibility, generateDrawing, setDrawing, setDrawingStatus]);
-
-  // Auto-regenerate when section plane changes
-  // Strategy: INSTANT - no debounce, but prevent overlapping computations
-  // The generation time itself acts as natural batching for fast slider movements
-  //
-  // For face-picked custom planes (issue #243), `customKey` collapses the
-  // plane's normal+distance into a string we can compare cheaply — without
-  // it dragging the gizmo wouldn't trigger regeneration because the
-  // cardinal axis/position/flipped triple stays the same.
-  // Trassia: `chQp.key` haengt mit im Schluessel. Eine geaenderte Korridorbreite
-  // laesst die Ebene unveraendert — ohne diesen Anteil wuerde das Panel die alte
-  // Zeichnung behalten und der Regler waere wirkungslos.
-  const customKey = (sp: { custom?: { normal: [number, number, number]; distance: number } }) =>
-    (sp.custom ? `${sp.custom.normal.join(',')}|${sp.custom.distance}` : '') + `|${chQp.key}`;
-  const sectionRef = useRef({
-    axis: sectionPlane.axis,
-    position: sectionPlane.position,
-    flipped: sectionPlane.flipped,
-    customKey: customKey(sectionPlane),
-  });
-  const isGeneratingRef = useRef(false);
-  const latestSectionRef = useRef({
-    axis: sectionPlane.axis,
-    position: sectionPlane.position,
-    flipped: sectionPlane.flipped,
-    customKey: customKey(sectionPlane),
-  });
+  // Every entry point shares one queue. A superseded cut still disposes its
+  // generator, but cannot publish over the newest requested inputs (#3921).
+  const queueRef = useRef<ReturnType<typeof createDrawingRequestQueue> | null>(null);
+  if (!queueRef.current) queueRef.current = createDrawingRequestQueue();
+  const queue = queueRef.current;
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const generateDrawing = useCallback((isRegenerate = false) => queue.request(async isCurrent => {
+    setIsRegenerating(isRegenerate);
+    try { await computeDrawing(isRegenerate, isCurrent); }
+    finally { setIsRegenerating(false); }
+  }), [computeDrawing, queue]);
+  const doRegenerate = useCallback(() => generateDrawing(true), [generateDrawing]);
 
-  // Stable regenerate function that handles overlapping calls
-  const doRegenerate = useCallback(async () => {
-    if (isGeneratingRef.current) {
-      // Already generating - the latest position is already tracked in latestSectionRef
-      // When current generation finishes, it will check if another is needed
-      return;
-    }
-
-    isGeneratingRef.current = true;
-    setIsRegenerating(true);
-
-    // Capture position at start of generation
-    const targetSection = { ...latestSectionRef.current };
-
-    try {
-      await generateDrawing(true);
-    } finally {
-      isGeneratingRef.current = false;
-      setIsRegenerating(false);
-
-      // Check if section changed while we were generating
-      const current = latestSectionRef.current;
-      if (
-        current.axis !== targetSection.axis ||
-        current.position !== targetSection.position ||
-        current.flipped !== targetSection.flipped ||
-        current.customKey !== targetSection.customKey
-      ) {
-        // Position changed during generation - regenerate immediately with latest
-        // Use microtask to avoid blocking
-        queueMicrotask(() => doRegenerate());
-      }
-    }
-  }, [generateDrawing]);
-
-  const customKeyValue = customKey(sectionPlane);
+  // Restore the persisted section cut on reload (issue #4153 gap):
+  // `useDrawing2DPersistence.ts`'s restore path loaded a saved model's
+  // `SectionConfig` only into its own module-local variable, used solely to
+  // re-save it — never fed back into the store's `sectionPlane`, so the
+  // section that produced the restored markup was never regenerated; the
+  // measurements/annotations came back floating over whatever cut
+  // `sectionPlane` already held (the default, or the last cardinal mode from
+  // a PREVIOUS, unrelated session — see `sectionSlice.ts`'s
+  // `loadLastSectionMode`). `consumeRestoredSectionConfig` hands this effect
+  // that saved `SectionConfig` exactly once per restore; converting it back
+  // into `sectionPlane`'s semantic axis + 0-100 percent (the inverse of the
+  // `axis`/`position` math in `computeDrawing` above) and writing it to the
+  // store lets the existing plane-changed auto-generate effect below do the
+  // actual regeneration — no new generation path, no bypass of the
+  // `restoringModelId` guard (`consumeRestoredSectionConfig` only returns a
+  // hit for the model whose restore already concluded, matching that guard's
+  // own per-model keying).
+  //
+  // Depends on BOTH `geometryResult` (bounds must be ready to convert a
+  // world-space position to a percentage) and `displayOptions` (a proxy for
+  // "the restore just concluded" — `applyHash` always assigns a fresh
+  // `drawing2DDisplayOptions` object when it restores an entry, restored
+  // `sectionConfig` or not) so this fires regardless of which of the two
+  // becomes ready last: a cache-loaded model has bounds before the async
+  // content hash resolves; a fresh load can resolve the hash first and wait
+  // on WASM meshing for bounds. `consumeRestoredSectionConfig` is one-shot,
+  // so an extra, premature firing (bounds ready, restore not concluded yet)
+  // is a harmless no-op, not a second consumption.
   useEffect(() => {
-    // Always update latest section ref (even if generating)
-    latestSectionRef.current = {
-      axis: sectionPlane.axis,
-      position: sectionPlane.position,
-      flipped: sectionPlane.flipped,
-      customKey: customKeyValue,
-    };
+    const bounds = geometryResult?.coordinateInfo?.shiftedBounds;
+    if (!bounds) return;
+    const modelId = useViewerStore.getState().activeModelId;
+    if (!modelId) return;
+    const restored = consumeRestoredSectionConfig(modelId);
+    if (!restored) return;
 
-    // Check if section plane actually changed from last processed
-    const prev = sectionRef.current;
-    if (
-      prev.axis === sectionPlane.axis &&
-      prev.position === sectionPlane.position &&
-      prev.flipped === sectionPlane.flipped &&
-      prev.customKey === customKeyValue
-    ) {
+    const axis = restored.plane.axis;
+    const axisMin = bounds.min[axis];
+    const axisMax = bounds.max[axis];
+    const span = axisMax - axisMin;
+    // A degenerate (zero-extent) bounding box has no meaningful percentage —
+    // fall back to the slider's own default centre rather than divide by ~0.
+    const position = span > 1e-9
+      ? Math.min(100, Math.max(0, ((restored.plane.position - axisMin) / span) * 100))
+      : 50;
+
+    const customPlane = restored.plane.customPlane;
+    useViewerStore.setState((state) => ({
+      sectionPlane: {
+        ...state.sectionPlane,
+        axis: AXIS_MAP_REVERSE[axis],
+        position,
+        flipped: restored.plane.flipped,
+        enabled: true,
+        custom: customPlane
+          ? {
+              normal: [customPlane.normal.x, customPlane.normal.y, customPlane.normal.z],
+              distance: customPlane.distance,
+              // `origin` is already the projected pick point ON the plane
+              // (`dot(origin, normal) === distance`), so using it as
+              // `pickedAt` satisfies `customPlaneCenter`'s round-trip
+              // invariant exactly (see that function's own doc in
+              // `sectionSlice.ts`) — no original pick point survives the
+              // world-space `SectionConfig` this was restored from.
+              pickedAt: [customPlane.origin.x, customPlane.origin.y, customPlane.origin.z],
+              tangent: [customPlane.tangent.x, customPlane.tangent.y, customPlane.tangent.z],
+              bitangent: [customPlane.bitangent.x, customPlane.bitangent.y, customPlane.bitangent.z],
+            }
+          : undefined,
+      },
+    }));
+  }, [geometryResult, displayOptions]);
+
+  // Match useRenderUpdates: a saved overlay preference needs the section tool.
+  // Compare actual inputs, not callback identities or the drawing we publish.
+  const drawingActive = panelVisible || (activeTool === 'section' && displayOptions.show3DOverlay);
+  const previousInputs = useRef<unknown[]>([]);
+  const wasActive = useRef(false);
+  const previousPlane = useRef('');
+  useEffect(() => () => {
+    queue.cancel();
+    wasActive.current = false;
+    previousInputs.current = [];
+  }, [queue]);
+  useEffect(() => {
+    // Trassia: `chQp.key` haengt mit im Ebenenschluessel. Eine geaenderte
+    // Korridorbreite laesst die Ebene unveraendert — ohne diesen Anteil wuerde
+    // das Panel die alte Zeichnung behalten und der Regler waere wirkungslos.
+    const plane = JSON.stringify([sectionPlane.axis, sectionPlane.position, sectionPlane.flipped,
+      sectionPlane.custom, chQp.key]);
+    const inputs = [geometryResult, geometryResult?.meshes.length, ifcDataStore,
+      displayOptions, typeVisibility, combinedHiddenIds, combinedIsolatedIds,
+      computedIsolatedIds, models];
+    const changed = inputs.some((value, index) => value !== previousInputs.current[index]);
+    const planeChanged = plane !== previousPlane.current;
+    const activated = drawingActive && !wasActive.current;
+    const deactivated = !drawingActive && wasActive.current;
+    previousInputs.current = inputs;
+    previousPlane.current = plane;
+    wasActive.current = drawingActive;
+    if (!drawingActive) { if (deactivated) queue.cancel(); return; }
+    if (!geometryResult?.meshes.length) {
+      queue.cancel();
+      if (drawing) { setDrawing(null); setDrawingStatus('idle'); }
       return;
     }
-
-    // Update processed ref
-    sectionRef.current = {
-      axis: sectionPlane.axis,
-      position: sectionPlane.position,
-      flipped: sectionPlane.flipped,
-      customKey: customKeyValue,
-    };
-
-    // If panel is visible OR 3D overlay is enabled, and we have geometry, regenerate INSTANTLY
-    if ((panelVisible || displayOptions.show3DOverlay) && geometryResult?.meshes) {
-      // Start immediately - no debounce
-      // doRegenerate handles preventing overlaps and will auto-regenerate with latest when done
-      doRegenerate();
+    if (activated || changed || planeChanged) {
+      const regenerate = !activated && !changed && planeChanged;
+      void generateDrawing(regenerate).catch(error => {
+        console.error('Automatic drawing request failed:', error);
+        setDrawingError(error instanceof Error ? error.message : 'Generation failed');
+      });
     }
-  }, [panelVisible, displayOptions.show3DOverlay, sectionPlane.axis, sectionPlane.position, sectionPlane.flipped, customKeyValue, geometryResult, combinedHiddenIds, combinedIsolatedIds, computedIsolatedIds, doRegenerate]);
+  });
 
   return {
     generateDrawing,

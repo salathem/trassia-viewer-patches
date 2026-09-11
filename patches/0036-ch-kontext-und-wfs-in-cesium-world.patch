@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/CesiumOverlay.tsx b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-index 832ce1b..2ffc943 100644
+index 6b315e3..1bfea66 100644
 --- a/apps/viewer/src/components/viewer/CesiumOverlay.tsx
 +++ b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-@@ -34,6 +34,11 @@ import { useCesiumCameraSync } from './cesium/useCesiumCameraSync';
+@@ -36,6 +36,11 @@ import { useCesiumCameraSync } from './cesium/useCesiumCameraSync';
  // ZUSAETZLICHE Primitive in derselben Szene. Warum nicht als weiterer Fall in
  // addDataSourceLayer(): siehe cesium/useChCesiumTiles.ts.
  import { useChCesiumTiles } from './cesium/useChCesiumTiles';
@@ -14,7 +14,7 @@ index 832ce1b..2ffc943 100644
  
  export interface CesiumOverlayProps {
    mapConversion?: MapConversion;
-@@ -399,6 +404,17 @@ export function CesiumOverlay({
+@@ -448,6 +453,17 @@ export function CesiumOverlay({
    // zerstoert. Der Haken rechnet damit.
    useChCesiumTiles({ status, viewerRef });
  

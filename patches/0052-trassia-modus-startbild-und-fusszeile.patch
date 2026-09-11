@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/StatusBar.tsx b/apps/viewer/src/components/viewer/StatusBar.tsx
-index 63c2df3..0393fe7 100644
+index 15a213f..de510c3 100644
 --- a/apps/viewer/src/components/viewer/StatusBar.tsx
 +++ b/apps/viewer/src/components/viewer/StatusBar.tsx
 @@ -20,6 +20,8 @@ import { ChProjektFuss } from './ChProjektFuss';
@@ -10,8 +10,8 @@ index 63c2df3..0393fe7 100644
 +import { chVollmodus } from '@/lib/ch/modus';
  
  export function StatusBar() {
-   const { loading, geometryResult, ifcDataStore } = useIfc();
-@@ -214,6 +216,9 @@ export function StatusBar() {
+   const { loading, geometryResult, ifcDataStore, models } = useIfc();
+@@ -226,6 +228,9 @@ export function StatusBar() {
  
          <Separator orientation="vertical" className="h-3.5" />
  
@@ -21,7 +21,7 @@ index 63c2df3..0393fe7 100644
          <a
            href="https://ifclite.dev"
            target="_blank"
-@@ -223,6 +228,17 @@ export function StatusBar() {
+@@ -235,6 +240,17 @@ export function StatusBar() {
          >
            ifclite.dev →
          </a>
@@ -40,10 +40,10 @@ index 63c2df3..0393fe7 100644
  
        <FlavorDialog open={flavorDialogOpen} onClose={() => setFlavorDialogOpen(false)} />
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index 7bfcbb0..84e107e 100644
+index 9bb21f0..ce1404a 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -57,6 +57,10 @@ import { toast } from '@/components/ui/toast';
+@@ -61,6 +61,10 @@ import { toast } from '@/components/ui/toast';
  // Trassia overlay (not upstream) — Paket V-DRAPE, siehe lib/ch/drape-ingest.ts.
  import { chDrapeTakeDroppedFiles, chDrapeUnderlayCandidates } from '@/lib/ch/drape-ingest';
  import { TourInvite } from '@/components/tours/TourInvite';
@@ -52,9 +52,9 @@ index 7bfcbb0..84e107e 100644
 +// ifclite.dev); im Vollmodus (?voll=1) bleibt alles. Siehe lib/ch/modus.ts.
 +import { chVollmodus } from '@/lib/ch/modus';
  import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
- import { describeUnsupportedFormat } from '@/hooks/ingest/pointCloudIngest';
+ import { describeUnsupportedFormat } from '@/hooks/ingest/unsupportedFormat';
  import { Upload, Command, AlertTriangle, ChevronDown, ExternalLink, Plus, Clock3, Sparkles, ArrowUpRight, PackagePlus, Cloud, GitMerge } from 'lucide-react';
-@@ -1342,6 +1346,7 @@ export function ViewportContainer() {
+@@ -1184,6 +1188,7 @@ export function ViewportContainer() {
                  <PackagePlus className="h-3 w-3 transition-transform group-enabled:group-hover:-translate-y-0.5" />
                  <span>Start blank</span>
                </button>
@@ -62,7 +62,7 @@ index 7bfcbb0..84e107e 100644
                <button
                  type="button"
                  onClick={() => useViewerStore.getState().openPanelInHome('sources')}
-@@ -1358,6 +1363,8 @@ export function ViewportContainer() {
+@@ -1200,6 +1205,8 @@ export function ViewportContainer() {
                      front door stopped being accurate at the second provider. */}
                  <span>Open from cloud</span>
                </button>
@@ -71,7 +71,7 @@ index 7bfcbb0..84e107e 100644
                <a
                  href="/mcp"
                  className="group inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-[11px] border border-dashed border-zinc-300 dark:border-[#3b4261] text-zinc-500 dark:text-[#7a82a5] hover:border-primary hover:text-primary transition-all cursor-pointer"
-@@ -1366,15 +1373,16 @@ export function ViewportContainer() {
+@@ -1208,15 +1215,16 @@ export function ViewportContainer() {
                  <span>Drive with any LLM</span>
                  <ArrowUpRight className="h-2.5 w-2.5 opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                </a>
@@ -90,7 +90,7 @@ index 7bfcbb0..84e107e 100644
  
              {recentFiles.length > 0 && (
                <div className="mt-6 w-full border-t border-zinc-200 dark:border-[#3b4261] pt-4">
-@@ -1413,7 +1421,9 @@ export function ViewportContainer() {
+@@ -1255,7 +1263,9 @@ export function ViewportContainer() {
                action, and its height pushed the welcome card off-screen. */}
  
            {/* Moonshot callout (#1717): Layer PRs are brand new - nobody knows
@@ -101,7 +101,7 @@ index 7bfcbb0..84e107e 100644
            <button
              type="button"
              onClick={() => {
-@@ -1439,13 +1449,17 @@ export function ViewportContainer() {
+@@ -1281,13 +1291,17 @@ export function ViewportContainer() {
                Try the demo stack &rarr;
              </span>
            </button>
@@ -120,7 +120,7 @@ index 7bfcbb0..84e107e 100644
              <a
                href="https://ifclite.dev"
                target="_blank"
-@@ -1455,6 +1469,7 @@ export function ViewportContainer() {
+@@ -1297,6 +1311,7 @@ export function ViewportContainer() {
                <span>New here?</span>
                <span className="font-bold text-primary group-hover:translate-x-0.5 transition-transform">ifclite.dev →</span>
              </a>

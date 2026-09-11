@@ -1,17 +1,18 @@
 diff --git a/apps/viewer/src/components/viewer/Section2DPanel.tsx b/apps/viewer/src/components/viewer/Section2DPanel.tsx
+index 5b24dc0..33259a3 100644
 --- a/apps/viewer/src/components/viewer/Section2DPanel.tsx
 +++ b/apps/viewer/src/components/viewer/Section2DPanel.tsx
-@@ -44,6 +44,9 @@
- import { useDxfUnderlaysForDrawing, useDxfMapToWorldTransform, dxfWorldShift, dxfUnderlayDrawingBounds } from '@/hooks/useDxfUnderlay';
- import { useScanSectionLayer } from '@/hooks/useScanSectionLayer';
+@@ -44,6 +44,9 @@ import { useDrawing2DPersistence } from '@/hooks/useDrawing2DPersistence';
  import type { CachedSheetTransform } from '@/lib/drawing/sheet-geometry-key';
+ import { useDrawingMarkupRestoreOnLoad } from '@/hooks/useDrawingMarkupRestoreOnLoad';
+ import { SaveMarkupToModelButton, SaveMarkupToModelMenuItem } from './SaveMarkupToModelButton';
 +// Trassia overlay (not upstream) — Beschriftung der Querprofil-Ansicht,
 +// siehe overlay/apps/viewer/src/components/viewer/ChQpStamp.tsx
 +import { ChQpStamp, ChQpSheetTitle } from '@/components/viewer/ChQpStamp';
  
  interface Section2DPanelProps {
    mergedGeometry?: GeometryResult | null;
-@@ -1122,6 +1125,14 @@
+@@ -1102,6 +1105,14 @@ export function Section2DPanel({
          onMouseLeave={handleMouseLeave}
          onDoubleClick={handleDoubleClick}
        >

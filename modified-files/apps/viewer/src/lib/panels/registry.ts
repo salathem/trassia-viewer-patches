@@ -33,6 +33,7 @@ import {
   Cloud,
   Layers as LayersIcon,
   Box,
+  FileWarning,
   // Trassia overlay (not upstream) — Paket V-DRAPE.
   Mountain,
   // Trassia overlay (not upstream) — Paket V-KUBATUR; Symbol seit U4
@@ -70,6 +71,8 @@ export type WorkspacePanelId =
   | 'collab'
   | 'layers'
   | 'zones'
+  | 'loadReport'
+  | 'appearance'
   // Trassia overlay (not upstream) — Paket V-DRAPE.
   | 'drape'
   // Trassia overlay (not upstream) — Paket V-KUBATUR.
@@ -105,7 +108,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
   // Alt+1..9 / Alt+0 — order frozen since #1200 for the first seven.
   { id: 'properties', title: 'Information', short: 'Info', Icon: Info, group: 'inspect', region: 'side' },
   { id: 'compare', title: 'Compare models', short: 'Compare', Icon: GitCompareArrows, group: 'inspect', region: 'side' },
-  { id: 'bcf', title: 'BCF issues', short: 'BCF', Icon: MessageSquare, group: 'review', region: 'side' },
+  { id: 'bcf', title: 'BCF topics', short: 'BCF', Icon: MessageSquare, group: 'review', region: 'side' },
   { id: 'ids', title: 'IDS validation', short: 'IDS', Icon: ClipboardCheck, group: 'review', region: 'side' },
   { id: 'lens', title: 'Lens rules', short: 'Lens', Icon: Palette, group: 'review', region: 'side' },
   { id: 'clash', title: 'Clash detection', short: 'Clash', Icon: Crosshair, group: 'review', region: 'side' },
@@ -133,6 +136,11 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
   // Location zones (construction sections / takt areas, #1810). APPENDED so
   // the frozen Alt+1..0 mapping stays intact (no Alt shortcut).
   { id: 'zones', title: 'Location zones', short: 'Zones', Icon: Box, group: 'review', region: 'side' },
+  // Flag-free like 'zones' above (#1869 precedent) — no dedicated
+  // `loadReportPanelVisible` boolean; `openWorkspacePanel`'s generic
+  // non-SIDEBAR_PANEL_FLAGS branch adopts it directly (issue #3927).
+  { id: 'loadReport', title: 'Load report', short: 'Load report', Icon: FileWarning, group: 'review', region: 'side' },
+  { id: 'appearance', title: 'Appearance', short: 'Appearance', Icon: Palette, group: 'author', region: 'side' },
   // Trassia (Paket V-DRAPE): 2D-Daten (DXF, GeoJSON/WFS) auf die
   // Gelaendeoberflaeche legen. ANGEHAENGT, damit die eingefrorene
   // Alt+1..0-Zuordnung der ersten zehn Eintraege unberuehrt bleibt — dieses

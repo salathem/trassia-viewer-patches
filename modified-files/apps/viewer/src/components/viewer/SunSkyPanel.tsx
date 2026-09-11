@@ -25,6 +25,7 @@ import { useDraggablePanel } from '@/hooks/useDraggablePanel';
 import { cn } from '@/lib/utils';
 import type { CesiumDataSource } from '@/store/slices/cesiumSlice';
 import { CustomBasemapEditor } from './CustomBasemapEditor';
+import { CustomTilesetEditor } from './CustomTilesetEditor';
 // Trassia (V-WELT-FIX): die Basiskartenwahl haengt hinter
 // CH_BASISKARTEN_VERFUEGBAR (siehe unten). Die swisstopo-Umgebung und die
 // WFS-Ebenen wohnen seit Paket UX-KOPF (Marco-Befund 2026-09-02) im eigenen
@@ -50,6 +51,7 @@ const CONTEXT_SOURCES: Array<{ value: CesiumDataSource; label: string; hint: str
   { value: 'osm-buildings', label: 'OSM Buildings', hint: 'Extruded footprints over the satellite base map' },
   { value: 'google-photorealistic', label: 'Photorealistic', hint: 'Google 3D Tiles — textured real-world context' },
   { value: 'custom', label: 'Custom (XYZ)', hint: 'Your own XYZ/TMS tile URL template' },
+  { value: 'custom-3dtiles', label: 'Custom (3D Tiles)', hint: 'Your own 3D Tiles tileset URL (1.0 or 1.1)' },
 ];
 
 const SWEEP_MODES: Array<{ value: SolarSweepMode; label: string; hint: string }> = [
@@ -181,6 +183,7 @@ export function SunSkyPanel() {
                     </select>
                   </label>
                   {dataSource === 'custom' && <CustomBasemapEditor />}
+                  {dataSource === 'custom-3dtiles' && <CustomTilesetEditor />}
                 </>
               )}
             </>

@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index 6164bb8..affceb7 100644
+index 016f079..b73851b 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -28,6 +28,10 @@ import { CesiumPlacementEditor } from './CesiumPlacementEditor';
+@@ -31,6 +31,10 @@ import { CesiumPlacementEditor } from './CesiumPlacementEditor';
  import { SunSkyPanel } from './SunSkyPanel';
  // Trassia overlay (Paket UX-KOPF): eigenes Panel fuer die Schweizer Umgebung.
  import { ChUmgebungPanel } from './ChUmgebungPanel';
@@ -13,7 +13,7 @@ index 6164bb8..affceb7 100644
  import { SpaceMousePanel } from './SpaceMousePanel';
  import { useSolarEnvironment } from '@/hooks/useSolarEnvironment';
  import { useSolarSweep } from '@/hooks/useSolarSweep';
-@@ -1273,6 +1277,10 @@ export function ViewportContainer() {
+@@ -1115,6 +1119,10 @@ export function ViewportContainer() {
                }
              `}</style>
  
@@ -24,7 +24,7 @@ index 6164bb8..affceb7 100644
              {/* Logo Section */}
              <div className="mb-10 relative group/logo cursor-pointer">
                {/* Back Layer */}
-@@ -1387,6 +1395,14 @@ export function ViewportContainer() {
+@@ -1229,6 +1237,14 @@ export function ViewportContainer() {
              {/* First-run tour invite — needs loadFile, so it shares the
                  WebGPU gate of every other action on this card. */}
              {chVollmodus() && webgpu.supported && !webgpu.checking && <TourInvite />}

@@ -1,17 +1,17 @@
 diff --git a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
-index 6223880..b1315ad 100644
+index 4504eaf..8174c0e 100644
 --- a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
 +++ b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
-@@ -18,6 +18,8 @@ import type { AnnotationFill2D, AnnotationText2D } from '@/hooks/useSymbolicAnno
- import type { ScanBandPoint } from '@/hooks/scanSectionMath';
+@@ -22,6 +22,8 @@ import type { ScanBandPoint } from '@/hooks/scanSectionMath';
  import { type CachedSheetTransform } from '@/lib/drawing/sheet-geometry-key';
  import { resolveSheetTransform } from '@/lib/drawing/sheet-transform';
+ import { useDrawingElementPropertiesLookup } from '@/hooks/useDrawingElementPropertiesLookup';
 +// Trassia overlay (not upstream) — Paket P3-NP: Bemassung zwischen Bruchkanten.
 +import { chNpLayout, chNpZeichnen, type ChNpFarben } from '@/lib/ch/np/np-zeichnen';
  
  // Fill colors for IFC types (architectural convention)
  const IFC_TYPE_FILL_COLORS: Record<string, string> = {
-@@ -391,6 +393,14 @@ interface Drawing2DCanvasProps {
+@@ -298,6 +300,14 @@ interface Drawing2DCanvasProps {
    // `unitDisplayOverrides` but left this canvas's own `formatDistance()`
    // calls on the pre-#2199 no-argument (always-metric) form).
    unitDisplayOverrides?: Record<string, string>;
@@ -26,7 +26,7 @@ index 6223880..b1315ad 100644
  }
  
  export function Drawing2DCanvas({
-@@ -427,6 +437,11 @@ export function Drawing2DCanvas({
+@@ -334,6 +344,11 @@ export function Drawing2DCanvas({
    scanPoints,
    scanOpacity = 1,
    unitDisplayOverrides = EMPTY_UNIT_DISPLAY_OVERRIDES,
@@ -36,13 +36,13 @@ index 6223880..b1315ad 100644
 +  chNpKlassenLabel,
 +  chNpHerkunft,
  }: Drawing2DCanvasProps): React.ReactElement {
+   const referenceImages = useReferenceImagesForDrawing(drawing.config.plane);
    const canvasRef = useRef<HTMLCanvasElement>(null);
-   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-@@ -1837,7 +1852,64 @@ export function Drawing2DCanvas({
+@@ -1747,7 +1762,64 @@ export function Drawing2DCanvas({
          }
        }
      }
--  }, [drawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, unitDisplayOverrides]);
+-  }, [referenceImages, drawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, unitDisplayOverrides]);
 +
 +    // ═══════════════════════════════════════════════════════════════════════
 +    // Trassia overlay (not upstream) — Paket P3-NP:
@@ -100,12 +100,12 @@ index 6223880..b1315ad 100644
 +        farben,
 +      );
 +    }
-+  }, [drawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, unitDisplayOverrides, chNpMarken, chNpBemassungen, chNpKlassenLabel, chNpHerkunft]);
++  }, [referenceImages, drawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, unitDisplayOverrides, chNpMarken, chNpBemassungen, chNpKlassenLabel, chNpHerkunft]);
  
    return (
      <canvas
 diff --git a/apps/viewer/src/components/viewer/Section2DPanel.tsx b/apps/viewer/src/components/viewer/Section2DPanel.tsx
-index e94687b..f485f20 100644
+index de0cb12..12aafa9 100644
 --- a/apps/viewer/src/components/viewer/Section2DPanel.tsx
 +++ b/apps/viewer/src/components/viewer/Section2DPanel.tsx
 @@ -70,6 +70,10 @@ import { useChHeaderDrag } from '@/hooks/useChPanelChrome';
@@ -119,7 +119,7 @@ index e94687b..f485f20 100644
  
  interface Section2DPanelProps {
    mergedGeometry?: GeometryResult | null;
-@@ -245,6 +249,8 @@ export function Section2DPanel({
+@@ -249,6 +253,8 @@ export function Section2DPanel({
    const chGemessen = chPanelBreite(chBreiten, 'drawing2d');
    // Wechselt, sobald das Wurzelelement ausgetauscht wurde (Ortswechsel).
    const chOrt = chPanelOrt(useChPanelOrte(), 'drawing2d');
@@ -128,7 +128,7 @@ index e94687b..f485f20 100644
    useEffect(() => {
      setIsNarrow(chPanelIstSchmal(chGemessen, panelSize.width));
    }, [chGemessen, panelSize.width]);
-@@ -1249,6 +1255,10 @@ export function Section2DPanel({
+@@ -1229,6 +1235,10 @@ export function Section2DPanel({
                scanPoints={displayOptions.showScanSection ? scanSectionLayer.points : undefined}
                scanOpacity={displayOptions.scanSectionOpacity}
                unitDisplayOverrides={unitDisplayOverrides}

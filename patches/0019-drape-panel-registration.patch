@@ -1,31 +1,31 @@
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index e1f9a0e..04cec09 100644
+index 0d9a109..553537c 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
-@@ -33,6 +33,8 @@ import {
-   Cloud,
+@@ -34,6 +34,8 @@ import {
    Layers as LayersIcon,
    Box,
+   FileWarning,
 +  // Trassia overlay (not upstream) — Paket V-DRAPE.
 +  Mountain,
    type LucideIcon,
  } from 'lucide-react';
  
-@@ -56,7 +58,9 @@ export type WorkspacePanelId =
-   | 'lists'
-   | 'collab'
+@@ -59,7 +61,9 @@ export type WorkspacePanelId =
    | 'layers'
--  | 'zones';
-+  | 'zones'
+   | 'zones'
+   | 'loadReport'
+-  | 'appearance';
++  | 'appearance'
 +  // Trassia overlay (not upstream) — Paket V-DRAPE.
 +  | 'drape';
  
  /** Activity-bar clustering — a divider is drawn whenever the group changes. */
  export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
-@@ -112,6 +116,11 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
-   // Location zones (construction sections / takt areas, #1810). APPENDED so
-   // the frozen Alt+1..0 mapping stays intact (no Alt shortcut).
-   { id: 'zones', title: 'Location zones', short: 'Zones', Icon: Box, group: 'review', region: 'side' },
+@@ -120,6 +124,11 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   // non-SIDEBAR_PANEL_FLAGS branch adopts it directly (issue #3927).
+   { id: 'loadReport', title: 'Load report', short: 'Load report', Icon: FileWarning, group: 'review', region: 'side' },
+   { id: 'appearance', title: 'Appearance', short: 'Appearance', Icon: Palette, group: 'author', region: 'side' },
 +  // Trassia (Paket V-DRAPE): 2D-Daten (DXF, GeoJSON/WFS) auf die
 +  // Gelaendeoberflaeche legen. ANGEHAENGT, damit die eingefrorene
 +  // Alt+1..0-Zuordnung der ersten zehn Eintraege unberuehrt bleibt — dieses
@@ -35,24 +35,24 @@ index e1f9a0e..04cec09 100644
  
  /** The bottom-strip panel ids, mapped to their store visibility flag + setter
 diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-index 90ec9a5..47de0b9 100644
+index 890cfee..f691fd5 100644
 --- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
 +++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-@@ -27,6 +27,8 @@ import { GanttPanel } from '@/components/viewer/schedule/GanttPanel';
- import { ListPanel } from '@/components/viewer/lists/ListPanel';
+@@ -28,6 +28,8 @@ import { ListPanel } from '@/components/viewer/lists/ListPanel';
  import { RoomPanel } from '@/components/viewer/RoomPanel';
  import { ZonesPanel } from '@/components/viewer/ZonesPanel';
+ import { LoadReportPanel } from '@/components/viewer/LoadReportPanel';
 +// Trassia overlay (not upstream) — Paket V-DRAPE, siehe ChDrapePanel.tsx.
 +import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
  // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
  // dynamic chunk keeps it out of the initial bundle until first opened.
  const LayersPanel = lazy(() =>
-@@ -60,6 +62,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
-     case 'lists': return <ListPanel onClose={onClose} />;
+@@ -79,6 +81,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
      case 'collab': return <RoomPanel onClose={onClose} />;
      case 'zones': return <ZonesPanel onClose={onClose} />;
+     case 'loadReport': return <LoadReportPanel onClose={onClose} />;
 +    // Trassia (Paket V-DRAPE).
 +    case 'drape': return <ChDrapePanel onClose={onClose} />;
-     case 'layers': return (
-       <ChunkErrorBoundary label="Layers panel">
-         <Suspense fallback={null}>
+     case 'layers': return <LayersPanelBody onClose={onClose} />;
+     case 'sources': return <SourcesPanelBody onClose={onClose} />;
+   }

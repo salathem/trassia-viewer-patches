@@ -1,11 +1,11 @@
 diff --git a/apps/viewer/src/components/viewer/SunSkyPanel.tsx b/apps/viewer/src/components/viewer/SunSkyPanel.tsx
-index 3cfbab8..cce824a 100644
+index 5b69dec..86fdb1e 100644
 --- a/apps/viewer/src/components/viewer/SunSkyPanel.tsx
 +++ b/apps/viewer/src/components/viewer/SunSkyPanel.tsx
-@@ -25,6 +25,13 @@ import { useDraggablePanel } from '@/hooks/useDraggablePanel';
- import { cn } from '@/lib/utils';
+@@ -26,6 +26,13 @@ import { cn } from '@/lib/utils';
  import type { CesiumDataSource } from '@/store/slices/cesiumSlice';
  import { CustomBasemapEditor } from './CustomBasemapEditor';
+ import { CustomTilesetEditor } from './CustomTilesetEditor';
 +// Trassia overlay (Pakete V-KONTEXT / V-WFS) — die zuschaltbare
 +// swisstopo-Umgebung und die amtlichen WFS-Ebenen. Beide gehoeren in den
 +// Weltmodus-Zweig dieses Panels: dort steht schon die verwandte Entscheidung
@@ -16,7 +16,7 @@ index 3cfbab8..cce824a 100644
  import type { SolarSweepMode } from '@/store/slices/solarSlice';
  import { LIGHTING_PRESETS, LIGHTING_PRESET_ORDER, isLightingPresetId } from '@/lib/lighting-presets';
  import { LightingTrimControls } from './LightingTrimControls';
-@@ -148,22 +155,41 @@ export function SunSkyPanel() {
+@@ -150,23 +157,42 @@ export function SunSkyPanel() {
                {/* Base map — pick the real-world backdrop. Photorealistic can
                    be overwhelming; the plain OSM map is a simple flat
                    alternative (#1744). Lives here (not just in the sun study)
@@ -36,6 +36,7 @@ index 3cfbab8..cce824a 100644
 -                </select>
 -              </label>
 -              {dataSource === 'custom' && <CustomBasemapEditor />}
+-              {dataSource === 'custom-3dtiles' && <CustomTilesetEditor />}
 +                  so the choice is available whenever the world context is on.
 +
 +                  Trassia (V-WELT-FIX): AUSGEBLENDET. Keine der vier Quellen
@@ -63,6 +64,7 @@ index 3cfbab8..cce824a 100644
 +                    </select>
 +                  </label>
 +                  {dataSource === 'custom' && <CustomBasemapEditor />}
++                  {dataSource === 'custom-3dtiles' && <CustomTilesetEditor />}
 +                </>
 +              )}
 +              {/* Trassia: swisstopo-Umgebung (Gebaeude/Vegetation/Terrain),

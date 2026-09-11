@@ -25,10 +25,10 @@ index 9bd8520..89a8cb0 100644
    // Move focus into the popover on open and restore it to the trigger on close.
    useEffect(() => {
 diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-index 7735205..e07030c 100644
+index 3ace089..9c21668 100644
 --- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
 +++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-@@ -10,6 +10,10 @@ import { useEffect, useCallback, useRef } from 'react';
+@@ -11,6 +11,10 @@ import { replayWorkspaceHistory } from '@/lib/model-placement/history';
  import { useViewerStore } from '@/store';
  import { resetVisibilityForHomeFromStore } from '@/store/homeView';
  import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
@@ -39,7 +39,7 @@ index 7735205..e07030c 100644
  import { closeAllPanelWindows } from '@/services/panel-windows';
  import { eventKey, isTextEntryTarget } from '@/lib/keyboard-event';
  import {
-@@ -124,7 +128,9 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+@@ -119,7 +123,9 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
      // (Alt+1 = ¡ on macOS). 1-9 map to the first nine; 0 maps to the tenth.
      if (e.altKey && !ctrl) {
        const shortcutPanel = workspacePanelForShortcutCode(e.code);

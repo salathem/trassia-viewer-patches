@@ -339,6 +339,7 @@ export class DxfWriter {
     const [minX, minY, maxX, maxY] = this.hasExtents()
       ? [this.minX, this.minY, this.maxX, this.maxY]
       : [0, 0, 0, 0];
+    // $DWGCODEPAGE must match {@link encodeDxfCp1252}.
     // $INSUNITS = 6 (metres). Later than R12 strictly allows, and written
     // deliberately: unknown header variables are skipped by every reader,
     // and without it the drawing imports unitless (Trassia patch, finding
@@ -347,6 +348,7 @@ export class DxfWriter {
     return (
       '0\nSECTION\n2\nHEADER\n' +
       '9\n$ACADVER\n1\nAC1009\n' +
+      '9\n$DWGCODEPAGE\n3\nANSI_1252\n' +
       '9\n$INSUNITS\n70\n6\n' +
       '9\n$EXTMIN\n10\n' + fmt(minX) + '\n20\n' + fmt(minY) + '\n30\n0.0\n' +
       '9\n$EXTMAX\n10\n' + fmt(maxX) + '\n20\n' + fmt(maxY) + '\n30\n0.0\n' +

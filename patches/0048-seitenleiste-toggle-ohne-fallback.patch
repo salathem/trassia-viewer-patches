@@ -39,10 +39,10 @@ index 1cf3e0d..ab216c5 100644
  
    const dockPanel = useCallback((id: WorkspacePanelId) => openInHome(id), [openInHome]);
 diff --git a/apps/viewer/src/store/index.ts b/apps/viewer/src/store/index.ts
-index 6f14925..f2e7bac 100644
+index f7f9bff..82a1edd 100644
 --- a/apps/viewer/src/store/index.ts
 +++ b/apps/viewer/src/store/index.ts
-@@ -705,8 +705,18 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
+@@ -434,8 +434,18 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
      const isActive = s.sidebarActivePanel === panel
        && !s.floatingPanels.some((p) => p.id === panel)
        && !s.poppedOutIds.includes(panel);
@@ -63,7 +63,7 @@ index 6f14925..f2e7bac 100644
    },
  
    toggleBottomPanel: (panel) => {
-@@ -808,6 +818,11 @@ function registerSidebarExclusivity(store: ReturnType<typeof createViewerStore>)
+@@ -537,6 +547,11 @@ function registerSidebarExclusivity(store: ReturnType<typeof createViewerStore>)
        if (flag && !state[flag] && prev[flag]) {
          const next = SIDEBAR_PANEL_FLAGS.find(([f]) => state[f]);
          state.setSidebarActivePanel(next ? next[1] : 'properties');

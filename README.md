@@ -10,8 +10,8 @@ executable form served at https://viewer.trassia.com.
 ## Contents
 
 - `patches/` — the exact patches (`0001`–`0061`) applied, in numeric order, on top of
-  upstream commit `49dfc3090425569095622ca567715d017c4cf166` (tag `@ifc-lite/wasm@6.1.1`)
-- `modified-files/` — the fifty modified files in full source form
+  upstream commit `83888869d3aad3a5cf173068be51021c95148aab` (tag `@ifc-lite/wasm@6.5.0`)
+- `modified-files/` — the fifty-five modified files in full source form
   (base commit + all patches applied):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/Drawing2DCanvas.tsx`

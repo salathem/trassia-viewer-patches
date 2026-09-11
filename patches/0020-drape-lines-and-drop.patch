@@ -1,9 +1,9 @@
 diff --git a/apps/viewer/src/components/viewer/Viewport.tsx b/apps/viewer/src/components/viewer/Viewport.tsx
-index e939c60..2dcd945 100644
+index 840c2ce..604f2df 100644
 --- a/apps/viewer/src/components/viewer/Viewport.tsx
 +++ b/apps/viewer/src/components/viewer/Viewport.tsx
-@@ -68,6 +68,8 @@ import { useAlignmentLines3D } from '../../hooks/useAlignmentLines3D.js';
- import { useGridLines3D } from '../../hooks/useGridLines3D.js';
+@@ -67,6 +67,8 @@ import {
+ import { useAlignmentLines3D } from '../../hooks/useAlignmentLines3D.js';
  import { useDxfUnderlays3DLines } from '../../hooks/useDxfUnderlay.js';
  import { uploadDxfLines3DGuarded } from './dxf-lines-3d-upload.js';
 +// Trassia overlay (not upstream) — Paket V-DRAPE, siehe hooks/useChDrapeLines.ts.
@@ -11,7 +11,7 @@ index e939c60..2dcd945 100644
  import { subscribeViewportHealth } from './device-loss-report.js';
  
  interface ViewportProps {
-@@ -1509,7 +1511,20 @@ export function Viewport({
+@@ -1503,7 +1505,20 @@ export function Viewport({
    // a load-time choice — see DxfUnderlayPanel.tsx), independent of the 2D
    // drawing panel's underlay. Only line paths are lifted to 3D; fills/text
    // are not (see dxfUnderlayToWorldLines3D's doc).
@@ -34,10 +34,10 @@ index e939c60..2dcd945 100644
      const renderer = rendererRef.current;
      if (!renderer || !isInitialized) return;
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index 7f7d688..a67a5ec 100644
+index 78d4a65..21ed175 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -52,6 +52,8 @@ import { recordDownloadedSourceFile } from '@/lib/sources/persistence';
+@@ -56,6 +56,8 @@ import { recordDownloadedSourceFile } from '@/lib/sources/persistence';
  import { sanitizeFilename } from '@/lib/export/download';
  import { enqueueSourceLoad } from '@/lib/sources/loadQueue';
  import { toast } from '@/components/ui/toast';
@@ -45,8 +45,8 @@ index 7f7d688..a67a5ec 100644
 +import { chDrapeTakeDroppedFiles, chDrapeUnderlayCandidates } from '@/lib/ch/drape-ingest';
  import { TourInvite } from '@/components/tours/TourInvite';
  import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
- import { describeUnsupportedFormat } from '@/hooks/ingest/pointCloudIngest';
-@@ -623,7 +625,24 @@ export function ViewportContainer() {
+ import { describeUnsupportedFormat } from '@/hooks/ingest/unsupportedFormat';
+@@ -466,7 +468,24 @@ export function ViewportContainer() {
      // a dropped site plan must never replace or federate with the model.
      const allDropped0 = Array.from(e.dataTransfer.files);
      const { dxfFiles, modelFiles: allDropped } = splitDxfFiles(allDropped0);

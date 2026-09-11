@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/CesiumOverlay.tsx b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-index 2ffc943..71ba646 100644
+index 1bfea66..f60a477 100644
 --- a/apps/viewer/src/components/viewer/CesiumOverlay.tsx
 +++ b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-@@ -39,6 +39,9 @@ import { useChCesiumTiles } from './cesium/useChCesiumTiles';
+@@ -41,6 +41,9 @@ import { useChCesiumTiles } from './cesium/useChCesiumTiles';
  import { useChSwisstopoUmgebung } from './cesium/useChSwisstopoUmgebung';
  // Trassia overlay (Paket V-WFS) — amtliche WFS-Ebenen als geklemmte Overlays.
  import { useChWfsLayers } from './cesium/useChWfsLayers';
@@ -12,7 +12,7 @@ index 2ffc943..71ba646 100644
  
  export interface CesiumOverlayProps {
    mapConversion?: MapConversion;
-@@ -190,7 +193,30 @@ export function CesiumOverlay({
+@@ -196,7 +199,30 @@ export function CesiumOverlay({
          scene.globe.showGroundAtmosphere = false;
          scene.backgroundColor = Cesium.Color.TRANSPARENT;
          scene.globe.baseColor = Cesium.Color.TRANSPARENT;
@@ -44,7 +44,22 @@ index 2ffc943..71ba646 100644
            // Plain OpenStreetMap slippy map: a simple, uncluttered flat base
            // map (no satellite imagery, no 3D massing) for users who find the
            // photorealistic globe overwhelming (#1744). The globe drapes the
-@@ -473,6 +499,12 @@ async function addDataSourceLayer(
+diff --git a/apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts b/apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts
+index 15ea08e..968c2f5 100644
+--- a/apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts
++++ b/apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts
+@@ -15,12 +15,23 @@
+  * (a missing tileset here silently leaves the globe alone, which is the
+  * existing, accepted behaviour for OSM Buildings / Google Photorealistic).
+  */
++// Trassia (V-WELT-FIX): warum die Basiskarten stillgelegt sind und was an
++// ihre Stelle getreten ist. Seit Pin 6.5.0 lebt diese Funktion in einer
++// eigenen Datei (Upstream-Umbau); der Riegel zieht mit.
++import { CH_BASISKARTEN_VERFUEGBAR } from '@/lib/ch/kontext/basiskarten';
++
+ export async function addDataSourceLayer(
+   Cesium: typeof import('cesium'),
+   viewer: InstanceType<typeof import('cesium').Viewer>,
    dataSource: string,
    ionToken: string,
  ): Promise<InstanceType<typeof import('cesium').Cesium3DTileset> | null> {

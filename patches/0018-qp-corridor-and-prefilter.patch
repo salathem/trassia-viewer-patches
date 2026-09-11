@@ -1,9 +1,10 @@
 diff --git a/apps/viewer/src/hooks/useDrawingGeneration.ts b/apps/viewer/src/hooks/useDrawingGeneration.ts
+index e4ca2f1..46d62a0 100644
 --- a/apps/viewer/src/hooks/useDrawingGeneration.ts
 +++ b/apps/viewer/src/hooks/useDrawingGeneration.ts
-@@ -43,6 +43,11 @@
- import * as IfcWasm from '@ifc-lite/wasm';
- import { customPlaneCenter } from '@/store';
+@@ -46,6 +46,11 @@ import * as IfcWasm from '@ifc-lite/wasm';
+ import { customPlaneCenter, useViewerStore } from '@/store';
+ import { notifyDrawing2DSectionConfig, consumeRestoredSectionConfig } from './useDrawing2DPersistence.js';
  import { buildModelViewIdFilter, selectModelMeshes } from '@/lib/type-view-visibility';
 +// Trassia overlay (not upstream) — Querprofil-Ansicht, Paket V-QP.
 +// Der Korridor begrenzt die ZEICHNUNG (siehe lib/ch/qp-corridor.ts), der
@@ -13,17 +14,17 @@ diff --git a/apps/viewer/src/hooks/useDrawingGeneration.ts b/apps/viewer/src/hoo
  import { isTypeVisible, type TypeVisibilityGate } from '@/store/typeVisibilityFilter';
  
  // The winding-robust Rust `meshOutline2d` binding (issue #979) is gitignored →
-@@ -144,6 +149,9 @@
+@@ -158,6 +163,9 @@ export function useDrawingGeneration({
    setDrawingProgress,
    setDrawingError,
  }: UseDrawingGenerationParams): UseDrawingGenerationResult {
 +  // Trassia: Korridorbreite und Ueberhoehung. Als Abonnement, damit eine
 +  // geaenderte Breite dieselbe Neuberechnung ausloest wie eine neue Station.
 +  const chQp = useChQpView();
-   // Track if this is a regeneration (vs initial generation)
-   const isRegeneratingRef = useRef(false);
  
-@@ -522,6 +530,22 @@
+   // Cache for symbolic representations - these don't change with section position
+   // Only re-parse when model or display options change
+@@ -534,6 +542,22 @@ export function useDrawingGeneration({
          );
        }
  
@@ -46,7 +47,7 @@ diff --git a/apps/viewer/src/hooks/useDrawingGeneration.ts b/apps/viewer/src/hoo
        // If all meshes were filtered out by visibility, clear the drawing
        if (meshesToProcess.length === 0) {
          setDrawing(null);
-@@ -843,9 +867,10 @@
+@@ -857,9 +881,10 @@ export function useDrawingGeneration({
            },
          };
  
@@ -58,8 +59,8 @@ diff --git a/apps/viewer/src/hooks/useDrawingGeneration.ts b/apps/viewer/src/hoo
 +        setDrawing(chQpShapeDrawing(result, chQp, Boolean(sectionPlane.custom)));
        }
  
-       // Always set status to ready (whether initial generation or regeneration)
-@@ -859,6 +884,7 @@
+       // Remember the SectionConfig that produced this view so the markup
+@@ -878,6 +903,7 @@ export function useDrawingGeneration({
        generator?.dispose();
      }
    }, [
@@ -67,16 +68,16 @@ diff --git a/apps/viewer/src/hooks/useDrawingGeneration.ts b/apps/viewer/src/hoo
      geometryResult,
      ifcDataStore,
      sectionPlane,
-@@ -937,8 +963,11 @@
-   // plane's normal+distance into a string we can compare cheaply — without
-   // it dragging the gizmo wouldn't trigger regeneration because the
-   // cardinal axis/position/flipped triple stays the same.
-+  // Trassia: `chQp.key` haengt mit im Schluessel. Eine geaenderte Korridorbreite
-+  // laesst die Ebene unveraendert — ohne diesen Anteil wuerde das Panel die alte
-+  // Zeichnung behalten und der Regler waere wirkungslos.
-   const customKey = (sp: { custom?: { normal: [number, number, number]; distance: number } }) =>
--    sp.custom ? `${sp.custom.normal.join(',')}|${sp.custom.distance}` : '';
-+    (sp.custom ? `${sp.custom.normal.join(',')}|${sp.custom.distance}` : '') + `|${chQp.key}`;
-   const sectionRef = useRef({
-     axis: sectionPlane.axis,
-     position: sectionPlane.position,
+@@ -991,8 +1017,11 @@ export function useDrawingGeneration({
+     previousInputs.current = [];
+   }, [queue]);
+   useEffect(() => {
++    // Trassia: `chQp.key` haengt mit im Ebenenschluessel. Eine geaenderte
++    // Korridorbreite laesst die Ebene unveraendert — ohne diesen Anteil wuerde
++    // das Panel die alte Zeichnung behalten und der Regler waere wirkungslos.
+     const plane = JSON.stringify([sectionPlane.axis, sectionPlane.position, sectionPlane.flipped,
+-      sectionPlane.custom]);
++      sectionPlane.custom, chQp.key]);
+     const inputs = [geometryResult, geometryResult?.meshes.length, ifcDataStore,
+       displayOptions, typeVisibility, combinedHiddenIds, combinedIsolatedIds,
+       computedIsolatedIds, models];

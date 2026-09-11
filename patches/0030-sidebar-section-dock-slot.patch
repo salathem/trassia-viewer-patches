@@ -1,4 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
+index 753ae83..82752e0 100644
 --- a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
 @@ -21,6 +21,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';

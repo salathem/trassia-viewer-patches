@@ -58,10 +58,10 @@ index 89a8cb0..0617a56 100644
    // Move focus into the popover on open and restore it to the trigger on close.
    useEffect(() => {
 diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-index 7ef20c6..2d66b87 100644
+index 697197b..a01e484 100644
 --- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
 +++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-@@ -11,9 +11,10 @@ import { useViewerStore } from '@/store';
+@@ -12,9 +12,10 @@ import { useViewerStore } from '@/store';
  import { resetVisibilityForHomeFromStore } from '@/store/homeView';
  import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
  // Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
@@ -75,7 +75,7 @@ index 7ef20c6..2d66b87 100644
  import { closeAllPanelWindows } from '@/services/panel-windows';
  import { eventKey, isTextEntryTarget } from '@/lib/keyboard-event';
  import {
-@@ -130,7 +131,7 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+@@ -125,7 +126,7 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
        const shortcutPanel = workspacePanelForShortcutCode(e.code);
        // Trassia (TODO #36): ein nicht angebotenes Panel bleibt zu; die Taste
        // faellt durch wie eine unbelegte (kein preventDefault).
@@ -84,7 +84,7 @@ index 7ef20c6..2d66b87 100644
          e.preventDefault();
          useViewerStore.getState().openPanelInHome(shortcutPanel);
          return;
-@@ -389,7 +390,9 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+@@ -384,7 +385,9 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
        // Dialog gehoert dem Menue (Radix schliesst es selbst) — sonst schloss
        // ein Escape im Export-Menue des 2D-Panels das ganze Schnittwerkzeug.
        const ziel = e.target as HTMLElement | null;

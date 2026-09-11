@@ -2,6 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { usePlacementCoordinateInfo } from '@/hooks/usePlacementCoordinateInfo';
+import { useFederatedGeometry } from './useFederatedGeometry';
+import { modelIndices } from '@/lib/model-placement/model-indices';
 import { useMemo, useRef, useState, useCallback, useEffect, useSyncExternalStore } from 'react';
 import { useLevelDisplayEffect } from '@/hooks/useLevelDisplayEffect';
 import { ingestDxfFiles, splitDxfFiles } from '@/hooks/ingest/dxfIngest';
@@ -48,6 +51,7 @@ import {
   openIfcFilesWithHandles,
   handlesFromDataTransfer,
 } from '@/services/file-system-access';
+import { FILE_ACCEPT, isSupportedModelFile } from '@/services/supported-model-files';
 import {
   SOURCE_DOWNLOAD_EVENT,
   type SourceDownloadEvent,
@@ -66,41 +70,13 @@ import { TourInvite } from '@/components/tours/TourInvite';
 // ifclite.dev); im Vollmodus (?voll=1) bleibt alles. Siehe lib/ch/modus.ts.
 import { chVollmodus } from '@/lib/ch/modus';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
-import { describeUnsupportedFormat } from '@/hooks/ingest/pointCloudIngest';
+import { describeUnsupportedFormat } from '@/hooks/ingest/unsupportedFormat';
 import { Upload, Command, AlertTriangle, ChevronDown, ExternalLink, Plus, Clock3, Sparkles, ArrowUpRight, PackagePlus, Cloud, GitMerge } from 'lucide-react';
 import { createBlankIfcFile } from '@/utils/createBlankIfc';
-import type { MeshData, CoordinateInfo, GeometryResult, PointCloudAsset } from '@ifc-lite/geometry';
+import type { MeshData, PointCloudAsset } from '@ifc-lite/geometry';
 import { type IfcDataStore, type MapConversion } from '@ifc-lite/parser';
 import { getEffectiveGeoreference } from '@/lib/geo/effective-georef';
 import { isMeshVisibleInViewMode, meshClassIsPlaced, meshIsNonOccurrence } from '@/lib/type-view-visibility';
-
-const ZERO_VEC3 = { x: 0, y: 0, z: 0 };
-const DEFAULT_COORDINATE_INFO: CoordinateInfo = {
-  originShift: ZERO_VEC3,
-  originalBounds: { min: ZERO_VEC3, max: ZERO_VEC3 },
-  shiftedBounds: { min: ZERO_VEC3, max: ZERO_VEC3 },
-  hasLargeCoordinates: false,
-};
-
-type Vec3Bounds = { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } };
-
-/** True for a real (non-placeholder, non-degenerate) bounds box. */
-function isUsableBounds(b: Vec3Bounds | undefined): b is Vec3Bounds {
-  if (!b) return false;
-  return (
-    b.max.x > b.min.x || b.max.y > b.min.y || b.max.z > b.min.z
-  );
-}
-
-/** Axis-aligned union of two bounds boxes (either may be undefined). */
-function unionBounds(acc: Vec3Bounds | undefined, b: Vec3Bounds | undefined): Vec3Bounds | undefined {
-  if (!isUsableBounds(b)) return acc;
-  if (!acc) return { min: { ...b.min }, max: { ...b.max } };
-  return {
-    min: { x: Math.min(acc.min.x, b.min.x), y: Math.min(acc.min.y, b.min.y), z: Math.min(acc.min.z, b.min.z) },
-    max: { x: Math.max(acc.max.x, b.max.x), y: Math.max(acc.max.y, b.max.y), z: Math.max(acc.max.z, b.max.z) },
-  };
-}
 
 export function ViewportContainer() {
   // Drive Stacked / Solo / Exploded level display from the slice.
@@ -148,147 +124,19 @@ export function ViewportContainer() {
     geometryResult,
     ifcDataStore,
     models,
-    boundedGeometryMode,
-    geometryUpdateTick,
     geometryContentVersion,
   } = viewportStoreState;
   const storeModels = models;
-  const mergedContentVersionRef = useRef(geometryContentVersion);
 
   // Check if we have models loaded (for determining add vs replace behavior)
   const hasModelsLoaded = models.size > 0 || (geometryResult?.meshes && geometryResult.meshes.length > 0);
 
   // Multi-model: create mapping from modelId to modelIndex (stable order)
-  const modelIdToIndex = useMemo(() => {
-    const map = new Map<string, number>();
-    let index = 0;
-    for (const modelId of storeModels.keys()) {
-      map.set(modelId, index++);
-    }
-    return map;
-  }, [storeModels]);
+  const modelIdToIndex = useMemo(() => modelIndices(storeModels), [storeModels]);
 
-  const mergedCacheRef = useRef<MeshData[]>([]);
-  const mergedLengthsRef = useRef<Map<string, number>>(new Map());
-  const mergedVisibilityRef = useRef<Map<string, boolean>>(new Map());
+  const mergedGeometryResult = useFederatedGeometry(storeModels, geometryResult, modelIdToIndex, geometryContentVersion);
 
-  // Multi-model: merge geometries from all visible models
-  const mergedGeometryResult = useMemo(() => {
-    if (storeModels.size === 1) {
-      const firstModel = storeModels.values().next().value;
-      if (!firstModel?.visible) {
-        return {
-          meshes: [],
-          totalVertices: 0,
-          totalTriangles: 0,
-          coordinateInfo: DEFAULT_COORDINATE_INFO,
-        } satisfies GeometryResult;
-      }
-      return firstModel.geometryResult ?? geometryResult;
-    }
-
-    if (storeModels.size > 1) {
-      let totalVertices = 0;
-      let totalTriangles = 0;
-      // The merged coordinateInfo must cover ALL visible models, not just the
-      // first one — the renderer fits the camera to `shiftedBounds`, so a
-      // first-wins box left every model after the first off-screen (it only
-      // showed its 2D grid overlay). Union the bounds across visible models;
-      // keep the first model's frame metadata (originShift / RTC) since
-      // federated models share a coordinate frame.
-      let baseCoordInfo: CoordinateInfo | undefined;
-      let unionedShifted: Vec3Bounds | undefined;
-      let unionedOriginal: Vec3Bounds | undefined;
-      let anyLargeCoords = false;
-      let shouldRebuild = false;
-
-      if (mergedLengthsRef.current.size !== storeModels.size) {
-        shouldRebuild = true;
-      }
-
-      // An external content version bump (e.g. realignFederation re-baked
-      // vertices in place) requires a full cache rebuild — length/visibility
-      // triggers above can't detect in-place mutation. Compare against the
-      // last version we honoured; rebuild when it bumps.
-      if (mergedContentVersionRef.current !== geometryContentVersion) {
-        shouldRebuild = true;
-        mergedContentVersionRef.current = geometryContentVersion;
-      }
-
-      for (const [modelId, model] of storeModels) {
-        const modelGeometry = model.geometryResult;
-        const meshCount = model.visible ? (modelGeometry?.meshes.length ?? 0) : 0;
-        totalVertices += model.visible ? (modelGeometry?.totalVertices ?? 0) : 0;
-        totalTriangles += model.visible ? (modelGeometry?.totalTriangles ?? 0) : 0;
-        if (model.visible && modelGeometry?.coordinateInfo) {
-          const ci = modelGeometry.coordinateInfo;
-          if (!baseCoordInfo) baseCoordInfo = ci;
-          anyLargeCoords = anyLargeCoords || !!ci.hasLargeCoordinates;
-          unionedShifted = unionBounds(unionedShifted, ci.shiftedBounds);
-          unionedOriginal = unionBounds(unionedOriginal, ci.originalBounds);
-        }
-
-        if (
-          mergedVisibilityRef.current.get(modelId) !== model.visible ||
-          (mergedLengthsRef.current.get(modelId) ?? 0) > meshCount
-        ) {
-          shouldRebuild = true;
-        }
-      }
-
-      if (shouldRebuild) {
-        const rebuilt: MeshData[] = [];
-        mergedLengthsRef.current = new Map();
-        mergedVisibilityRef.current = new Map();
-        for (const [modelId, model] of storeModels) {
-          const modelGeometry = model.geometryResult;
-          mergedVisibilityRef.current.set(modelId, model.visible);
-          const modelIndex = modelIdToIndex.get(modelId) ?? 0;
-          if (!model.visible || !modelGeometry?.meshes) {
-            mergedLengthsRef.current.set(modelId, 0);
-            continue;
-          }
-          for (const mesh of modelGeometry.meshes) {
-            rebuilt.push({ ...mesh, modelIndex });
-          }
-          mergedLengthsRef.current.set(modelId, modelGeometry.meshes.length);
-        }
-        mergedCacheRef.current = rebuilt;
-      } else {
-        for (const [modelId, model] of storeModels) {
-          const modelGeometry = model.geometryResult;
-          const modelIndex = modelIdToIndex.get(modelId) ?? 0;
-          const previousLength = mergedLengthsRef.current.get(modelId) ?? 0;
-          const nextMeshes = model.visible ? (modelGeometry?.meshes ?? []) : [];
-          for (let i = previousLength; i < nextMeshes.length; i++) {
-            const mesh = nextMeshes[i];
-            mergedCacheRef.current.push({ ...mesh, modelIndex });
-          }
-          mergedLengthsRef.current.set(modelId, nextMeshes.length);
-          mergedVisibilityRef.current.set(modelId, model.visible);
-        }
-      }
-
-      const mergedCoordinateInfo: CoordinateInfo | undefined = baseCoordInfo
-        ? {
-            ...baseCoordInfo,
-            originalBounds: unionedOriginal ?? baseCoordInfo.originalBounds,
-            shiftedBounds: unionedShifted ?? baseCoordInfo.shiftedBounds,
-            hasLargeCoordinates: anyLargeCoords,
-          }
-        : undefined;
-
-      return {
-        meshes: mergedCacheRef.current,
-        totalVertices,
-        totalTriangles,
-        coordinateInfo: mergedCoordinateInfo ?? DEFAULT_COORDINATE_INFO,
-      } satisfies GeometryResult;
-    }
-
-    // Legacy mode (no federation): use original geometryResult
-    return geometryResult;
-  }, [storeModels, geometryResult, modelIdToIndex, geometryContentVersion]);
+  const placedCoordinateInfo = usePlacementCoordinateInfo(mergedGeometryResult?.coordinateInfo);
 
   /**
    * Aggregate point clouds across visible models.
@@ -498,12 +346,7 @@ export function ViewportContainer() {
     applyDragEvent('leave');
   }, [applyDragEvent]);
 
-  const isSupportedFile = useCallback((f: File) => {
-    const n = f.name.toLowerCase();
-    return n.endsWith('.ifc') || n.endsWith('.ifcx') || n.endsWith('.ifczip') || n.endsWith('.glb')
-      || n.endsWith('.las') || n.endsWith('.laz') || n.endsWith('.ply') || n.endsWith('.pcd')
-      || n.endsWith('.e57') || n.endsWith('.pts') || n.endsWith('.xyz');
-  }, []);
+  const isSupportedFile = isSupportedModelFile;
 
   // Single routing point for every ingestion path (picker / drop / input). The
   // optional `handles` array is positionally aligned with `files` and carries a
@@ -818,7 +661,6 @@ export function ViewportContainer() {
     }
   }, [loadFile]);
 
-  const hasGeometry = mergedGeometryResult?.meshes && mergedGeometryResult.meshes.length > 0;
 
   // Check if any models are loaded (even if hidden) - used to show empty 3D vs starting UI
   const hasLoadedModels = storeModels.size > 0 || (geometryResult?.meshes && geometryResult.meshes.length > 0);
@@ -1124,7 +966,7 @@ export function ViewportContainer() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".ifc,.ifcx,.ifczip,.glb,.las,.laz,.ply,.pcd,.e57,.pts,.xyz,.dxf"
+          accept={FILE_ACCEPT}
           multiple
           onChange={handleFileSelect}
           className="hidden"
@@ -1568,6 +1410,7 @@ export function ViewportContainer() {
         geometryContentVersion={geometryContentVersion}
         pointClouds={mergedPointClouds}
         coordinateInfo={mergedGeometryResult?.coordinateInfo}
+        sectionCoordinateInfo={placedCoordinateInfo}
         computedIsolatedIds={computedIsolatedIds}
         modelIdToIndex={modelIdToIndex}
         cesiumActive={cesiumEnabled && georef !== null}

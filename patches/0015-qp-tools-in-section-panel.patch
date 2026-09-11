@@ -1,7 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
+index c18540c..1a862f2 100644
 --- a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
 +++ b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
-@@ -17,6 +17,8 @@
+@@ -17,6 +17,8 @@ import { SectionPlaneVisualization } from './SectionVisualization';
  import { SectionCapControls } from './SectionCapControls';
  // Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/ChAlignmentSection.tsx
  import { ChAlignmentSection } from './ChAlignmentSection';
@@ -10,7 +11,7 @@ diff --git a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx b/apps/vie
  import { chPeekProjectSection } from '@/lib/ch/ch-project-section';
  import { useChSectionPanelAutoCollapse } from '@/hooks/useChNarrowPanels';
  
-@@ -267,6 +269,13 @@
+@@ -267,6 +269,13 @@ export function SectionOverlay() {
                  building model sees the panel exactly as upstream ships it. */}
              <ChAlignmentSection />
  

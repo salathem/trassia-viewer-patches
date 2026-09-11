@@ -1,4 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
+index 1a862f2..3da3f69 100644
 --- a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
 +++ b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
 @@ -19,6 +19,13 @@ import { SectionCapControls } from './SectionCapControls';

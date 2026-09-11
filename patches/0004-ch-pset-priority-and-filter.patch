@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/PropertiesPanel.tsx b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-index 9ac451d..7bee9fa 100644
+index c0efa60..7c6b12b 100644
 --- a/apps/viewer/src/components/viewer/PropertiesPanel.tsx
 +++ b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-@@ -48,6 +48,9 @@ import { CoordVal, CoordRow } from './properties/CoordinateDisplay';
+@@ -45,6 +45,9 @@ import { CoordVal, CoordRow } from './properties/CoordinateDisplay';
  import { renderToWorldViewer, viewerToIfcAxes } from './tools/measure-modes/coordinates';
  import { useRenderFrameOffsets } from '@/hooks/useRenderFrameOffsets';
  import { PropertySetCard } from './properties/PropertySetCard';
@@ -12,7 +12,7 @@ index 9ac451d..7bee9fa 100644
  import { QuantitySetCard } from './properties/QuantitySetCard';
  import { ModelMetadataPanel } from './properties/ModelMetadataPanel';
  import { ClassificationCard } from './properties/ClassificationCard';
-@@ -221,6 +224,10 @@ export function PropertiesPanel() {
+@@ -209,6 +212,10 @@ export function PropertiesPanel() {
    const [copied, setCopied] = useState(false);
    const [coordCopied, setCoordCopied] = useState<string | null>(null);
    const [coordOpen, setCoordOpen] = useState(false);
@@ -23,7 +23,7 @@ index 9ac451d..7bee9fa 100644
  
    // Inline property editing is gated by the global edit-mode pill in
    // the main toolbar (see `uiSlice.editEnabled`). Reading it from the
-@@ -1158,8 +1165,12 @@ export function PropertiesPanel() {
+@@ -1162,8 +1169,12 @@ export function PropertiesPanel() {
    const renderedEntityDescription = overlayAttr(3) ?? entityNode?.description ?? undefined;
    const renderedEntityObjectType = overlayAttr(4) ?? entityNode?.objectType ?? undefined;
    const renderedSpatialInfo = spatialInfo;
@@ -38,7 +38,7 @@ index 9ac451d..7bee9fa 100644
    const renderedMergedProperties = mergedProperties;
    const renderedQuantities = quantities;
    const renderedQuantitiesWithInheritedType = quantitiesWithInheritedType;
-@@ -1666,6 +1677,15 @@ export function PropertiesPanel() {
+@@ -1601,6 +1612,15 @@ export function PropertiesPanel() {
                  <TaskEditCard taskGlobalId={singleSelectedTaskGlobalId} />
                </div>
              )}
@@ -54,27 +54,27 @@ index 9ac451d..7bee9fa 100644
              {/* Edit toolbar - only shown when edit mode is active */}
              {editMode && selectedEntity && (
                <>
-@@ -1711,6 +1731,7 @@ export function PropertiesPanel() {
+@@ -1646,6 +1666,7 @@ export function PropertiesPanel() {
                        <PropertySetCard
-                         key={`occ-${pset.name}`}
+                         key={`occ-${pset.name}-${index}`}
                          pset={pset}
 +                        chGroupLabel={chPsetGroupLabel(pset.name)}
                          modelId={selectedEntity?.modelId}
                          entityId={selectedEntity?.expressId}
                          enableEditing={editMode}
-@@ -1738,6 +1759,7 @@ export function PropertiesPanel() {
+@@ -1673,6 +1694,7 @@ export function PropertiesPanel() {
                        <PropertySetCard
-                         key={`type-${pset.name}`}
+                         key={`type-${pset.name}-${index}`}
                          pset={pset}
 +                        chGroupLabel={chPsetGroupLabel(pset.name)}
                          modelId={selectedEntity?.modelId}
                          entityId={renderedTypeProperties.typeId}
                          enableEditing={editMode}
 diff --git a/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx b/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx
-index e1ef446..7dbc6f8 100644
+index f34b5d6..24f7835 100644
 --- a/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx
 +++ b/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx
-@@ -37,9 +37,14 @@ export interface PropertySetCardProps {
+@@ -38,9 +38,14 @@ export interface PropertySetCardProps {
     *  renders CONVERTED into that unit instead of the file's raw value.
     *  Omitted (or empty) keeps the existing unconverted-file-unit display. */
    unitDisplayOverrides?: Record<string, string>;
@@ -90,10 +90,10 @@ index e1ef446..7dbc6f8 100644
    // Check if any property in this set is mutated
    const hasMutations = pset.properties.some(p => p.isMutated);
    const isNewPset = pset.isNewPset;
-@@ -102,6 +107,13 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
+@@ -103,6 +108,13 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
            </Tooltip>
          )}
-         <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-0">{pset.name}</span>
+         <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-0">{setDisplayName(pset.name, 'Property Set')}</span>
 +        {/* Trassia: names WHY this set is at the top of the panel. Data
 +            provenance is the first question on a converted Swiss model. */}
 +        {chGroupLabel && (

@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/HierarchyPanel.tsx b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
-index afd3dce..c973eb7 100644
+index 07c807b..0d62d07 100644
 --- a/apps/viewer/src/components/viewer/HierarchyPanel.tsx
 +++ b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
 @@ -39,6 +39,12 @@ import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
@@ -15,7 +15,7 @@ index afd3dce..c973eb7 100644
  
  export function HierarchyPanel() {
    const {
-@@ -276,6 +282,33 @@ export function HierarchyPanel() {
+@@ -275,6 +281,33 @@ export function HierarchyPanel() {
      }
    }, [getNodeElements, hiddenEntities, hideEntities, showEntities, selectedEntityId, clearSelection]);
  
@@ -49,7 +49,7 @@ index afd3dce..c973eb7 100644
    // Handle model visibility toggle
    const handleModelVisibilityToggle = useCallback((modelId: string, e: React.MouseEvent) => {
      e.stopPropagation();
-@@ -359,6 +392,11 @@ export function HierarchyPanel() {
+@@ -358,6 +391,11 @@ export function HierarchyPanel() {
  
    // Handle node click - for selection/isolation or expand/collapse
    const handleNodeClick = useCallback((node: TreeNode, e: React.MouseEvent) => {
@@ -61,7 +61,7 @@ index afd3dce..c973eb7 100644
      if (node.type === 'model-header' && node.id !== 'models-header') {
        // Model header click handled by its own onClick (expand/collapse)
        return;
-@@ -1057,9 +1095,10 @@ export function HierarchyPanel() {
+@@ -1053,9 +1091,10 @@ export function HierarchyPanel() {
              </div>
            </div>
          ) : (
@@ -76,10 +76,10 @@ index afd3dce..c973eb7 100644
        </div>
      );
 diff --git a/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx b/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx
-index 11e5830..04b82cf 100644
+index 65311db..35883e0 100644
 --- a/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx
 +++ b/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx
-@@ -16,6 +16,9 @@ import { cn } from '@/lib/utils';
+@@ -18,6 +18,9 @@ import { cn } from '@/lib/utils';
  import type { TreeNode } from './types';
  import { isSpatialContainer } from './types';
  import { IFC_ICON_CODEPOINTS, IFC_ICON_DEFAULT } from './ifc-icons';
@@ -89,7 +89,7 @@ index 11e5830..04b82cf 100644
  
  /**
   * Resolve the Material Symbols code point for a given IFC type string.
-@@ -73,6 +76,8 @@ export function HierarchyNode({
+@@ -75,6 +78,8 @@ export function HierarchyNode({
    // Use Lucide icon for non-IFC structural nodes, Material Symbols for IFC classes
    const LucideIcon = NODE_TYPE_ICONS[node.type];
    const iconCodepoint = getIfcIconCodepoint(resolvedType);
@@ -98,7 +98,7 @@ index 11e5830..04b82cf 100644
  
    // Spatial containers, storeys, spaces, and grouping headers get the emphasized
    // label treatment; element rows stay lighter.
-@@ -106,14 +111,19 @@ export function HierarchyNode({
+@@ -108,14 +113,19 @@ export function HierarchyNode({
        >
          <div
            className={cn(
@@ -121,7 +121,7 @@ index 11e5830..04b82cf 100644
          >
            {/* Expand/collapse chevron */}
            {node.hasChildren ? (
-@@ -128,14 +138,26 @@ export function HierarchyNode({
+@@ -130,14 +140,26 @@ export function HierarchyNode({
            )}
  
            <FileBox className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -151,8 +151,8 @@ index 11e5830..04b82cf 100644
 +            </Tooltip>
            )}
  
-           <Tooltip>
-@@ -233,7 +255,7 @@ export function HierarchyNode({
+           <button className="p-0.5" aria-label={`Reposition model ${node.name}`} title="Reposition model"
+@@ -239,7 +261,7 @@ export function HierarchyNode({
      >
        <div
          className={cn(
@@ -161,7 +161,7 @@ index 11e5830..04b82cf 100644
            // No selection styling for spatial containers in multi-model mode
            isMultiModel && isSpatialContainer(node.type)
              ? 'border-transparent cursor-default'
-@@ -241,7 +263,8 @@ export function HierarchyNode({
+@@ -247,7 +269,8 @@ export function HierarchyNode({
                  'cursor-pointer',
                  isSelected ? 'border-l-primary font-medium selected' : 'border-transparent'
                ),
@@ -171,7 +171,7 @@ index 11e5830..04b82cf 100644
          )}
          style={{
            paddingLeft: `${node.depth * 16 + 8}px`,
-@@ -378,12 +401,18 @@ export function HierarchyNode({
+@@ -384,12 +407,18 @@ export function HierarchyNode({
          {node.elementCount !== undefined && (
            <Tooltip>
              <TooltipTrigger asChild>
@@ -193,10 +193,10 @@ index 11e5830..04b82cf 100644
            </Tooltip>
          )}
 diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-index 2d66b87..f956108 100644
+index a01e484..5a32a37 100644
 --- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
 +++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-@@ -15,6 +15,10 @@ import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
+@@ -16,6 +16,10 @@ import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
  // Panels, die in der Leiste stehen (nicht versteckt — der Nutzer kann sie im
  // Anpassen-Dialog einblenden); ?voll=1 wie Upstream. Siehe lib/ch/modus.ts.
  import { chVollmodus } from '@/lib/ch/modus';
@@ -207,7 +207,7 @@ index 2d66b87..f956108 100644
  import { closeAllPanelWindows } from '@/services/panel-windows';
  import { eventKey, isTextEntryTarget } from '@/lib/keyboard-event';
  import {
-@@ -245,13 +249,32 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+@@ -240,13 +244,32 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
        const ids = getAllSelectedGlobalIds();
        hideEntities(ids);
      }
@@ -246,7 +246,7 @@ index 2d66b87..f956108 100644
        }
      }
      if (key === 'a' && !ctrl && !shift) {
-@@ -394,6 +417,8 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+@@ -389,6 +412,8 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
        // sich selbst per Escape) gehoert dazu.
        if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return;
        e.preventDefault();
@@ -255,7 +255,7 @@ index 2d66b87..f956108 100644
        const now = Date.now();
        const timeSinceLastEscape = now - lastEscapeRef.current;
        lastEscapeRef.current = now;
-@@ -486,7 +511,9 @@ export const KEYBOARD_SHORTCUTS = [
+@@ -481,7 +506,9 @@ export const KEYBOARD_SHORTCUTS = [
    { key: '−', description: 'Remove current context from basket', category: 'Visibility' },
    { key: 'D', description: 'Toggle basket presentation dock', category: 'Visibility' },
    { key: 'B', description: 'Save basket as presentation view', category: 'Visibility' },

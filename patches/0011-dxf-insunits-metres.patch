@@ -14,7 +14,7 @@ index dec150b..7c98e53 100644
      const doc = parseDxf(dxf);
      const line = doc.entities.find((e) => e.kind === 'line');
 diff --git a/packages/drawing-2d/src/dxf-exporter.test.ts b/packages/drawing-2d/src/dxf-exporter.test.ts
-index c0e9630..3a3a2d1 100644
+index 9bc9ca5..ff5c250 100644
 --- a/packages/drawing-2d/src/dxf-exporter.test.ts
 +++ b/packages/drawing-2d/src/dxf-exporter.test.ts
 @@ -85,10 +85,12 @@ const underlay = (): DxfUnderlay => ({
@@ -32,7 +32,7 @@ index c0e9630..3a3a2d1 100644
      expect(doc.entities).toHaveLength(0);
    });
 diff --git a/packages/drawing-2d/src/dxf-exporter.ts b/packages/drawing-2d/src/dxf-exporter.ts
-index e7dd3af..5ce51d3 100644
+index 2454bd5..8c46c9b 100644
 --- a/packages/drawing-2d/src/dxf-exporter.ts
 +++ b/packages/drawing-2d/src/dxf-exporter.ts
 @@ -21,10 +21,12 @@
@@ -53,7 +53,7 @@ index e7dd3af..5ce51d3 100644
  
  import type { Drawing2D, DrawingLine, DrawingPolygon, LineCategory, Point2D } from './types.js';
 diff --git a/packages/drawing-2d/src/dxf/writer.test.ts b/packages/drawing-2d/src/dxf/writer.test.ts
-index b8b0693..f4acd7e 100644
+index 5eef0a4..09d8ccf 100644
 --- a/packages/drawing-2d/src/dxf/writer.test.ts
 +++ b/packages/drawing-2d/src/dxf/writer.test.ts
 @@ -24,16 +24,18 @@ import { parseDxf } from './parser.js';
@@ -78,7 +78,7 @@ index b8b0693..f4acd7e 100644
      const w = new DxfWriter();
      const dxf = w.toString();
      expect(dxf.startsWith('999\n')).toBe(true);
-@@ -129,9 +131,10 @@ describe('DxfWriter entity round trip (via this package\'s own parser)', () => {
+@@ -135,9 +137,10 @@ describe('DxfWriter entity round trip (via this package\'s own parser)', () => {
      const layer = w.layer('walls', '#000000');
      w.addLine({ x: 1.5, y: -2.25 }, { x: 10, y: 20 }, layer);
      const doc = parseDxf(w.toString());
@@ -93,7 +93,7 @@ index b8b0693..f4acd7e 100644
      const line = doc.entities[0] as DxfLineEntity;
      expect(line.kind).toBe('line');
 diff --git a/packages/drawing-2d/src/dxf/writer.ts b/packages/drawing-2d/src/dxf/writer.ts
-index bbac440..e97195a 100644
+index e7e6225..c01ffd7 100644
 --- a/packages/drawing-2d/src/dxf/writer.ts
 +++ b/packages/drawing-2d/src/dxf/writer.ts
 @@ -22,9 +22,17 @@
@@ -126,12 +126,12 @@ index bbac440..e97195a 100644
  const DEFAULT_HEADER_COMMENT = 'ifc-lite section export - units: metres';
  
  /**
-@@ -323,11 +331,15 @@ export class DxfWriter {
+@@ -323,11 +331,17 @@ export class DxfWriter {
      const [minX, minY, maxX, maxY] = this.hasExtents()
        ? [this.minX, this.minY, this.maxX, this.maxY]
        : [0, 0, 0, 0];
--    // R12 (AC1009): no $INSUNITS (introduced R14) — see the `999` comment
--    // this.toString() prepends ahead of this section instead.
+-    // R12: no $INSUNITS (unit is the `999` comment). $DWGCODEPAGE must match {@link encodeDxfCp1252}.
++    // $DWGCODEPAGE must match {@link encodeDxfCp1252}.
 +    // $INSUNITS = 6 (metres). Later than R12 strictly allows, and written
 +    // deliberately: unknown header variables are skipped by every reader,
 +    // and without it the drawing imports unitless (Trassia patch, finding
@@ -140,6 +140,7 @@ index bbac440..e97195a 100644
      return (
        '0\nSECTION\n2\nHEADER\n' +
        '9\n$ACADVER\n1\nAC1009\n' +
+       '9\n$DWGCODEPAGE\n3\nANSI_1252\n' +
 +      '9\n$INSUNITS\n70\n6\n' +
        '9\n$EXTMIN\n10\n' + fmt(minX) + '\n20\n' + fmt(minY) + '\n30\n0.0\n' +
        '9\n$EXTMAX\n10\n' + fmt(maxX) + '\n20\n' + fmt(maxY) + '\n30\n0.0\n' +

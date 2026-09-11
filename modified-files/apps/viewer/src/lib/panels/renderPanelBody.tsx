@@ -27,6 +27,7 @@ import { GanttPanel } from '@/components/viewer/schedule/GanttPanel';
 import { ListPanel } from '@/components/viewer/lists/ListPanel';
 import { RoomPanel } from '@/components/viewer/RoomPanel';
 import { ZonesPanel } from '@/components/viewer/ZonesPanel';
+import { LoadReportPanel } from '@/components/viewer/LoadReportPanel';
 // Trassia overlay (not upstream) — Paket V-DRAPE, siehe ChDrapePanel.tsx.
 import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
 // Trassia overlay (not upstream) — Paket V-KUBATUR, siehe ChKubaturPanel.tsx.
@@ -54,6 +55,22 @@ const SourcesPanel = lazy(() =>
   import('@/components/sources/SourcesPanel').then((m) => ({ default: m.SourcesPanel })),
 );
 
+const AppearancePanel = lazy(() => import('@/components/viewer/appearance/AppearancePanel').then(m => ({ default: m.AppearancePanel })));
+
+// Each lazy panel needs its own stable host identity. Reusing the boundary
+// itself as the body can retain another panel's failed-chunk state on a switch.
+function AppearancePanelBody() {
+  return <ChunkErrorBoundary label="Appearance panel"><Suspense fallback={null}><AppearancePanel /></Suspense></ChunkErrorBoundary>;
+}
+
+function LayersPanelBody({ onClose }: { onClose: () => void }) {
+  return <ChunkErrorBoundary label="Layers panel"><Suspense fallback={null}><LayersPanel onClose={onClose} /></Suspense></ChunkErrorBoundary>;
+}
+
+function SourcesPanelBody({ onClose }: { onClose: () => void }) {
+  return <Suspense fallback={null}><SourcesPanel onClose={onClose} /></Suspense>;
+}
+
 /**
  * Render the body for a workspace panel. `onClose` is the host's "close this
  * panel" handler (re-dock to Information, remove the float, or re-dock the
@@ -63,6 +80,7 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
   switch (id) {
     // Hierarchy's home is the left slot (#1267); it is never routed to the right
     // pane / float / pop-out, but the case keeps the id to body map exhaustive.
+    case 'appearance': return <AppearancePanelBody />;
     case 'hierarchy': return <HierarchyPanel />;
     case 'properties': return <PropertiesPanel />;
     case 'compare': return <ComparePanel onClose={onClose} />;
@@ -76,6 +94,7 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
     case 'lists': return <ListPanel onClose={onClose} />;
     case 'collab': return <RoomPanel onClose={onClose} />;
     case 'zones': return <ZonesPanel onClose={onClose} />;
+    case 'loadReport': return <LoadReportPanel onClose={onClose} />;
     // Trassia (Paket V-DRAPE).
     case 'drape': return <ChDrapePanel onClose={onClose} />;
     // Trassia (Paket V-KUBATUR).
@@ -90,17 +109,7 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
         </Suspense>
       </ChunkErrorBoundary>
     );
-    case 'layers': return (
-      <ChunkErrorBoundary label="Layers panel">
-        <Suspense fallback={null}>
-          <LayersPanel onClose={onClose} />
-        </Suspense>
-      </ChunkErrorBoundary>
-    );
-    case 'sources': return (
-      <Suspense fallback={null}>
-        <SourcesPanel onClose={onClose} />
-      </Suspense>
-    );
+    case 'layers': return <LayersPanelBody onClose={onClose} />;
+    case 'sources': return <SourcesPanelBody onClose={onClose} />;
   }
 }

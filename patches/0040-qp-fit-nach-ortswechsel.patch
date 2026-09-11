@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/Section2DPanel.tsx b/apps/viewer/src/components/viewer/Section2DPanel.tsx
-index f485f20..a33b437 100644
+index 12aafa9..0a43a69 100644
 --- a/apps/viewer/src/components/viewer/Section2DPanel.tsx
 +++ b/apps/viewer/src/components/viewer/Section2DPanel.tsx
 @@ -74,6 +74,10 @@ import {
@@ -13,7 +13,7 @@ index f485f20..a33b437 100644
  
  interface Section2DPanelProps {
    mergedGeometry?: GeometryResult | null;
-@@ -347,6 +351,11 @@ export function Section2DPanel({
+@@ -348,6 +352,11 @@ export function Section2DPanel({
      reattachToken: chOrt,
    });
  

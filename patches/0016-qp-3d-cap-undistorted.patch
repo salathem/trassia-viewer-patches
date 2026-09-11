@@ -1,7 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/useRenderUpdates.ts b/apps/viewer/src/components/viewer/useRenderUpdates.ts
+index 8a33fcf..9b22c5a 100644
 --- a/apps/viewer/src/components/viewer/useRenderUpdates.ts
 +++ b/apps/viewer/src/components/viewer/useRenderUpdates.ts
-@@ -17,6 +17,8 @@
+@@ -17,6 +17,8 @@ import type { Drawing2D } from '@ifc-lite/drawing-2d';
  import type { SectionPlane } from '@/store';
  import { customPlaneCenter } from '@/store';
  import { getThemeClearColor } from '../../utils/viewportUtils.js';
@@ -10,7 +11,7 @@ diff --git a/apps/viewer/src/components/viewer/useRenderUpdates.ts b/apps/viewer
  
  export interface UseRenderUpdatesParams {
    rendererRef: MutableRefObject<Renderer | null>;
-@@ -73,11 +75,17 @@
+@@ -73,11 +75,17 @@ export function useRenderUpdates(params: UseRenderUpdatesParams): void {
      coordinateInfo,
      sectionPlaneRef,
      sectionRangeRef,

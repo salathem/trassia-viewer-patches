@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/HierarchyPanel.tsx b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
-index 93d7dcf..afd3dce 100644
+index b1578f9..07c807b 100644
 --- a/apps/viewer/src/components/viewer/HierarchyPanel.tsx
 +++ b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
 @@ -36,6 +36,9 @@ import { SectionHeader } from './hierarchy/SectionHeader';
@@ -12,7 +12,7 @@ index 93d7dcf..afd3dce 100644
  
  export function HierarchyPanel() {
    const {
-@@ -990,6 +993,8 @@ export function HierarchyPanel() {
+@@ -986,6 +989,8 @@ export function HierarchyPanel() {
  
            {/* Models Section */}
            <div style={{ height: `${(1 - splitRatio) * 100}%` }} className="flex flex-col min-h-0">
@@ -21,7 +21,7 @@ index 93d7dcf..afd3dce 100644
              <SectionHeader icon={FileBox} title="Models" count={models.size} />
              <div ref={modelsRef} className="flex-1 overflow-auto scrollbar-thin bg-white dark:bg-black">
                <div
-@@ -1079,6 +1084,10 @@ export function HierarchyPanel() {
+@@ -1075,6 +1080,10 @@ export function HierarchyPanel() {
          )}
        </div>
  

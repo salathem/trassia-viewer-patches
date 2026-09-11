@@ -1,7 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
+index 7f12a50..4aecc43 100644
 --- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
 +++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-@@ -36,6 +36,13 @@ import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
+@@ -37,6 +37,13 @@ import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
  import { useChProjectLoader } from '@/hooks/useChProjectLoader';
  import { ChProjectBanner } from './ChProjectBanner';
  import { ChLensEngine } from './ChLensEngine';
@@ -15,7 +16,7 @@ diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/sr
  import { chReadProjectParam } from '@/lib/ch/project-manifest';
  import { EntityContextMenu } from './EntityContextMenu';
  import { AnonymizedExportDialog } from './anonymized-export/AnonymizedExportDialog';
-@@ -432,6 +439,17 @@ export function ViewerLayout() {
+@@ -434,6 +441,17 @@ export function ViewerLayout() {
              files hang in. */}
          <ChProjectBanner />
  

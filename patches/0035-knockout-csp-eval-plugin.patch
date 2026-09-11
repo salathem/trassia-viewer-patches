@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/vite.config.ts b/apps/viewer/vite.config.ts
-index 307c509..1aa4919 100644
+index 5c282a8..e54e158 100644
 --- a/apps/viewer/vite.config.ts
 +++ b/apps/viewer/vite.config.ts
-@@ -12,6 +12,9 @@ import { oauthCallbackRoutes } from './vite-plugins/oauth-callback';
+@@ -16,6 +16,9 @@ import { oauthCallbackRoutes } from './vite-plugins/oauth-callback';
  // Same allowlist the production relay uses, so dev and prod cannot disagree
  // about which Dalux node a request reaches (#2792).
  import { daluxRelayRoute } from './vite-plugins/dalux-relay';
@@ -11,8 +11,8 @@ index 307c509..1aa4919 100644
 +import { chKnockoutCsp } from './vite-plugins/ch-knockout-csp';
  
  // --- Build-time changelog parser ---
- 
-@@ -250,6 +253,11 @@ export default defineConfig({
+ interface ReleaseHighlight {
+@@ -251,6 +254,11 @@ export default defineConfig({
      // relay. Dev runs the SAME handler production does (#2792), rather than a
      // second proxy config that can drift from it.
      daluxRelayRoute(),

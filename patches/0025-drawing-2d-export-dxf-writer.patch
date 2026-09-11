@@ -1,15 +1,14 @@
 diff --git a/packages/drawing-2d/src/index.ts b/packages/drawing-2d/src/index.ts
-index 36492fd..f5ae0f8 100644
+index 7b75c7a..83bb19c 100644
 --- a/packages/drawing-2d/src/index.ts
 +++ b/packages/drawing-2d/src/index.ts
-@@ -225,12 +225,25 @@ export type { ColorRaster, ColorRasterOptions, RasterFit } from './color-raster.
+@@ -225,12 +225,26 @@ export type { ColorRaster, ColorRasterOptions, RasterFit } from './color-raster.
  // DXF EXPORT (issue #1861)
  // ═══════════════════════════════════════════════════════════════════════════
  
 -// Only the exporter facade is public. The low-level writer internals
--// (DxfWriter, sanitizeDxfLayerName, cssToAci, the linetype/justification
--// types) stay package-private: no external consumer exists, and an unused
--// public export is permanent semver liability (PR #1871 review).
+-// (DxfWriter, sanitizeDxfLayerName, cssToAci, linetype/justification types)
+-// stay package-private: an unused public export is permanent semver liability.
 +// The exporter facade turns a `Drawing2D` into DXF, with one layer per
 +// `LineCategory`. Upstream kept the low-level writer package-private because
 +// "no external consumer exists" (PR #1871 review); with the Trassia patch
@@ -22,6 +21,7 @@ index 36492fd..f5ae0f8 100644
 +// it is not needed from outside.
  export { DXFExporter, exportToDXF } from './dxf-exporter.js';
  export type { DXFExportOptions, DXFUnderlayOptions } from './dxf-exporter.js';
+ export { encodeDxfCp1252, type Cp1252EncodeResult } from './dxf/encoding.js'; // public: $DWGCODEPAGE ANSI_1252, not UTF-8
 +export { DxfWriter, sanitizeDxfLayerName } from './dxf/writer.js';
 +export type {
 +  DxfLinetype,

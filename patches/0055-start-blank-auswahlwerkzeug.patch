@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index 84e107e..6164bb8 100644
+index ce1404a..016f079 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -745,7 +745,11 @@ export function ViewportContainer() {
+@@ -588,7 +588,11 @@ export function ViewportContainer() {
      // resets activeTool back to 'select'. Setting addElement before that
      // races and leaves the user in select mode despite the click.
      await loadFile(file);

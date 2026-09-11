@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx b/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx
-index 7e703b8..96a9bb3 100644
+index cd33930..b18b1a1 100644
 --- a/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx
 +++ b/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx
-@@ -130,6 +130,8 @@ import {
+@@ -125,6 +125,8 @@ import {
    EnhLine,
    type Vec3Like,
  } from './measure-modes/geo-readout';
@@ -11,7 +11,7 @@ index 7e703b8..96a9bb3 100644
  import { useDraggablePanel } from '@/hooks/useDraggablePanel';
  import { useAnchorGeoreference, type AnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
  
-@@ -688,6 +690,16 @@ export function MeasureOverlay() {
+@@ -683,6 +685,16 @@ export function MeasureOverlay() {
          </div>
        )}
  

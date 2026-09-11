@@ -24,7 +24,7 @@ import { useChGesamtStatistik, chZahlExakt } from '@/lib/ch/gesamt-statistik';
 import { chVollmodus } from '@/lib/ch/modus';
 
 export function StatusBar() {
-  const { loading, geometryResult, ifcDataStore } = useIfc();
+  const { loading, geometryResult, ifcDataStore, models } = useIfc();
   const progress = useViewerStore((s) => s.progress);
   const error = useViewerStore((s) => s.error);
   const selectedStoreys = useViewerStore((s) => s.selectedStoreys);
@@ -104,20 +104,32 @@ export function StatusBar() {
   // Trassia (ZAHL): Summe ueber alle Modelle; ohne foederierte Modelle = stats.
   const gesamt = useChGesamtStatistik(stats, geometryResult);
 
+  // `selectedStoreys` holds raw model-space expressIds (see HierarchyPanel's
+  // `setStoreysSelection`), which may belong to ANY federated model, not just
+  // the active one — `ifcDataStore` only tracks the active model
+  // (`modelSlice.ts`). Resolve each id through the model whose own spatial
+  // hierarchy actually contains it as a storey, falling back to the active
+  // store for legacy single-model mode. Mirrors ViewportOverlays' storey-name
+  // lookup (#3506) for the same reason: a non-active model's storey must not
+  // be counted against the active model's hierarchy.
   const visibleElements = useMemo(() => {
-    if (selectedStoreys.size === 0 || !ifcDataStore?.spatialHierarchy) {
+    if (selectedStoreys.size === 0 || (!ifcDataStore?.spatialHierarchy && models.size === 0)) {
       return gesamt.elements;
     }
-    // Count elements from all selected storeys
     let count = 0;
     for (const storeyId of selectedStoreys) {
-      const storeyElements = ifcDataStore.spatialHierarchy.byStorey.get(storeyId);
+      const ownHierarchy = models.size > 0
+        ? Array.from(models.values()).find(
+            (m) => m.ifcDataStore?.spatialHierarchy?.byStorey.has(storeyId),
+          )?.ifcDataStore?.spatialHierarchy
+        : ifcDataStore?.spatialHierarchy;
+      const storeyElements = ownHierarchy?.byStorey.get(storeyId);
       if (storeyElements) {
         count += storeyElements.length;
       }
     }
     return count || gesamt.elements;
-  }, [selectedStoreys, ifcDataStore, gesamt.elements]);
+  }, [selectedStoreys, ifcDataStore, models, gesamt.elements]);
 
   // Trassia (UX-KOPF-Nachschliff, Marco 2026-09-02): gap-3 auf dem Root,
   // damit Statistik- und Perf-Block denselben Abstand tragen wie die

@@ -237,6 +237,7 @@ export type { ColorRaster, ColorRasterOptions, RasterFit } from './color-raster.
 // it is not needed from outside.
 export { DXFExporter, exportToDXF } from './dxf-exporter.js';
 export type { DXFExportOptions, DXFUnderlayOptions } from './dxf-exporter.js';
+export { encodeDxfCp1252, type Cp1252EncodeResult } from './dxf/encoding.js'; // public: $DWGCODEPAGE ANSI_1252, not UTF-8
 export { DxfWriter, sanitizeDxfLayerName } from './dxf/writer.js';
 export type {
   DxfLinetype,

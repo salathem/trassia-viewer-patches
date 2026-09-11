@@ -1,7 +1,8 @@
 diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
+index bebc98a..64e8128 100644
 --- a/apps/viewer/src/hooks/useDrawingExport.ts
 +++ b/apps/viewer/src/hooks/useDrawingExport.ts
-@@ -9,6 +9,8 @@
+@@ -9,6 +9,8 @@ import { downloadFile, sanitizeFilename } from '@/lib/export/download';
  // Trassia overlay (not upstream) — the station cut publishes what it is
  // called; see overlay/apps/viewer/src/lib/ch/section-export-name.ts.
  import { chSectionExportStem } from '@/lib/ch/section-export-name';
@@ -10,7 +11,7 @@ diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/u
  import { toast } from '@/components/ui/toast';
  import { pdfLineStyleFor } from '@/lib/export/pdf-line-style';
  import {
-@@ -338,7 +340,7 @@
+@@ -341,7 +343,7 @@ interface UseDrawingExportResult {
  }
  
  function useDrawingExport({
@@ -19,7 +20,7 @@ diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/u
    displayOptions,
    sectionPlane,
    activePresetId,
-@@ -358,6 +360,14 @@
+@@ -361,6 +363,14 @@ function useDrawingExport({
    isPinned = false,
    cachedSheetTransformRef,
  }: UseDrawingExportParams): UseDrawingExportResult {

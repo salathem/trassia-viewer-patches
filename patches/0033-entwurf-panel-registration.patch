@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index c832137..98f633f 100644
+index f089feb..35cbcaf 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
-@@ -39,8 +39,14 @@ import {
+@@ -40,8 +40,14 @@ import {
    Ruler,
    // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
    ChartSpline,
@@ -17,7 +17,7 @@ index c832137..98f633f 100644
  
  /** Every panel reachable from the unified sidebar rail. `properties` is the
   *  Information panel (the right pane's default fallback). Each panel opens in
-@@ -68,7 +74,9 @@ export type WorkspacePanelId =
+@@ -71,7 +77,9 @@ export type WorkspacePanelId =
    // Trassia overlay (not upstream) — Paket V-KUBATUR.
    | 'kubatur'
    // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
@@ -28,7 +28,7 @@ index c832137..98f633f 100644
  
  /** Activity-bar clustering — a divider is drawn whenever the group changes. */
  export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
-@@ -142,6 +150,19 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+@@ -150,6 +158,19 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
    // zwar unten in dieser Datei, wird aber nirgends gelesen (geprueft im
    // Pin 989da893: einzige Fundstelle ist die Deklaration selbst).
    { id: 'laengsschnitt', title: 'Longitudinal profile', short: 'Profile', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
@@ -49,10 +49,10 @@ index c832137..98f633f 100644
  
  /** The bottom-strip panel ids, mapped to their store visibility flag + setter
 diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-index 7c4e544..83baccc 100644
+index 2742124..cd8032c 100644
 --- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
 +++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-@@ -34,6 +34,15 @@ import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
+@@ -35,6 +35,15 @@ import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
  // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT, siehe
  // ChLaengsschnittPanel.tsx.
  import { ChLaengsschnittPanel } from '@/components/viewer/ChLaengsschnittPanel';
@@ -68,7 +68,7 @@ index 7c4e544..83baccc 100644
  // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
  // dynamic chunk keeps it out of the initial bundle until first opened.
  const LayersPanel = lazy(() =>
-@@ -73,6 +82,14 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+@@ -92,6 +101,14 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
      case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
      // Trassia (Paket V-LAENGSSCHNITT).
      case 'laengsschnitt': return <ChLaengsschnittPanel onClose={onClose} />;
@@ -80,6 +80,6 @@ index 7c4e544..83baccc 100644
 +        </Suspense>
 +      </ChunkErrorBoundary>
 +    );
-     case 'layers': return (
-       <ChunkErrorBoundary label="Layers panel">
-         <Suspense fallback={null}>
+     case 'layers': return <LayersPanelBody onClose={onClose} />;
+     case 'sources': return <SourcesPanelBody onClose={onClose} />;
+   }

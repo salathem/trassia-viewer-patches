@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/LensPanel.tsx b/apps/viewer/src/components/viewer/LensPanel.tsx
-index bc8930a..c39a4e0 100644
+index aeacdfb..f60fa44 100644
 --- a/apps/viewer/src/components/viewer/LensPanel.tsx
 +++ b/apps/viewer/src/components/viewer/LensPanel.tsx
 @@ -35,6 +35,8 @@ import {
@@ -9,9 +9,9 @@ index bc8930a..c39a4e0 100644
 +// Trassia overlay — shortcut to the upstream auto-color path, see the file.
 +import { ChOriginLenses } from './lens/ChOriginLenses';
  import { planLensHiddenSync, ruleIsolationOwnsChannel } from './lens-visibility-ownership';
+ import { resolvePresentationIds } from '@/lib/presentation/resolvePresentationIds';
  import type { Lens, LensRule, LensCriteria, AutoColorSpec, AutoColorLegendEntry, DiscoveredLensData } from '@/store/slices/lensSlice';
- import {
-@@ -1685,6 +1687,13 @@ export function LensPanel({ onClose }: LensPanelProps) {
+@@ -1680,6 +1682,13 @@ export function LensPanel({ onClose }: LensPanelProps) {
          {/* New lens buttons */}
          {!editingLens && !creatingAutoColor && (
            <div className="space-y-1.5">

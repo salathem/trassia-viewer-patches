@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-index afebaf7..35862c0 100644
+index b0889cd..a2f7def 100644
 --- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
 +++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-@@ -26,6 +26,11 @@ import { useViewerStore } from '@/store';
+@@ -27,6 +27,11 @@ import { useViewerStore } from '@/store';
  import { isCollabEnabled } from '@/lib/collab/config';
  import { toast } from '@/components/ui/toast';
  import { parseRoleFromToken } from '@/lib/collab/share-link';
@@ -14,7 +14,7 @@ index afebaf7..35862c0 100644
  import { EntityContextMenu } from './EntityContextMenu';
  import { AnonymizedExportDialog } from './anonymized-export/AnonymizedExportDialog';
  import { useDuplicateShortcut } from './useDuplicateShortcut';
-@@ -107,21 +112,45 @@ export function ViewerLayout() {
+@@ -109,21 +114,45 @@ export function ViewerLayout() {
        return;
      }
      if (resolvedUrl.origin !== window.location.origin) {
@@ -60,7 +60,7 @@ index afebaf7..35862c0 100644
        }
      })();
    }, [autoloadAddModel]);
-@@ -372,6 +401,10 @@ export function ViewerLayout() {
+@@ -374,6 +403,10 @@ export function ViewerLayout() {
              </span>
            </div>
          )}
@@ -72,10 +72,10 @@ index afebaf7..35862c0 100644
          <KeyboardShortcutsDialog open={shortcutsDialog.open} onClose={shortcutsDialog.close} initialTab={shortcutsDialog.tab} />
  
 diff --git a/apps/viewer/src/hooks/useIfcLoader.ts b/apps/viewer/src/hooks/useIfcLoader.ts
-index fc3e421..2091b34 100644
+index 658a09b..f653db7 100644
 --- a/apps/viewer/src/hooks/useIfcLoader.ts
 +++ b/apps/viewer/src/hooks/useIfcLoader.ts
-@@ -70,6 +70,10 @@ import { capturePreAlignment } from './ingest/federationRealign.js';
+@@ -75,6 +75,10 @@ import { capturePreAlignment } from './ingest/federationRealign.js';
  import type { PreAlignmentSnapshot } from '../store/index.js';
  import { computePointCloudAlignment, unregisterPointCloudAlignment, hasRegisteredPointCloudAlignment, type PointCloudSourceUnit } from './ingest/pointCloudAlignment.js';
  import { toast } from '../components/ui/toast.js';
@@ -86,7 +86,7 @@ index fc3e421..2091b34 100644
  import { posthog } from '../lib/analytics.js';
  import { reportRenderStats } from '../utils/renderStatsReport.js';
  import { nextFrameOrTimeout } from '../utils/frameWait.js';
-@@ -743,6 +747,34 @@ export function useIfcLoader() {
+@@ -795,6 +799,34 @@ export function useIfcLoader() {
        // cloud format was already resolved from the head slice above.
        const format = pointCloudFormat ?? detectFormat(buffer);
  

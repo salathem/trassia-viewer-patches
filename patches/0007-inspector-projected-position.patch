@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/PropertiesPanel.tsx b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-index 7bee9fa..bdbc1a2 100644
+index 7c6b12b..54a3601 100644
 --- a/apps/viewer/src/components/viewer/PropertiesPanel.tsx
 +++ b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-@@ -44,7 +44,10 @@ import { ZoneVolumeBreakdown } from './ZoneVolumeBreakdown';
+@@ -41,7 +41,10 @@ import { ZoneVolumeBreakdown } from './ZoneVolumeBreakdown';
  import type { ZoneSet } from '@/lib/zones';
  import { withInheritedTypeQuantities } from '@/lib/zones/inherited-quantities';
  
@@ -14,7 +14,7 @@ index 7bee9fa..bdbc1a2 100644
  import { renderToWorldViewer, viewerToIfcAxes } from './tools/measure-modes/coordinates';
  import { useRenderFrameOffsets } from '@/hooks/useRenderFrameOffsets';
  import { PropertySetCard } from './properties/PropertySetCard';
-@@ -1457,16 +1460,11 @@ export function PropertiesPanel() {
+@@ -1392,16 +1395,11 @@ export function PropertiesPanel() {
                <span className="font-bold uppercase tracking-wide shrink-0">World</span>
                {!coordOpen && (
                  <>
@@ -36,7 +36,7 @@ index 7bee9fa..bdbc1a2 100644
                    <span className="text-[9px] text-teal-500/0 group-hover/coord:text-teal-500/40 transition-colors shrink-0">details</span>
                  </>
                )}
-@@ -1474,15 +1472,11 @@ export function PropertiesPanel() {
+@@ -1409,15 +1407,11 @@ export function PropertiesPanel() {
              <CollapsibleContent>
                {entityCoordinates && (
                  <div className="px-2 py-1.5 space-y-0.5">
@@ -58,10 +58,10 @@ index 7bee9fa..bdbc1a2 100644
                      onCopy={copyCoords}
                    />
 diff --git a/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx b/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx
-index d431469..79fdebd 100644
+index dcb3d62..11f804e 100644
 --- a/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx
 +++ b/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx
-@@ -973,9 +973,18 @@ describe('guard sanity', () => {
+@@ -990,9 +990,18 @@ describe('guard sanity', () => {
  
        const container = renderNode(<PropertiesPanel />);
        const text = container.textContent ?? '';

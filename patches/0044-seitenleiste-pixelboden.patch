@@ -40,6 +40,28 @@ index 82752e0..77215d0 100644
        };
        const teardown = () => {
          document.removeEventListener('mousemove', move);
+diff --git a/apps/viewer/src/store/slices/sidebarSlice.test.ts b/apps/viewer/src/store/slices/sidebarSlice.test.ts
+index 7ba80d7..4025c49 100644
+--- a/apps/viewer/src/store/slices/sidebarSlice.test.ts
++++ b/apps/viewer/src/store/slices/sidebarSlice.test.ts
+@@ -59,7 +59,16 @@ describe('sidebarSlice (#1208)', () => {
+     s.getState().setSidebarWidthPct(999);
+     assert.ok(s.getState().sidebarWidthPct <= 60);
+     s.getState().setSidebarWidthPct(1);
+-    assert.ok(s.getState().sidebarWidthPct >= 14);
++    // Trassia (Paket V-PFLEGE, Patch 0044): der Boden dieser Klemme ist von
++    // 14 auf 6 % gesenkt worden. Der Test hielt genau den Wert fest, den die
++    // Aenderung bewusst aufgibt — ein Prozentboden waechst mit dem Bildschirm
++    // (14 % sind auf einem 3440-px-Schirm 482 px) und ist darum der falsche
++    // Ort fuer eine Untergrenze. Der echte, breitenabhaengige Boden liegt
++    // seither in SidebarDock.tsx (MIN_WIDTH_PX = 240 px); diese Klemme ist
++    // nur noch die Persistenz-Schranke gegen kaputte gespeicherte Werte.
++    // Der Pruefgegenstand — „eine unsinnige Zahl wird geklemmt" — bleibt
++    // unveraendert, nur die Zahl folgt der neuen Schranke.
++    assert.ok(s.getState().sidebarWidthPct >= 6);
+   });
+ 
+   it('reorders a panel to the front', () => {
 diff --git a/apps/viewer/src/store/slices/sidebarSlice.ts b/apps/viewer/src/store/slices/sidebarSlice.ts
 index 742575b..a7a6145 100644
 --- a/apps/viewer/src/store/slices/sidebarSlice.ts
@@ -65,25 +87,3 @@ index 742575b..a7a6145 100644
  const MAX_WIDTH_PCT = 60;
  
  // Display order in the rail. Hierarchy (#1267) is appended to WORKSPACE_PANELS
-diff --git a/apps/viewer/src/store/slices/sidebarSlice.test.ts b/apps/viewer/src/store/slices/sidebarSlice.test.ts
-index 7ba80d7..4025c49 100644
---- a/apps/viewer/src/store/slices/sidebarSlice.test.ts
-+++ b/apps/viewer/src/store/slices/sidebarSlice.test.ts
-@@ -59,7 +59,16 @@ describe('sidebarSlice (#1208)', () => {
-     s.getState().setSidebarWidthPct(999);
-     assert.ok(s.getState().sidebarWidthPct <= 60);
-     s.getState().setSidebarWidthPct(1);
--    assert.ok(s.getState().sidebarWidthPct >= 14);
-+    // Trassia (Paket V-PFLEGE, Patch 0044): der Boden dieser Klemme ist von
-+    // 14 auf 6 % gesenkt worden. Der Test hielt genau den Wert fest, den die
-+    // Aenderung bewusst aufgibt — ein Prozentboden waechst mit dem Bildschirm
-+    // (14 % sind auf einem 3440-px-Schirm 482 px) und ist darum der falsche
-+    // Ort fuer eine Untergrenze. Der echte, breitenabhaengige Boden liegt
-+    // seither in SidebarDock.tsx (MIN_WIDTH_PX = 240 px); diese Klemme ist
-+    // nur noch die Persistenz-Schranke gegen kaputte gespeicherte Werte.
-+    // Der Pruefgegenstand — „eine unsinnige Zahl wird geklemmt" — bleibt
-+    // unveraendert, nur die Zahl folgt der neuen Schranke.
-+    assert.ok(s.getState().sidebarWidthPct >= 6);
-   });
- 
-   it('reorders a panel to the front', () => {

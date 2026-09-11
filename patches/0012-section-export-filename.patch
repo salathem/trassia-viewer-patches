@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
-index 0bf9acb..c4231ea 100644
+index da8027f..bebc98a 100644
 --- a/apps/viewer/src/hooks/useDrawingExport.ts
 +++ b/apps/viewer/src/hooks/useDrawingExport.ts
 @@ -6,6 +6,9 @@ import { useCallback } from 'react';
@@ -12,7 +12,7 @@ index 0bf9acb..c4231ea 100644
  import { toast } from '@/components/ui/toast';
  import { pdfLineStyleFor } from '@/lib/export/pdf-line-style';
  import {
-@@ -1030,7 +1033,12 @@ function useDrawingExport({
+@@ -1024,7 +1027,12 @@ function useDrawingExport({
        coordinateTransform,
        metadataComment,
      });
@@ -23,6 +23,6 @@ index 0bf9acb..c4231ea 100644
 +    // name is kept for every other section, where it is the honest one.
 +    const stem = chSectionExportStem(sectionPlane.custom)
 +      ?? `section-${sectionPlane.axis}-${sectionPlane.position}`;
-     downloadFile(dxf, `${stem}.dxf`, 'application/dxf');
+     downloadDxf(dxf, `${stem}.dxf`);
      posthog.capture('drawing_exported', {
        format: 'dxf',
