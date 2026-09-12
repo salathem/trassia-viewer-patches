@@ -9,7 +9,7 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0061`) applied, in numeric order, on top of
+- `patches/` — the exact patches (`0001`–`0063`) applied, in numeric order, on top of
   upstream commit `83888869d3aad3a5cf173068be51021c95148aab` (tag `@ifc-lite/wasm@6.5.0`)
 - `modified-files/` — the fifty-five modified files in full source form
   (base commit + all patches applied):
@@ -25,12 +25,16 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/ViewerLayout.tsx`
   - `apps/viewer/src/components/viewer/Viewport.tsx`
   - `apps/viewer/src/components/viewer/ViewportContainer.tsx`
+  - `apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts`
   - `apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts`
   - `apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx`
   - `apps/viewer/src/components/viewer/properties/ModelMetadataPanel.tsx`
   - `apps/viewer/src/components/viewer/properties/PropertySetCard.tsx`
+  - `apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx`
+  - `apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx`
   - `apps/viewer/src/components/viewer/ribbon/tabs/ViewTab.tsx`
   - `apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx`
+  - `apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx`
   - `apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurePanel.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx`
@@ -46,6 +50,7 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/hooks/useDrawingExport.ts`
   - `apps/viewer/src/hooks/useDrawingGeneration.ts`
   - `apps/viewer/src/hooks/useIfcLoader.ts`
+  - `apps/viewer/src/hooks/useKeyboardShortcuts.ts`
   - `apps/viewer/src/hooks/useMeasure2D.ts`
   - `apps/viewer/src/hooks/usePanelControls.ts`
   - `apps/viewer/src/hooks/useViewControls.ts`
@@ -296,6 +301,14 @@ All files in this repository are licensed under the **MPL-2.0**.
   stays in place for 500 ms, dimmed and inert, before it moves to "Hidden" —
   so a double-click on "Hide" no longer hides two panels (list split in an
   overlay helper, `lib/ch/leiste-anpassen.ts`).
+
+- `0062` — persisted sidebar layouts remember the panel registry in `chBekannt`.
+  Newly appended upstream panels use the Trassia hidden default when an older
+  layout is loaded, while the user's existing visibility choices are kept.
+- `0063` — section-panel controls expose accessible labels: the collapse toggle
+  reports its expand/collapse action and expanded state, and the drawing and
+  close buttons each have an explicit label. Event handlers and geometry logic
+  are unchanged.
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil
