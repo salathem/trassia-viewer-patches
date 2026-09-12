@@ -200,6 +200,8 @@ export function SectionOverlay() {
             </span>
             <button
               onClick={togglePanel}
+              aria-label={isPanelCollapsed ? 'Expand section panel' : 'Collapse section panel'}
+              aria-expanded={!isPanelCollapsed}
               className="flex items-center gap-2 hover:bg-accent/50 rounded px-2 py-1 transition-colors min-w-0"
             >
             <Slice className="h-4 w-4 text-primary" />
@@ -224,14 +226,14 @@ export function SectionOverlay() {
           <div className="flex items-center gap-1">
             {/* Only show 2D button when panel is closed */}
             {!drawingPanelVisible && (
-              <Button variant="ghost" size="icon-sm" onClick={handleView2D} title="Open 2D Drawing Panel">
+              <Button variant="ghost" size="icon-sm" onClick={handleView2D} title="Open 2D Drawing Panel" aria-label="Open 2D Drawing Panel">
                 <FileImage className="h-3 w-3" />
               </Button>
             )}
             {/* Trassia (Paket V-UX, P4): in die rechte Leiste holen. Das
                 schwebende Panel deckt bei 1440x900 37 % des 3D-Bildes zu. */}
             <ChDockButton />
-            <Button variant="ghost" size="icon-sm" onClick={handleClose} title="Close">
+            <Button variant="ghost" size="icon-sm" onClick={handleClose} title="Close" aria-label="Close section panel">
               <X className="h-3 w-3" />
             </Button>
           </div>
