@@ -9,9 +9,9 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0063`) applied, in numeric order, on top of
+- `patches/` — the exact patches (`0001`–`0066`) applied, in numeric order, on top of
   upstream commit `83888869d3aad3a5cf173068be51021c95148aab` (tag `@ifc-lite/wasm@6.5.0`)
-- `modified-files/` — the fifty-five modified files in full source form
+- `modified-files/` — the fifty-seven modified files in full source form
   (base commit + all patches applied):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/Drawing2DCanvas.tsx`
@@ -28,6 +28,7 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts`
   - `apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts`
   - `apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx`
+  - `apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx`
   - `apps/viewer/src/components/viewer/properties/ModelMetadataPanel.tsx`
   - `apps/viewer/src/components/viewer/properties/PropertySetCard.tsx`
   - `apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx`
@@ -36,6 +37,7 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx`
   - `apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx`
   - `apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx`
+  - `apps/viewer/src/components/viewer/sidebar/SidebarPanelHost.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurePanel.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurementVisuals.tsx`
@@ -309,6 +311,18 @@ All files in this repository are licensed under the **MPL-2.0**.
   reports its expand/collapse action and expanded state, and the drawing and
   close buttons each have an explicit label. Event handlers and geometry logic
   are unchanged.
+
+- `0064` — closing either half of a split sidebar targets that panel and keeps
+  the other panel open. Header close buttons and a second click on the active
+  rail icon use the same close action; an ephemeral revision keeps the existing
+  exclusivity subscription from resolving that close intent again.
+- `0065` — the terrain-height query and georeferencing controls follow the
+  Trassia automatic-height policy. Old terrain samples are cleared before a
+  new bridge is installed; when automatic height sampling is disabled, the
+  panel shows the policy notice and hides terrain-derived save/snap actions.
+- `0066` — the IFC geometry stream yields after a work budget so queued worker
+  events do not continuously occupy the browser's microtask queue. The next
+  event still passes the existing stale-session check before writing state.
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil

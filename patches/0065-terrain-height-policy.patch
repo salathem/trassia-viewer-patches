@@ -1,0 +1,86 @@
+diff --git a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
+--- a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
++++ b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
+@@ -19,6 +19,7 @@
+ 
+ import { useEffect, useRef, useState, type RefObject } from 'react';
+ import { useViewerStore } from '@/store';
++import { chQueryTerrainHeight } from '@/lib/ch/kontext/terrain-policy';
+ import type { MapConversion, ProjectedCRS } from '@ifc-lite/parser';
+ import type { CoordinateInfo } from '@ifc-lite/geometry';
+ import { createCesiumBridge, type CesiumBridge } from '@/lib/geo/cesium-bridge';
+@@ -101,6 +102,11 @@
+   //   5. Push terrain-derived state (height, clip Y) and
+   //      install the bridge.
+   useEffect(() => {
++    // Clear old model/provider samples before any asynchronous bridge work.
++    setCesiumTerrainHeight(null);
++    setCesiumTerrainSource(null);
++    setCesiumTerrainSaveHeight(null);
++    setCesiumTerrainClipY(null);
+     if (status !== 'ready' || !mapConversion || !projectedCRS) {
+       bridgeRef.current = null;
+       cameraBridgeRef.current = null;
+@@ -136,14 +142,14 @@
+       const preferOrthometricTerrain = shouldPreferOrthometricTerrain(projectedCRS);
+       let terrainSample = null;
+       try {
+-        terrainSample = await cameraTentative.queryTerrainHeight(Cesium, viewer, {
++        terrainSample = await chQueryTerrainHeight(() => cameraTentative.queryTerrainHeight(Cesium, viewer, {
+           cacheNamespace: [
+             terrainEnabled ? 'terrain' : 'ellipsoid',
+             dataSource,
+             preferOrthometricTerrain ? 'orthometric' : 'visual-surface',
+           ].join(':'),
+           preferOrthometric: preferOrthometricTerrain,
+-        });
++        }));
+       }
+       catch (err) { console.warn('[CesiumOverlay] terrain query failed:', err); }
+       if (cancelled) return;
+diff --git a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx b/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx
+--- a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx
++++ b/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx
+@@ -13,6 +13,7 @@
+ import { Badge } from '@/components/ui/badge';
+ import { computeAngleToGridNorth, type GeoreferenceInfo, type MapConversion, type ProjectedCRS } from '@ifc-lite/parser';
+ import { useViewerStore } from '@/store';
++import { CH_AUTOMATIC_TERRAIN_HEIGHT, CH_TERRAIN_HEIGHT_NOTICE } from '@/lib/ch/kontext/terrain-policy';
+ import { posthog } from '@/lib/analytics';
+ import type { CoordinateInfo, GeometryResult } from '@ifc-lite/geometry';
+ import { EpsgLookupDialog, type EpsgResult } from './EpsgLookupDialog';
+@@ -892,7 +893,9 @@
+           <div className="flex items-center gap-2">
+             <Mountain className="h-3 w-3 text-teal-500 shrink-0" />
+             <span className="text-[10px] text-zinc-600 dark:text-zinc-400 flex-1">Visible surface height</span>
+-            {cesiumTerrainHeight !== null ? (
++            {!CH_AUTOMATIC_TERRAIN_HEIGHT ? (
++              <span className="text-[9px] text-zinc-500 dark:text-zinc-400">{CH_TERRAIN_HEIGHT_NOTICE}</span>
++            ) : cesiumTerrainHeight !== null ? (
+               <span className="text-[9px] font-mono text-teal-500" title={cesiumTerrainSource ?? undefined}>
+                 {cesiumTerrainHeight.toFixed(1)} m
+               </span>
+@@ -900,12 +903,12 @@
+               <span className="text-[9px] font-mono text-zinc-400">querying...</span>
+             )}
+           </div>
+-          {cesiumTerrainSource && (
++          {CH_AUTOMATIC_TERRAIN_HEIGHT && cesiumTerrainSource && (
+             <div className="ml-5 text-[9px] text-zinc-500 dark:text-zinc-400">
+               sampled via {cesiumTerrainSource}
+             </div>
+           )}
+-          {cesiumTerrainHeight !== null && cesiumTerrainSaveHeight !== null && editable && modelId && (
++          {CH_AUTOMATIC_TERRAIN_HEIGHT && cesiumTerrainHeight !== null && cesiumTerrainSaveHeight !== null && editable && modelId && (
+             <div className="flex items-center gap-1 ml-5">
+               <button
+                 onClick={() => handleSave('mapConversion', 'orthogonalHeight', oHeightForBaseAltitude(cesiumTerrainSaveHeight))}
+@@ -972,7 +975,7 @@
+   // Only show when this panel's model is the active Cesium model and the
+   // geoid-corrected snap target is ready (#1456): never fall back to the raw
+   // ellipsoidal sample, which would skip the correction.
+-  if (!cesiumEnabled || terrainHeight === null || terrainSaveHeight === null || !editable || !modelId || modelId !== sourceModelId) return null;
++  if (!CH_AUTOMATIC_TERRAIN_HEIGHT || !cesiumEnabled || terrainHeight === null || terrainSaveHeight === null || !editable || !modelId || modelId !== sourceModelId) return null;
+ 
+   return (
+     <Tooltip>

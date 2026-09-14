@@ -82,6 +82,7 @@ import { chSetLoadNotice, chClearLoadNotice } from '../lib/ch/ch-load-notice.js'
 import { posthog } from '../lib/analytics.js';
 import { reportRenderStats } from '../utils/renderStatsReport.js';
 import { nextFrameOrTimeout } from '../utils/frameWait.js';
+import { createStreamYield } from '../utils/chStreamYield.js';
 import { visibilityWitness } from '../utils/visibilityWitness.js';
 import { buildModelLoadedPayload, captureModelLoaded, clearModelLoadedSnapshot, snapshotFromGeometry } from '../utils/loadTelemetry.js';
 import { classifyLoadError, errorCaptureProps, type LoadErrorKind } from '../lib/load-errors.js';
@@ -1667,6 +1668,7 @@ export function useIfcLoader() {
           }
         };
 
+        const yieldAfterEvent = createStreamYield();
         while (true) {
           const watchdogMs = getGeometryStreamWatchdogMs(
             false,
@@ -2090,6 +2092,11 @@ export function useIfcLoader() {
               if (target.kind === 'federated') void appearanceLoad?.finishAfter(finalizePromise, () => useViewerStore.getState().models.get(modelId));
               break;
           }
+          // Queued worker events can otherwise drain as one long microtask
+          // chain. Yield after a work budget so input/paint can run. The next
+          // event still passes the existing stale-session guard before writes.
+          const yieldTask = yieldAfterEvent(eventReceived);
+          if (yieldTask) await yieldTask;
         }
         await closeGeometryIterator?.();
       } catch (err) {

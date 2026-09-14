@@ -174,6 +174,7 @@ export function usePanelControls(): PanelControls {
   }, []);
 
   const closePanel = useCallback((id: WorkspacePanelId) => {
+    if (useViewerStore.getState().closeDockedSidebarPanel(id)) return;
     if (isLeftPanel(id)) {
       useViewerStore.getState().setLeftPanelCollapsed(true);
       return;

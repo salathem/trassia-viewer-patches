@@ -19,6 +19,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useViewerStore } from '@/store';
+import { chQueryTerrainHeight } from '@/lib/ch/kontext/terrain-policy';
 import type { MapConversion, ProjectedCRS } from '@ifc-lite/parser';
 import type { CoordinateInfo } from '@ifc-lite/geometry';
 import { createCesiumBridge, type CesiumBridge } from '@/lib/geo/cesium-bridge';
@@ -101,6 +102,11 @@ export function useCesiumBridge({
   //   5. Push terrain-derived state (height, clip Y) and
   //      install the bridge.
   useEffect(() => {
+    // Clear old model/provider samples before any asynchronous bridge work.
+    setCesiumTerrainHeight(null);
+    setCesiumTerrainSource(null);
+    setCesiumTerrainSaveHeight(null);
+    setCesiumTerrainClipY(null);
     if (status !== 'ready' || !mapConversion || !projectedCRS) {
       bridgeRef.current = null;
       cameraBridgeRef.current = null;
@@ -136,14 +142,14 @@ export function useCesiumBridge({
       const preferOrthometricTerrain = shouldPreferOrthometricTerrain(projectedCRS);
       let terrainSample = null;
       try {
-        terrainSample = await cameraTentative.queryTerrainHeight(Cesium, viewer, {
+        terrainSample = await chQueryTerrainHeight(() => cameraTentative.queryTerrainHeight(Cesium, viewer, {
           cacheNamespace: [
             terrainEnabled ? 'terrain' : 'ellipsoid',
             dataSource,
             preferOrthometricTerrain ? 'orthometric' : 'visual-surface',
           ].join(':'),
           preferOrthometric: preferOrthometricTerrain,
-        });
+        }));
       }
       catch (err) { console.warn('[CesiumOverlay] terrain query failed:', err); }
       if (cancelled) return;

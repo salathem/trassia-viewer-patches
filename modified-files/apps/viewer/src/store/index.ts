@@ -6,6 +6,7 @@
 
 import { createAppearanceSlice, type AppearanceSlice } from './slices/appearanceSlice.js';
 import { create } from 'zustand';
+import { chSidebarClosePatch, CH_SIDEBAR_FLAGS } from '@/lib/ch/panel-close';
 
 // Import slices
 import { createLoadingSlice, type LoadingSlice } from './slices/loadingSlice.js';
@@ -180,6 +181,9 @@ export type ViewerState = AppearanceSlice & LoadingSlice &
   ExtensionsSlice &
   SourcesSlice & {
     resetViewerState: () => void;
+    /** Ephemeral close intent; not persisted in the layout. */
+    sidebarCloseRevision: number;
+    closeDockedSidebarPanel: (panel: WorkspacePanelId) => boolean;
     /**
      * Open one right-side analysis panel and close the others, so the chosen
      * panel is always the topmost/active one. The right panel renders a single
@@ -346,6 +350,17 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
     endClashScenePresentation(() => get() as unknown as ClashSceneTeardown, 'federation-cleared');
   },
 
+  sidebarCloseRevision: 0,
+  closeDockedSidebarPanel: (panel) => {
+    const [set, get] = args;
+    const patch = chSidebarClosePatch(get(), panel);
+    if (patch === null) return false;
+    set(patch);
+    // Persist through the existing layout action after the atomic transition.
+    get().setSidebarMode(get().sidebarMode);
+    return true;
+  },
+
   openWorkspacePanel: (panel) => {
     const [set, get] = args;
     // Docking into the sidebar: if the panel was floating or popped out, re-dock
@@ -434,15 +449,12 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
     const isActive = s.sidebarActivePanel === panel
       && !s.floatingPanels.some((p) => p.id === panel)
       && !s.poppedOutIds.includes(panel);
-    // Trassia (Paket SEITENLEISTE, Marco-Befund 2026-09-02): ein zweiter Klick
-    // auf das aktive Symbol schliesst das Panel und laesst NICHTS erscheinen —
-    // die Leiste klappt auf ihre Symbolspalte zusammen. Vorher sprang der
-    // Upstream still auf den Information-Fallback (bei Information selbst war
-    // der Klick ein No-op). showWorkspacePanel('properties') raeumt weiterhin
-    // alle Flags; das Zusammenklappen danach ist die einzige Ergaenzung.
+    // Trassia: a second click closes this tool, just like its header X.
+    // A remaining split panel takes its place; with no survivor the sidebar
+    // collapses to icons, preserving the existing single-panel behaviour.
     if (isActive) {
-      get().showWorkspacePanel('properties');
-      get().setSidebarMode('collapsed');
+      // Same targeted close as the panel header; preserve a second tool.
+      get().closeDockedSidebarPanel(panel);
     } else {
       get().showWorkspacePanel(panel);
     }
@@ -497,17 +509,7 @@ const globalStoreRegistry = globalThis as typeof globalThis & {
  * fallback shown when none of these are on. (Script / Schedule / Lists are
  * NOT here: they live in the bottom panel and stay independent.)
  */
-const SIDEBAR_PANEL_FLAGS: ReadonlyArray<readonly [keyof ViewerState, WorkspacePanelId]> = [
-  ['bcfPanelVisible', 'bcf'],
-  ['idsPanelVisible', 'ids'],
-  ['lensPanelVisible', 'lens'],
-  ['clashPanelVisible', 'clash'],
-  ['comparePanelVisible', 'compare'],
-  ['extensionsPanelVisible', 'extensions'],
-  ['sourcesPanelVisible', 'sources'],
-  ['collabPanelVisible', 'collab'],
-  ['layersPanelVisible', 'layers'],
-];
+const SIDEBAR_PANEL_FLAGS = CH_SIDEBAR_FLAGS;
 
 /**
  * Enforce the "one docked panel at a time" invariant for the unified sidebar
@@ -521,6 +523,8 @@ const SIDEBAR_PANEL_FLAGS: ReadonlyArray<readonly [keyof ViewerState, WorkspaceP
  */
 function registerSidebarExclusivity(store: ReturnType<typeof createViewerStore>): void {
   store.subscribe((state, prev) => {
+    // Closing updates slots and flags together; do not re-resolve that intent.
+    if (state.sidebarCloseRevision !== prev.sidebarCloseRevision) return;
     // Did any panel just open this tick? (first off→on wins)
     let opened: WorkspacePanelId | null = null;
     for (const [flag, id] of SIDEBAR_PANEL_FLAGS) {
