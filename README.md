@@ -9,9 +9,9 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0066`) applied, in numeric order, on top of
+- `patches/` — the exact patches (`0001`–`0067`) applied, in numeric order, on top of
   upstream commit `83888869d3aad3a5cf173068be51021c95148aab` (tag `@ifc-lite/wasm@6.5.0`)
-- `modified-files/` — the fifty-seven modified files in full source form
+- `modified-files/` — the sixty modified files in full source form
   (base commit + all patches applied):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/Drawing2DCanvas.tsx`
@@ -27,6 +27,9 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/ViewportContainer.tsx`
   - `apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts`
   - `apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts`
+  - `apps/viewer/src/components/viewer/dock/FloatingPanelHost.tsx`
+  - `apps/viewer/src/components/viewer/dock/floating-panel-geometry.test.ts`
+  - `apps/viewer/src/components/viewer/dock/floating-panel-geometry.ts`
   - `apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx`
   - `apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx`
   - `apps/viewer/src/components/viewer/properties/ModelMetadataPanel.tsx`
@@ -323,6 +326,11 @@ All files in this repository are licensed under the **MPL-2.0**.
 - `0066` — the IFC geometry stream yields after a work budget so queued worker
   events do not continuously occupy the browser's microtask queue. The next
   event still passes the existing stale-session check before writing state.
+
+- `0067` - free floating panels keep their header below the measured ribbon
+  boundary. The host tracks viewport bounds whenever any floating panel is
+  open; snapped positions are unchanged. Geometry regression tests cover the
+  formerly hidden default header and preserve valid and unmeasured positions.
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil
