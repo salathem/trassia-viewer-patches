@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-index b0889cd..a2f7def 100644
+index 5b7e766..0789153 100644
 --- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
 +++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-@@ -27,6 +27,11 @@ import { useViewerStore } from '@/store';
+@@ -30,6 +30,11 @@ import { useViewerStore } from '@/store';
  import { isCollabEnabled } from '@/lib/collab/config';
  import { toast } from '@/components/ui/toast';
  import { parseRoleFromToken } from '@/lib/collab/share-link';
@@ -14,7 +14,7 @@ index b0889cd..a2f7def 100644
  import { EntityContextMenu } from './EntityContextMenu';
  import { AnonymizedExportDialog } from './anonymized-export/AnonymizedExportDialog';
  import { useDuplicateShortcut } from './useDuplicateShortcut';
-@@ -109,21 +114,45 @@ export function ViewerLayout() {
+@@ -107,21 +112,45 @@ export function ViewerLayout() {
        return;
      }
      if (resolvedUrl.origin !== window.location.origin) {
@@ -60,7 +60,7 @@ index b0889cd..a2f7def 100644
        }
      })();
    }, [autoloadAddModel]);
-@@ -374,6 +403,10 @@ export function ViewerLayout() {
+@@ -289,6 +318,10 @@ export function ViewerLayout() {
              </span>
            </div>
          )}
@@ -72,12 +72,12 @@ index b0889cd..a2f7def 100644
          <KeyboardShortcutsDialog open={shortcutsDialog.open} onClose={shortcutsDialog.close} initialTab={shortcutsDialog.tab} />
  
 diff --git a/apps/viewer/src/hooks/useIfcLoader.ts b/apps/viewer/src/hooks/useIfcLoader.ts
-index 658a09b..f653db7 100644
+index ddb0980..0b0cae1 100644
 --- a/apps/viewer/src/hooks/useIfcLoader.ts
 +++ b/apps/viewer/src/hooks/useIfcLoader.ts
-@@ -75,6 +75,10 @@ import { capturePreAlignment } from './ingest/federationRealign.js';
- import type { PreAlignmentSnapshot } from '../store/index.js';
+@@ -81,6 +81,10 @@ import { finalizeFederatedSpatialPlacement } from './ingest/federatedSpatialFina
  import { computePointCloudAlignment, unregisterPointCloudAlignment, hasRegisteredPointCloudAlignment, type PointCloudSourceUnit } from './ingest/pointCloudAlignment.js';
+ import { realignPointCloudsToAnchor } from './ingest/pointCloudAlignmentRealign.js';
  import { toast } from '../components/ui/toast.js';
 +// Trassia overlay — empty / non-STEP / truncated files used to report
 +// "IFC4 · Ready". See lib/ch/ch-file-validation.ts.
@@ -86,9 +86,9 @@ index 658a09b..f653db7 100644
  import { posthog } from '../lib/analytics.js';
  import { reportRenderStats } from '../utils/renderStatsReport.js';
  import { nextFrameOrTimeout } from '../utils/frameWait.js';
-@@ -795,6 +799,34 @@ export function useIfcLoader() {
-       // cloud format was already resolved from the head slice above.
-       const format = pointCloudFormat ?? detectFormat(buffer);
+@@ -754,6 +758,34 @@ export function useIfcLoader() {
+ 
+       const arrayBuffer = buffer instanceof ArrayBuffer ? buffer : new Uint8Array(buffer).slice().buffer; buffer = arrayBuffer;
  
 +      // Trassia: minimum honesty check before the parser gets the bytes. An
 +      // empty file, a text file renamed `.ifc` and an HTML page served by a

@@ -1,19 +1,10 @@
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index 553537c..4e731f4 100644
+index e38eee2..235ed99 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
-@@ -36,6 +36,8 @@ import {
-   FileWarning,
-   // Trassia overlay (not upstream) — Paket V-DRAPE.
-   Mountain,
-+  // Trassia overlay (not upstream) — Paket V-KUBATUR.
-+  Ruler,
-   type LucideIcon,
- } from 'lucide-react';
- 
-@@ -63,7 +65,9 @@ export type WorkspacePanelId =
-   | 'loadReport'
-   | 'appearance'
+@@ -59,7 +59,9 @@ export type WorkspacePanelId =
+   | 'placement'
+   | 'presentation'
    // Trassia overlay (not upstream) — Paket V-DRAPE.
 -  | 'drape';
 +  | 'drape'
@@ -22,7 +13,7 @@ index 553537c..4e731f4 100644
  
  /** Activity-bar clustering — a divider is drawn whenever the group changes. */
  export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
-@@ -129,6 +133,10 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+@@ -184,6 +186,10 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
    // Alt+1..0-Zuordnung der ersten zehn Eintraege unberuehrt bleibt — dieses
    // Panel bekommt keine Ziffer und ist ueber die Leiste erreichbar.
    { id: 'drape', title: 'Terrain drape', short: 'Drape', Icon: Mountain, group: 'author', region: 'side' },
@@ -32,13 +23,13 @@ index 553537c..4e731f4 100644
 +  { id: 'kubatur', title: 'Cut and fill', short: 'Cut/fill', Icon: Ruler, group: 'author', region: 'side' },
  ];
  
- /** The bottom-strip panel ids, mapped to their store visibility flag + setter
+ // The bottom strip (Script / Schedule / Lists) is table-driven; the id union and
 diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-index f691fd5..4f3504d 100644
+index c6d15e6..c50a1dc 100644
 --- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
 +++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-@@ -30,6 +30,8 @@ import { ZonesPanel } from '@/components/viewer/ZonesPanel';
- import { LoadReportPanel } from '@/components/viewer/LoadReportPanel';
+@@ -36,6 +36,8 @@ import { PlacementPanel } from '@/components/viewer/placement/PlacementPanel';
+ import { useViewerStore } from '@/store';
  // Trassia overlay (not upstream) — Paket V-DRAPE, siehe ChDrapePanel.tsx.
  import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
 +// Trassia overlay (not upstream) — Paket V-KUBATUR, siehe ChKubaturPanel.tsx.
@@ -46,7 +37,7 @@ index f691fd5..4f3504d 100644
  // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
  // dynamic chunk keeps it out of the initial bundle until first opened.
  const LayersPanel = lazy(() =>
-@@ -83,6 +85,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+@@ -147,6 +149,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
      case 'loadReport': return <LoadReportPanel onClose={onClose} />;
      // Trassia (Paket V-DRAPE).
      case 'drape': return <ChDrapePanel onClose={onClose} />;
@@ -54,4 +45,4 @@ index f691fd5..4f3504d 100644
 +    case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
      case 'layers': return <LayersPanelBody onClose={onClose} />;
      case 'sources': return <SourcesPanelBody onClose={onClose} />;
-   }
+     case 'charts': return <ChartsPanelBody />;

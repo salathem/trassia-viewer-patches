@@ -1,14 +1,13 @@
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index f089feb..35cbcaf 100644
+index d2b53f3..7a929d4 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
-@@ -40,8 +40,14 @@ import {
-   Ruler,
+@@ -25,7 +25,13 @@ import {
+   Mountain,
    // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
    ChartSpline,
 +  // Trassia overlay (not upstream) — Trassierungs-Spike S0 (Paket ENTWURF).
 +  Route,
-   type LucideIcon,
  } from 'lucide-react';
 +// Trassia overlay (not upstream) — die Spike-Flagge `?entwurf=1`. Winzig und
 +// ohne Abhaengigkeiten; der eigentliche Spike haengt hinter einem dynamischen
@@ -17,7 +16,7 @@ index f089feb..35cbcaf 100644
  
  /** Every panel reachable from the unified sidebar rail. `properties` is the
   *  Information panel (the right pane's default fallback). Each panel opens in
-@@ -71,7 +77,9 @@ export type WorkspacePanelId =
+@@ -65,7 +71,9 @@ export type WorkspacePanelId =
    // Trassia overlay (not upstream) — Paket V-KUBATUR.
    | 'kubatur'
    // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
@@ -28,7 +27,7 @@ index f089feb..35cbcaf 100644
  
  /** Activity-bar clustering — a divider is drawn whenever the group changes. */
  export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
-@@ -150,6 +158,19 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+@@ -203,6 +211,19 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
    // zwar unten in dieser Datei, wird aber nirgends gelesen (geprueft im
    // Pin 989da893: einzige Fundstelle ist die Deklaration selbst).
    { id: 'laengsschnitt', title: 'Longitudinal profile', short: 'Profile', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
@@ -47,12 +46,12 @@ index f089feb..35cbcaf 100644
 +    : []),
  ];
  
- /** The bottom-strip panel ids, mapped to their store visibility flag + setter
+ // The bottom strip (Script / Schedule / Lists) is table-driven; the id union and
 diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-index 2742124..cd8032c 100644
+index 1c2e74d..861f7fb 100644
 --- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
 +++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-@@ -35,6 +35,15 @@ import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
+@@ -41,6 +41,18 @@ import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
  // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT, siehe
  // ChLaengsschnittPanel.tsx.
  import { ChLaengsschnittPanel } from '@/components/viewer/ChLaengsschnittPanel';
@@ -65,21 +64,24 @@ index 2742124..cd8032c 100644
 +const ChEntwurfPanel = lazy(() =>
 +  import('@/components/viewer/ChEntwurfPanel').then((m) => ({ default: m.ChEntwurfPanel })),
 +);
++// Eigene kleine Fehlergrenze: die Upstream-ChunkErrorBoundary nimmt seit 10.x nur
++// feste Upstream-Beschriftungen an (siehe ChEntwurfFehlergrenze.tsx).
++import { ChEntwurfFehlergrenze } from '@/components/viewer/ChEntwurfFehlergrenze';
  // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
  // dynamic chunk keeps it out of the initial bundle until first opened.
  const LayersPanel = lazy(() =>
-@@ -92,6 +101,14 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+@@ -156,6 +168,14 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
      case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
      // Trassia (Paket V-LAENGSSCHNITT).
      case 'laengsschnitt': return <ChLaengsschnittPanel onClose={onClose} />;
 +    // Trassia (Trassierungs-Spike S0, nur bei `?entwurf=1`).
 +    case 'entwurf': return (
-+      <ChunkErrorBoundary label="Alignment design panel">
++      <ChEntwurfFehlergrenze>
 +        <Suspense fallback={null}>
 +          <ChEntwurfPanel onClose={onClose} />
 +        </Suspense>
-+      </ChunkErrorBoundary>
++      </ChEntwurfFehlergrenze>
 +    );
      case 'layers': return <LayersPanelBody onClose={onClose} />;
      case 'sources': return <SourcesPanelBody onClose={onClose} />;
-   }
+     case 'charts': return <ChartsPanelBody />;

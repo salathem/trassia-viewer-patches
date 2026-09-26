@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/CesiumOverlay.tsx b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-index 1bfea66..f60a477 100644
+index c8aa252..0a98a7f 100644
 --- a/apps/viewer/src/components/viewer/CesiumOverlay.tsx
 +++ b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-@@ -41,6 +41,9 @@ import { useChCesiumTiles } from './cesium/useChCesiumTiles';
+@@ -45,6 +45,9 @@ import { useChCesiumTiles } from './cesium/useChCesiumTiles';
  import { useChSwisstopoUmgebung } from './cesium/useChSwisstopoUmgebung';
  // Trassia overlay (Paket V-WFS) — amtliche WFS-Ebenen als geklemmte Overlays.
  import { useChWfsLayers } from './cesium/useChWfsLayers';
@@ -12,7 +12,7 @@ index 1bfea66..f60a477 100644
  
  export interface CesiumOverlayProps {
    mapConversion?: MapConversion;
-@@ -196,7 +199,30 @@ export function CesiumOverlay({
+@@ -212,7 +215,30 @@ export function CesiumOverlay({
          scene.globe.showGroundAtmosphere = false;
          scene.backgroundColor = Cesium.Color.TRANSPARENT;
          scene.globe.baseColor = Cesium.Color.TRANSPARENT;
@@ -45,10 +45,10 @@ index 1bfea66..f60a477 100644
            // map (no satellite imagery, no 3D massing) for users who find the
            // photorealistic globe overwhelming (#1744). The globe drapes the
 diff --git a/apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts b/apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts
-index 15ea08e..968c2f5 100644
+index 49fdb59..42ca329 100644
 --- a/apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts
 +++ b/apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts
-@@ -15,12 +15,23 @@
+@@ -17,6 +17,11 @@ import type { CesiumViewerLifetime } from './cesium-viewer-lifetime';
   * (a missing tileset here silently leaves the globe alone, which is the
   * existing, accepted behaviour for OSM Buildings / Google Photorealistic).
   */
@@ -60,8 +60,9 @@ index 15ea08e..968c2f5 100644
  export async function addDataSourceLayer(
    Cesium: typeof import('cesium'),
    viewer: InstanceType<typeof import('cesium').Viewer>,
-   dataSource: string,
+@@ -24,6 +29,12 @@ export async function addDataSourceLayer(
    ionToken: string,
+   lifetime: CesiumViewerLifetime,
  ): Promise<InstanceType<typeof import('cesium').Cesium3DTileset> | null> {
 +  // Trassia (V-WELT-FIX): die zweite Haelfte des fail-closed-Riegels. Ohne
 +  // diese Zeile liefe der `default`-Zweig unten in

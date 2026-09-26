@@ -20,7 +20,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X, EyeOff, Palette, Check, Plus, Trash2, Pencil, Copy, Save, Download, Upload, Sparkles, ArrowUpDown, GripVertical } from 'lucide-react';
 import { discoverDataSources, LENS_OPERATORS } from '@ifc-lite/lens';
-import type { LensOperator } from '@ifc-lite/lens';
 import { SearchableSelect } from './SearchableSelect';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -43,6 +42,8 @@ import type { Lens, LensRule, LensCriteria, AutoColorSpec, AutoColorLegendEntry,
 import {
   LENS_PALETTE, ENTITY_ATTRIBUTE_NAMES, AUTO_COLOR_SOURCES,
 } from '@/store/slices/lensSlice';
+import { useTranslation } from '@/i18n';
+import { OPERATOR_LABEL_KEYS, TYPE_LABEL_KEYS } from './lens-editor-labels';
 
 /** Stable empty set for the hidden-sync effect when no lens is active. */
 const EMPTY_LENS_HIDDEN: ReadonlySet<number> = new Set<number>();
@@ -52,38 +53,6 @@ function formatCount(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`;
   return String(n);
 }
-
-/**
- * Human-readable label for every {@link LensOperator}, for the operator
- * `<select>`s below. Every value LENS_OPERATORS exports must appear here -
- * an operator missing from an option list falls back to the browser's
- * first-option default on render (`selectedIndex` -1/0 depending on the
- * engine), silently misdisplaying a rule whose value the engine still
- * honours correctly. See the `and`/`or` compound criteria-type selector
- * above for the identical defect class this PR already fixed once.
- */
-const OPERATOR_LABELS: Record<LensOperator, string> = {
-  exists: 'Exists',
-  equals: 'Equals',
-  contains: 'Contains',
-  ne: 'Not Equal',
-  gt: '>',
-  gte: '>=',
-  lt: '<',
-  lte: '<=',
-};
-
-/** Human-readable label for source / criteria types (shared) */
-const TYPE_LABELS: Record<string, string> = {
-  ifcType: 'IFC Class',
-  attribute: 'Attribute',
-  property: 'Property',
-  quantity: 'Quantity',
-  classification: 'Classification',
-  material: 'Material',
-  model: 'Model',
-  group: 'Zone / Group',
-};
 
 interface LensPanelProps {
   onClose?: () => void;
@@ -102,6 +71,7 @@ const RuleRow = memo(function RuleRow({
   isIsolated?: boolean;
   onClick?: () => void;
 }) {
+  const { t } = useTranslation();
   const isEmpty = count === 0;
   const isClickable = !!onClick && !isEmpty;
 
@@ -120,7 +90,7 @@ const RuleRow = memo(function RuleRow({
       tabIndex={isClickable ? 0 : undefined}
       onClick={(e) => { if (isClickable) { e.stopPropagation(); onClick(); } }}
       onKeyDown={(e) => { if (isClickable && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }}
-      title={isClickable ? 'Click to isolate / show only this group' : isEmpty ? 'No matching entities' : undefined}
+      title={isClickable ? t('lensPanel.ruleRow.isolateTooltip') : isEmpty ? t('lensPanel.ruleRow.emptyTooltip') : undefined}
     >
       <div
         className={cn(
@@ -141,7 +111,7 @@ const RuleRow = memo(function RuleRow({
       </span>
       {isIsolated && (
         <span className="text-[10px] uppercase tracking-wider font-bold text-primary">
-          isolated
+          {t('lensPanel.isolatedBadge')}
         </span>
       )}
       <span className={cn(
@@ -167,6 +137,7 @@ const AutoColorRow = memo(function AutoColorRow({
   isIsolated?: boolean;
   onClick?: () => void;
 }) {
+  const { t } = useTranslation();
   const isEmpty = entry.count === 0;
   const isClickable = !!onClick && !isEmpty;
 
@@ -184,7 +155,7 @@ const AutoColorRow = memo(function AutoColorRow({
       tabIndex={isClickable ? 0 : undefined}
       onClick={(e) => { if (isClickable) { e.stopPropagation(); onClick(); } }}
       onKeyDown={(e) => { if (isClickable && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }}
-      title={isClickable ? 'Click to isolate / show only this value' : undefined}
+      title={isClickable ? t('lensPanel.autoColorRow.isolateTooltip') : undefined}
     >
       <div
         className="w-3 h-3 rounded-sm flex-shrink-0 ring-1 ring-black/10 dark:ring-white/20"
@@ -205,7 +176,7 @@ const AutoColorRow = memo(function AutoColorRow({
       </span>
       {isIsolated && (
         <span className="text-[10px] uppercase tracking-wider font-bold text-primary">
-          isolated
+          {t('lensPanel.isolatedBadge')}
         </span>
       )}
       <span className="text-[10px] tabular-nums font-mono min-w-[2ch] text-right text-zinc-400 dark:text-zinc-500">
@@ -253,6 +224,7 @@ export function RuleEditor({
   /** Reorder a rule (drag or keyboard). When set, the grip handle is interactive. */
   onMove?: (from: number, to: number) => void;
 }) {
+  const { t } = useTranslation();
   const criteriaType = rule.criteria.type;
   // Property / quantity / classification each need TWO selectors (set + name),
   // which the cramped criteria-type row can't show legibly. They get their own
@@ -371,7 +343,7 @@ export function RuleEditor({
         base.groupName = '';
         break;
     }
-    onChange({ criteria: base, name: rule.name === 'New Rule' ? TYPE_LABELS[newType] : rule.name });
+    onChange({ criteria: base, name: rule.name === 'New Rule' ? t(TYPE_LABEL_KEYS[newType]) : rule.name });
   };
 
   const selectClass = 'text-xs px-1.5 py-1 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 text-zinc-900 dark:text-zinc-100 rounded-sm';
@@ -409,8 +381,8 @@ export function RuleEditor({
           } : undefined}
           role={onMove ? 'button' : undefined}
           tabIndex={onMove ? 0 : undefined}
-          aria-label={onMove ? 'Reorder rule: drag, or press arrow up or down' : undefined}
-          title={onMove ? 'Drag to reorder (or arrow keys)' : undefined}
+          aria-label={onMove ? t('lensPanel.ruleEditor.reorderAriaLabel') : undefined}
+          title={onMove ? t('lensPanel.ruleEditor.reorderTooltip') : undefined}
           className={cn(
             'flex-shrink-0 -ml-1 rounded-sm',
             onMove
@@ -438,8 +410,8 @@ export function RuleEditor({
           value={criteriaType}
           onChange={(e) => handleCriteriaTypeChange(e.target.value as LensCriteria['type'])}
           disabled={isCompound}
-          aria-label={isCompound ? 'Compound criteria type (read-only, imported)' : 'Criteria type'}
-          title={isCompound ? 'Compound rules are imported read-only; this panel does not yet support editing them.' : undefined}
+          aria-label={isCompound ? t('lensPanel.ruleEditor.compoundTypeAriaLabel') : t('lensPanel.ruleEditor.criteriaTypeAriaLabel')}
+          title={isCompound ? t('lensPanel.ruleEditor.compoundReadOnlyTooltip') : undefined}
           className={cn(
             selectClass,
             isMultiField ? 'flex-1 min-w-0' : 'w-[90px]',
@@ -449,8 +421,8 @@ export function RuleEditor({
           {isCompound ? (
             <option value={criteriaType}>{criteriaType.toUpperCase()}</option>
           ) : (
-            Object.entries(TYPE_LABELS).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
+            Object.entries(TYPE_LABEL_KEYS).map(([val, labelKey]) => (
+              <option key={val} value={val}>{t(labelKey)}</option>
             ))
           )}
         </select>
@@ -477,7 +449,7 @@ export function RuleEditor({
                 name: ifcType ? ifcType.replace('Ifc', '') : rule.name,
               });
             }}
-            placeholder="Class..."
+            placeholder={t('lensPanel.ruleEditor.classPlaceholder')}
             className="flex-1 min-w-0"
             displayFn={(v) => v.replace('Ifc', '')}
           />
@@ -503,7 +475,7 @@ export function RuleEditor({
                 const updated = { ...rule.criteria, attributeValue: e.target.value };
                 onChange({ criteria: updated, name: deriveRuleName(updated, resolveModelName) });
               }}
-              placeholder="value..."
+              placeholder={t('lensPanel.ruleEditor.attributeValuePlaceholder')}
               className={cn(inputClass, 'flex-1 min-w-0')}
             />
           </>
@@ -521,7 +493,7 @@ export function RuleEditor({
               const updated = { ...rule.criteria, materialName: mat };
               onChange({ criteria: updated, name: deriveRuleName(updated, resolveModelName) });
             }}
-            placeholder="Material..."
+            placeholder={t('lensPanel.ruleEditor.materialPlaceholder')}
             className="flex-1 min-w-0"
           />
         )}
@@ -530,7 +502,7 @@ export function RuleEditor({
         {criteriaType === 'model' && (
           modelOptions.length <= 1 ? (
             <span className="flex-1 min-w-0 text-xs text-zinc-400 dark:text-zinc-500 truncate">
-              {modelOptions.length === 0 ? 'No models loaded' : modelOptions[0]?.name ?? 'Model'}
+              {modelOptions.length === 0 ? t('lensPanel.ruleEditor.noModelsLoaded') : modelOptions[0]?.name ?? t('lensPanel.ruleEditor.modelFallbackLabel')}
             </span>
           ) : (
             <select
@@ -542,7 +514,7 @@ export function RuleEditor({
               }}
               className={cn(selectClass, 'flex-1 min-w-0')}
             >
-              <option value="">Model...</option>
+              <option value="">{t('lensPanel.ruleEditor.modelSelectPlaceholder')}</option>
               {modelOptions.map(m => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
@@ -559,7 +531,7 @@ export function RuleEditor({
               const updated = { ...rule.criteria, groupName: e.target.value };
               onChange({ criteria: updated, name: deriveRuleName(updated, resolveModelName) });
             }}
-            placeholder="Zone / group name (blank = any)"
+            placeholder={t('lensPanel.ruleEditor.groupPlaceholder')}
             className={cn(inputClass, 'flex-1 min-w-0')}
           />
         )}
@@ -567,7 +539,7 @@ export function RuleEditor({
         <button
           onClick={onDuplicate}
           className="text-zinc-400 hover:text-primary dark:text-zinc-500 dark:hover:text-primary p-0.5 flex-shrink-0"
-          title="Duplicate rule"
+          title={t('lensPanel.ruleEditor.duplicateTooltip')}
         >
           <Copy className="h-3.5 w-3.5" />
         </button>
@@ -575,7 +547,7 @@ export function RuleEditor({
         <button
           onClick={onRemove}
           className="text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 p-0.5 flex-shrink-0"
-          title="Remove rule"
+          title={t('lensPanel.ruleEditor.removeTooltip')}
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -588,7 +560,7 @@ export function RuleEditor({
             value={rule.criteria.propertySet ?? ''}
             options={psetNames}
             onChange={(pset) => onChange({ criteria: { ...rule.criteria, propertySet: pset, propertyName: '' } })}
-            placeholder="Property set..."
+            placeholder={t('lensPanel.ruleEditor.propertySetPlaceholder')}
             className="w-full"
           />
           <SearchableSelect
@@ -598,7 +570,7 @@ export function RuleEditor({
               const updated = { ...rule.criteria, propertyName: prop };
               onChange({ criteria: updated, name: deriveRuleName(updated, resolveModelName) });
             }}
-            placeholder="Property..."
+            placeholder={t('lensPanel.ruleEditor.propertyNamePlaceholder')}
             className="w-full"
           />
         </div>
@@ -611,7 +583,7 @@ export function RuleEditor({
             value={rule.criteria.quantitySet ?? ''}
             options={qsetNames}
             onChange={(qset) => onChange({ criteria: { ...rule.criteria, quantitySet: qset, quantityName: '' } })}
-            placeholder="Quantity set..."
+            placeholder={t('lensPanel.ruleEditor.quantitySetPlaceholder')}
             className="w-full"
           />
           <SearchableSelect
@@ -621,7 +593,7 @@ export function RuleEditor({
               const updated = { ...rule.criteria, quantityName: qty };
               onChange({ criteria: updated, name: deriveRuleName(updated, resolveModelName) });
             }}
-            placeholder="Quantity..."
+            placeholder={t('lensPanel.ruleEditor.quantityNamePlaceholder')}
             className="w-full"
           />
         </div>
@@ -634,7 +606,7 @@ export function RuleEditor({
             value={rule.criteria.classificationSystem ?? ''}
             options={classificationSystems}
             onChange={(sys) => onChange({ criteria: { ...rule.criteria, classificationSystem: sys } })}
-            placeholder="System..."
+            placeholder={t('lensPanel.ruleEditor.classificationSystemPlaceholder')}
             className="w-full"
           />
           <input
@@ -644,7 +616,7 @@ export function RuleEditor({
               const updated = { ...rule.criteria, classificationCode: e.target.value };
               onChange({ criteria: updated, name: deriveRuleName(updated, resolveModelName) });
             }}
-            placeholder="Code..."
+            placeholder={t('lensPanel.ruleEditor.classificationCodePlaceholder')}
             className={cn(inputClass, 'w-full')}
           />
         </div>
@@ -659,7 +631,7 @@ export function RuleEditor({
             className={cn(selectClass, 'w-[80px]')}
           >
             {LENS_OPERATORS.map((op) => (
-              <option key={op} value={op}>{OPERATOR_LABELS[op]}</option>
+              <option key={op} value={op}>{t(OPERATOR_LABEL_KEYS[op])}</option>
             ))}
           </select>
           {rule.criteria.operator && rule.criteria.operator !== 'exists' && (
@@ -674,7 +646,7 @@ export function RuleEditor({
                 const key = criteriaType === 'property' ? 'propertyValue' : 'quantityValue';
                 onChange({ criteria: { ...rule.criteria, [key]: e.target.value } });
               }}
-              placeholder="Value..."
+              placeholder={t('lensPanel.ruleEditor.valuePlaceholder')}
               className={cn(inputClass, 'flex-1 min-w-0')}
             />
           )}
@@ -683,9 +655,9 @@ export function RuleEditor({
             onChange={(e) => onChange({ action: e.target.value as LensRule['action'] })}
             className={cn(selectClass, 'w-[72px]')}
           >
-            <option value="colorize">Color</option>
-            <option value="transparent">Transp</option>
-            <option value="hide">Hide</option>
+            <option value="colorize">{t('lensPanel.action.colorize')}</option>
+            <option value="transparent">{t('lensPanel.action.transparent')}</option>
+            <option value="hide">{t('lensPanel.action.hide')}</option>
           </select>
         </div>
       )}
@@ -700,7 +672,7 @@ export function RuleEditor({
               className={cn(selectClass, 'w-[80px]')}
             >
               {LENS_OPERATORS.map((op) => (
-                <option key={op} value={op}>{OPERATOR_LABELS[op]}</option>
+                <option key={op} value={op}>{t(OPERATOR_LABEL_KEYS[op])}</option>
               ))}
             </select>
           )}
@@ -709,9 +681,9 @@ export function RuleEditor({
             onChange={(e) => onChange({ action: e.target.value as LensRule['action'] })}
             className={cn(selectClass, 'w-[72px]')}
           >
-            <option value="colorize">Color</option>
-            <option value="transparent">Transp</option>
-            <option value="hide">Hide</option>
+            <option value="colorize">{t('lensPanel.action.colorize')}</option>
+            <option value="transparent">{t('lensPanel.action.transparent')}</option>
+            <option value="hide">{t('lensPanel.action.hide')}</option>
           </select>
         </div>
       )}
@@ -734,6 +706,7 @@ function LensEditor({
   discovered: DiscoveredLensData | null;
   onRequestDiscovery: (categories: { properties?: boolean; quantities?: boolean; classifications?: boolean; materials?: boolean }) => void;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(initial.name);
   // Deep-clone each rule's criteria on entry - `initial` may be the SAME
   // object the store (or a `duplicateLens` copy) is currently holding, so a
@@ -814,7 +787,7 @@ function LensEditor({
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Lens name..."
+          placeholder={t('lensPanel.editor.namePlaceholder')}
           className="w-full px-2 py-1.5 text-xs font-bold uppercase tracking-wider bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 text-zinc-900 dark:text-zinc-100 rounded-sm placeholder:normal-case placeholder:font-normal placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
           autoFocus
         />
@@ -850,7 +823,7 @@ function LensEditor({
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary hover:text-primary/80 w-full"
         >
           <Plus className="h-3.5 w-3.5" />
-          Add Rule
+          {t('lensPanel.editor.addRule')}
         </button>
       </div>
 
@@ -864,7 +837,7 @@ function LensEditor({
           disabled={!canSave}
         >
           <Save className="h-3 w-3 mr-1" />
-          Save
+          {t('lensPanel.editor.save')}
         </Button>
         <Button
           variant="ghost"
@@ -872,7 +845,7 @@ function LensEditor({
           className="h-7 text-[10px] uppercase tracking-wider rounded-sm"
           onClick={onCancel}
         >
-          Cancel
+          {t('lensPanel.editor.cancel')}
         </Button>
       </div>
     </div>
@@ -894,6 +867,7 @@ export function AutoColorEditor({
   discovered: DiscoveredLensData | null;
   onRequestDiscovery: (categories: { properties?: boolean; quantities?: boolean; classifications?: boolean; materials?: boolean }) => void;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(initial.name);
   const [source, setSource] = useState<AutoColorSpec['source']>(initial.autoColor.source);
   const [psetName, setPsetName] = useState(initial.autoColor.psetName ?? '');
@@ -972,7 +946,7 @@ export function AutoColorEditor({
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Auto-color lens name..."
+          placeholder={t('lensPanel.autoColor.namePlaceholder')}
           className="w-full px-2 py-1.5 text-xs font-bold uppercase tracking-wider bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 text-zinc-900 dark:text-zinc-100 rounded-sm placeholder:normal-case placeholder:font-normal placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
           autoFocus
         />
@@ -981,11 +955,11 @@ export function AutoColorEditor({
       <div className="border-t border-zinc-200 dark:border-zinc-700 px-3 py-2 space-y-2 bg-zinc-50/50 dark:bg-zinc-800/50">
         <div className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
           <Sparkles className="h-3 w-3" />
-          <span>Auto-color by distinct values</span>
+          <span>{t('lensPanel.autoColor.byDistinctValues')}</span>
         </div>
 
         <div className="flex items-center gap-1.5">
-          <label className="text-[10px] uppercase tracking-wider text-zinc-500 w-[50px]">Source</label>
+          <label className="text-[10px] uppercase tracking-wider text-zinc-500 w-[50px]">{t('lensPanel.autoColor.sourceLabel')}</label>
           <select
             value={source}
             onChange={(e) => {
@@ -994,13 +968,13 @@ export function AutoColorEditor({
               setPsetName('');
               setPropertyName('');
               if (!name || name.startsWith('Color by ')) {
-                setName(`Color by ${TYPE_LABELS[s]}`);
+                setName(`Color by ${t(TYPE_LABEL_KEYS[s])}`);
               }
             }}
             className={cn(selectClass, 'flex-1')}
           >
             {AUTO_COLOR_SOURCES.map(s => (
-              <option key={s} value={s}>{TYPE_LABELS[s]}</option>
+              <option key={s} value={s}>{t(TYPE_LABEL_KEYS[s])}</option>
             ))}
           </select>
         </div>
@@ -1008,13 +982,13 @@ export function AutoColorEditor({
         {needsPset && (
           <div className="flex items-center gap-1.5">
             <label className="text-[10px] uppercase tracking-wider text-zinc-500 w-[50px]">
-              {source === 'property' ? 'Pset' : source === 'classification' ? 'System' : 'Qset'}
+              {source === 'property' ? t('lensPanel.autoColor.psetLabel') : source === 'classification' ? t('lensPanel.autoColor.systemLabel') : t('lensPanel.autoColor.qsetLabel')}
             </label>
             <SearchableSelect
               value={psetName}
               options={psetOptions}
               onChange={(v) => { setPsetName(v); setPropertyName(''); }}
-              placeholder={source === 'property' ? 'Select property set...' : source === 'classification' ? 'Select system...' : 'Select quantity set...'}
+              placeholder={source === 'property' ? t('lensPanel.autoColor.selectPropertySetPlaceholder') : source === 'classification' ? t('lensPanel.autoColor.selectSystemPlaceholder') : t('lensPanel.autoColor.selectQuantitySetPlaceholder')}
               className="flex-1"
             />
           </div>
@@ -1022,14 +996,14 @@ export function AutoColorEditor({
 
         {needsPropertyName && (
           <div className="flex items-center gap-1.5">
-            <label className="text-[10px] uppercase tracking-wider text-zinc-500 w-[50px]">Name</label>
+            <label className="text-[10px] uppercase tracking-wider text-zinc-500 w-[50px]">{t('lensPanel.autoColor.nameLabel')}</label>
             {source === 'attribute' ? (
               <select
                 value={propertyName}
                 onChange={(e) => setPropertyName(e.target.value)}
                 className={cn(selectClass, 'flex-1')}
               >
-                <option value="">Select...</option>
+                <option value="">{t('lensPanel.autoColor.selectPlaceholderOption')}</option>
                 {ENTITY_ATTRIBUTE_NAMES.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             ) : (
@@ -1037,7 +1011,7 @@ export function AutoColorEditor({
                 value={propertyName}
                 options={propertyOptions}
                 onChange={setPropertyName}
-                placeholder={source === 'property' ? 'Select property...' : 'Select quantity...'}
+                placeholder={source === 'property' ? t('lensPanel.autoColor.selectPropertyPlaceholder') : t('lensPanel.autoColor.selectQuantityPlaceholder')}
                 className="flex-1"
               />
             )}
@@ -1046,7 +1020,7 @@ export function AutoColorEditor({
 
         {source === 'classification' && (
           <label className="flex items-center justify-between gap-2 cursor-pointer pt-0.5">
-            <span className="text-[10px] uppercase tracking-wider text-zinc-500">Show unclassified</span>
+            <span className="text-[10px] uppercase tracking-wider text-zinc-500">{t('lensPanel.autoColor.showUnclassified')}</span>
             <input
               type="checkbox"
               checked={includeUnclassified}
@@ -1066,7 +1040,7 @@ export function AutoColorEditor({
           disabled={!canSave}
         >
           <Save className="h-3 w-3 mr-1" />
-          Save
+          {t('lensPanel.editor.save')}
         </Button>
         <Button
           variant="ghost"
@@ -1074,7 +1048,7 @@ export function AutoColorEditor({
           className="h-7 text-[10px] uppercase tracking-wider rounded-sm"
           onClick={onCancel}
         >
-          Cancel
+          {t('lensPanel.editor.cancel')}
         </Button>
       </div>
     </div>
@@ -1106,6 +1080,7 @@ function LensCard({
   ruleCounts?: Map<string, number>;
   autoColorLegend?: AutoColorLegendEntry[];
 }) {
+  const { t } = useTranslation();
   const isAutoColor = !!lens.autoColor;
   const enabledRuleCount = lens.rules.filter(r => r.enabled).length;
   const [legendSort, setLegendSort] = useState<'count' | 'name-asc' | 'name-desc'>('count');
@@ -1124,7 +1099,9 @@ function LensCard({
     setLegendSort(prev => prev === 'count' ? 'name-asc' : prev === 'name-asc' ? 'name-desc' : 'count');
   }, []);
 
-  const sortLabel = legendSort === 'count' ? 'Count' : legendSort === 'name-asc' ? 'A→Z' : 'Z→A';
+  const sortLabel = legendSort === 'count'
+    ? t('lensPanel.card.sortCount')
+    : legendSort === 'name-asc' ? t('lensPanel.card.sortNameAsc') : t('lensPanel.card.sortNameDesc');
 
   return (
     <div
@@ -1156,7 +1133,7 @@ function LensCard({
             <button
               onClick={(e) => { e.stopPropagation(); onDuplicate(lens.id); }}
               className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-200 p-0.5"
-              title={lens.builtin ? 'Duplicate into an editable copy' : 'Duplicate lens'}
+              title={lens.builtin ? t('lensPanel.card.duplicateBuiltinTooltip') : t('lensPanel.card.duplicateTooltip')}
             >
               <Copy className="h-3 w-3" />
             </button>
@@ -1165,7 +1142,7 @@ function LensCard({
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(lens); }}
               className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-200 p-0.5"
-              title="Edit lens"
+              title={t('lensPanel.card.editTooltip')}
             >
               <Pencil className="h-3 w-3" />
             </button>
@@ -1174,15 +1151,15 @@ function LensCard({
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(lens.id); }}
               className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 p-0.5"
-              title="Delete lens"
+              title={t('lensPanel.card.deleteTooltip')}
             >
               <Trash2 className="h-3 w-3" />
             </button>
           )}
           <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono ml-1">
             {isAutoColor
-              ? TYPE_LABELS[lens.autoColor!.source]
-              : `${enabledRuleCount} rules`}
+              ? t(TYPE_LABEL_KEYS[lens.autoColor!.source])
+              : t('lensPanel.card.ruleCount', { count: enabledRuleCount })}
           </span>
         </div>
       </div>
@@ -1192,12 +1169,12 @@ function LensCard({
         <div className="border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60" {...tourAnchor(TOUR_ANCHORS.lensLegend)}>
           <div className="flex items-center justify-between px-3 py-1 border-b border-zinc-200/60 dark:border-zinc-700/60">
             <span className="text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 font-medium">
-              {legendToShow.length} values
+              {t('lensPanel.card.legendValuesCount', { count: legendToShow.length })}
             </span>
             <button
               onClick={cycleLegendSort}
               className="flex items-center gap-0.5 text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300"
-              title="Sort legend entries"
+              title={t('lensPanel.card.sortLegendTooltip')}
             >
               <ArrowUpDown className="h-2.5 w-2.5" />
               {sortLabel}
@@ -1240,6 +1217,7 @@ function LensCard({
 // ─── Main panel ─────────────────────────────────────────────────────────────
 
 export function LensPanel({ onClose }: LensPanelProps) {
+  const { t } = useTranslation();
   const { activeLensId, savedLenses } = useLens();
   const setActiveLens = useViewerStore((s) => s.setActiveLens);
   const createLens = useViewerStore((s) => s.createLens);
@@ -1263,9 +1241,9 @@ export function LensPanel({ onClose }: LensPanelProps) {
   const setLensAppliedHiddenIds = useViewerStore((s) => s.setLensAppliedHiddenIds);
   const lensRuleIsolation = useViewerStore((s) => s.lensRuleIsolation);
   const setLensRuleIsolation = useViewerStore((s) => s.setLensRuleIsolation);
-  // For footer stats — cheap primitive subscriptions
+  // Footer count only: useLens pushes colours via pendingColorUpdates, so no effect keys off this and `.size` is safe (#5206).
   const lensColorMapSize = useViewerStore((s) => s.lensColorMap.size);
-  const lensHiddenIdsSize = useViewerStore((s) => s.lensHiddenIds.size);
+  const lensHiddenIds = useViewerStore((s) => s.lensHiddenIds); // drives the hide-sync effect: identity, not `.size` (#5206)
   const lensRuleCounts = useViewerStore((s) => s.lensRuleCounts);
   const lensAutoColorLegend = useViewerStore((s) => s.lensAutoColorLegend);
   // Discovered data from loaded models (classes = instant, rest = lazy)
@@ -1310,9 +1288,9 @@ export function LensPanel({ onClose }: LensPanelProps) {
 
     // Run discovery async to not block the UI
     setTimeout(() => {
-      const { models, ifcDataStore } = useViewerStore.getState();
+      const { models, ifcDataStore, mutationViews, resolveGlobalIdFromModels } = useViewerStore.getState();
       if (models.size === 0 && !ifcDataStore) return;
-      const provider = createLensDataProvider(models, ifcDataStore);
+      const provider = createLensDataProvider(models, ifcDataStore, mutationViews, resolveGlobalIdFromModels);
       const result = discoverDataSources(provider, toDiscover);
       mergeDiscoveredData(result);
     }, 0);
@@ -1527,7 +1505,7 @@ export function LensPanel({ onClose }: LensPanelProps) {
     if (plan.nextApplied.length > 0 || state.lensAppliedHiddenIds.length > 0) {
       setLensAppliedHiddenIds(plan.nextApplied);
     }
-  }, [activeLensId, lensHiddenIdsSize, hideEntities, showEntities, setLensAppliedHiddenIds]);
+  }, [activeLensId, lensHiddenIds, hideEntities, showEntities, setLensAppliedHiddenIds]);
 
   const handleExport = useCallback(() => {
     const data = exportLenses();
@@ -1556,7 +1534,7 @@ export function LensPanel({ onClose }: LensPanelProps) {
         <div className="flex items-center gap-2">
           <Palette className="h-4 w-4 text-primary" />
           <h2 className="font-bold uppercase tracking-wider text-xs text-zinc-900 dark:text-zinc-100">
-            Lens
+            {t('lensPanel.title')}
           </h2>
         </div>
         <div className="flex items-center gap-1">
@@ -1565,7 +1543,7 @@ export function LensPanel({ onClose }: LensPanelProps) {
             size="sm"
             className="h-7 w-7 p-0 rounded-sm"
             onClick={handleExport}
-            title="Export lenses as JSON"
+            title={t('lensPanel.exportTooltip')}
           >
             <Download className="h-3.5 w-3.5" />
           </Button>
@@ -1574,7 +1552,7 @@ export function LensPanel({ onClose }: LensPanelProps) {
             size="sm"
             className="h-7 w-7 p-0 rounded-sm"
             onClick={() => fileInputRef.current?.click()}
-            title="Import lenses from JSON"
+            title={t('lensPanel.importTooltip')}
           >
             <Upload className="h-3.5 w-3.5" />
           </Button>
@@ -1600,7 +1578,7 @@ export function LensPanel({ onClose }: LensPanelProps) {
               {...tourAnchor(TOUR_ANCHORS.lensClear)}
             >
               <EyeOff className="h-3 w-3 mr-1" />
-              Clear
+              {t('lensPanel.clearButton')}
             </Button>
           )}
           {onClose && (
@@ -1608,7 +1586,7 @@ export function LensPanel({ onClose }: LensPanelProps) {
               variant="ghost"
               size="sm"
               className="h-7 w-7 p-0 rounded-sm"
-              aria-label="Close"
+              aria-label={t('lensPanel.closeAriaLabel')}
               onClick={onClose}
             >
               <X className="h-4 w-4" />
@@ -1694,14 +1672,14 @@ export function LensPanel({ onClose }: LensPanelProps) {
               className="w-full border-2 border-dashed border-zinc-300 dark:border-zinc-600 hover:border-primary dark:hover:border-primary py-2.5 flex items-center justify-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-primary transition-colors rounded-sm"
             >
               <Plus className="h-3.5 w-3.5" />
-              New Rule Lens
+              {t('lensPanel.newRuleLensButton')}
             </button>
             <button
               onClick={handleNewAutoColorLens}
               className="w-full border-2 border-dashed border-zinc-300 dark:border-zinc-600 hover:border-primary dark:hover:border-primary py-2.5 flex items-center justify-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-primary transition-colors rounded-sm"
             >
               <Sparkles className="h-3.5 w-3.5" />
-              New Auto-Color Lens
+              {t('lensPanel.newAutoColorLensButton')}
             </button>
           </div>
         )}
@@ -1710,8 +1688,13 @@ export function LensPanel({ onClose }: LensPanelProps) {
       {/* Status footer */}
       <div className="p-2 border-t-2 border-zinc-200 dark:border-zinc-800 text-[10px] uppercase tracking-wide text-zinc-600 dark:text-zinc-400 text-center bg-zinc-50 dark:bg-zinc-900 font-mono">
         {activeLensId
-          ? `Active · ${lensColorMapSize} colored · ${lensHiddenIdsSize > 0 ? `${lensHiddenIdsSize} hidden` : 'ghosted'}`
-          : 'Click a lens to activate'}
+          ? t('lensPanel.footer.active', {
+              colored: lensColorMapSize,
+              hidden: lensHiddenIds.size > 0
+                ? t('lensPanel.footer.hiddenCount', { count: lensHiddenIds.size })
+                : t('lensPanel.footer.ghosted'),
+            })
+          : t('lensPanel.footer.clickToActivate')}
       </div>
     </div>
   );

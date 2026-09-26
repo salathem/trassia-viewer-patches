@@ -1,31 +1,35 @@
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index 0d9a109..553537c 100644
+index b295002..e38eee2 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
-@@ -34,6 +34,8 @@ import {
-   Layers as LayersIcon,
-   Box,
-   FileWarning,
+@@ -18,6 +18,12 @@
+  */
+ 
+ import { BarChart3, Box, CalendarRange, ClipboardCheck, Cloud, Coins, Crosshair, FileText, FileWarning, GitCompareArrows, Info, Layers as LayersIcon, ListTree, MessageSquare, Move3d, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
++// Trassia overlay (not upstream) — Symbole der Trassia-Panels als eigener Import:
++// robust gegen Umformatierungen der Upstream-Importzeile (Pin 10.x zog sie in eine Zeile).
++import {
 +  // Trassia overlay (not upstream) — Paket V-DRAPE.
 +  Mountain,
-   type LucideIcon,
- } from 'lucide-react';
++} from 'lucide-react';
  
-@@ -59,7 +61,9 @@ export type WorkspacePanelId =
-   | 'layers'
-   | 'zones'
-   | 'loadReport'
--  | 'appearance';
-+  | 'appearance'
+ /** Every panel reachable from the unified sidebar rail. `properties` is the
+  *  Information panel (the right pane's default fallback). Each panel opens in
+@@ -51,7 +57,9 @@ export type WorkspacePanelId =
+   | 'pointclouds'
+   | 'measurements'
+   | 'placement'
+-  | 'presentation';
++  | 'presentation'
 +  // Trassia overlay (not upstream) — Paket V-DRAPE.
 +  | 'drape';
  
  /** Activity-bar clustering — a divider is drawn whenever the group changes. */
  export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
-@@ -120,6 +124,11 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
-   // non-SIDEBAR_PANEL_FLAGS branch adopts it directly (issue #3927).
-   { id: 'loadReport', title: 'Load report', short: 'Load report', Icon: FileWarning, group: 'review', region: 'side' },
-   { id: 'appearance', title: 'Appearance', short: 'Appearance', Icon: Palette, group: 'author', region: 'side' },
+@@ -171,6 +179,11 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   // shortcut). Entry points: the status bar and the ribbon / classic
+   // toolbar's Present button.
+   { id: 'presentation', title: 'Presentation', short: 'Present', Icon: Presentation, group: 'work', region: 'bottom', prefersWide: true },
 +  // Trassia (Paket V-DRAPE): 2D-Daten (DXF, GeoJSON/WFS) auf die
 +  // Gelaendeoberflaeche legen. ANGEHAENGT, damit die eingefrorene
 +  // Alt+1..0-Zuordnung der ersten zehn Eintraege unberuehrt bleibt — dieses
@@ -33,21 +37,21 @@ index 0d9a109..553537c 100644
 +  { id: 'drape', title: 'Terrain drape', short: 'Drape', Icon: Mountain, group: 'author', region: 'side' },
  ];
  
- /** The bottom-strip panel ids, mapped to their store visibility flag + setter
+ // The bottom strip (Script / Schedule / Lists) is table-driven; the id union and
 diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-index 890cfee..f691fd5 100644
+index a36669d..c6d15e6 100644
 --- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
 +++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-@@ -28,6 +28,8 @@ import { ListPanel } from '@/components/viewer/lists/ListPanel';
- import { RoomPanel } from '@/components/viewer/RoomPanel';
- import { ZonesPanel } from '@/components/viewer/ZonesPanel';
- import { LoadReportPanel } from '@/components/viewer/LoadReportPanel';
+@@ -34,6 +34,8 @@ import { PointCloudPanel } from '@/components/viewer/PointCloudPanel';
+ import { MeasurementsPanel } from '@/components/viewer/MeasurementsPanel';
+ import { PlacementPanel } from '@/components/viewer/placement/PlacementPanel';
+ import { useViewerStore } from '@/store';
 +// Trassia overlay (not upstream) — Paket V-DRAPE, siehe ChDrapePanel.tsx.
 +import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
  // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
  // dynamic chunk keeps it out of the initial bundle until first opened.
  const LayersPanel = lazy(() =>
-@@ -79,6 +81,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+@@ -143,6 +145,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
      case 'collab': return <RoomPanel onClose={onClose} />;
      case 'zones': return <ZonesPanel onClose={onClose} />;
      case 'loadReport': return <LoadReportPanel onClose={onClose} />;
@@ -55,4 +59,4 @@ index 890cfee..f691fd5 100644
 +    case 'drape': return <ChDrapePanel onClose={onClose} />;
      case 'layers': return <LayersPanelBody onClose={onClose} />;
      case 'sources': return <SourcesPanelBody onClose={onClose} />;
-   }
+     case 'charts': return <ChartsPanelBody />;

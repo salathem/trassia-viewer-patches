@@ -1,9 +1,9 @@
 diff --git a/apps/viewer/src/components/viewer/PropertiesPanel.tsx b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-index c0efa60..7c6b12b 100644
+index 83a0557..36f5a3f 100644
 --- a/apps/viewer/src/components/viewer/PropertiesPanel.tsx
 +++ b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-@@ -45,6 +45,9 @@ import { CoordVal, CoordRow } from './properties/CoordinateDisplay';
- import { renderToWorldViewer, viewerToIfcAxes } from './tools/measure-modes/coordinates';
+@@ -34,6 +34,9 @@ import { getEffectiveGeoreference } from '@/lib/geo/effective-georef';
+ import { displayStoreyElevationMeters } from '@/lib/geo/storey-elevation';
  import { useRenderFrameOffsets } from '@/hooks/useRenderFrameOffsets';
  import { PropertySetCard } from './properties/PropertySetCard';
 +// Trassia overlay — see lib/ch/ch-psets.ts for why.
@@ -11,8 +11,8 @@ index c0efa60..7c6b12b 100644
 +import { ChPropertyFilterBar } from './properties/ChPropertyFilterBar';
  import { QuantitySetCard } from './properties/QuantitySetCard';
  import { ModelMetadataPanel } from './properties/ModelMetadataPanel';
- import { ClassificationCard } from './properties/ClassificationCard';
-@@ -209,6 +212,10 @@ export function PropertiesPanel() {
+ import { useLandXmlSourceInspector } from './properties/useLandXmlSourceInspector';
+@@ -169,6 +172,10 @@ export function PropertiesPanel() {
    const [copied, setCopied] = useState(false);
    const [coordCopied, setCoordCopied] = useState<string | null>(null);
    const [coordOpen, setCoordOpen] = useState(false);
@@ -23,7 +23,7 @@ index c0efa60..7c6b12b 100644
  
    // Inline property editing is gated by the global edit-mode pill in
    // the main toolbar (see `uiSlice.editEnabled`). Reading it from the
-@@ -1162,8 +1169,12 @@ export function PropertiesPanel() {
+@@ -1158,8 +1165,12 @@ export function PropertiesPanel() {
    const renderedEntityDescription = overlayAttr(3) ?? entityNode?.description ?? undefined;
    const renderedEntityObjectType = overlayAttr(4) ?? entityNode?.objectType ?? undefined;
    const renderedSpatialInfo = spatialInfo;
@@ -38,7 +38,7 @@ index c0efa60..7c6b12b 100644
    const renderedMergedProperties = mergedProperties;
    const renderedQuantities = quantities;
    const renderedQuantitiesWithInheritedType = quantitiesWithInheritedType;
-@@ -1601,6 +1612,15 @@ export function PropertiesPanel() {
+@@ -1600,6 +1611,15 @@ export function PropertiesPanel() {
                  <TaskEditCard taskGlobalId={singleSelectedTaskGlobalId} />
                </div>
              )}
@@ -54,7 +54,7 @@ index c0efa60..7c6b12b 100644
              {/* Edit toolbar - only shown when edit mode is active */}
              {editMode && selectedEntity && (
                <>
-@@ -1646,6 +1666,7 @@ export function PropertiesPanel() {
+@@ -1645,6 +1665,7 @@ export function PropertiesPanel() {
                        <PropertySetCard
                          key={`occ-${pset.name}-${index}`}
                          pset={pset}
@@ -62,7 +62,7 @@ index c0efa60..7c6b12b 100644
                          modelId={selectedEntity?.modelId}
                          entityId={selectedEntity?.expressId}
                          enableEditing={editMode}
-@@ -1673,6 +1694,7 @@ export function PropertiesPanel() {
+@@ -1672,6 +1693,7 @@ export function PropertiesPanel() {
                        <PropertySetCard
                          key={`type-${pset.name}-${index}`}
                          pset={pset}
@@ -71,10 +71,10 @@ index c0efa60..7c6b12b 100644
                          entityId={renderedTypeProperties.typeId}
                          enableEditing={editMode}
 diff --git a/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx b/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx
-index f34b5d6..24f7835 100644
+index 2e41481..b81a4e6 100644
 --- a/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx
 +++ b/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx
-@@ -38,9 +38,14 @@ export interface PropertySetCardProps {
+@@ -39,9 +39,14 @@ export interface PropertySetCardProps {
     *  renders CONVERTED into that unit instead of the file's raw value.
     *  Omitted (or empty) keeps the existing unconverted-file-unit display. */
    unitDisplayOverrides?: Record<string, string>;
@@ -87,13 +87,13 @@ index f34b5d6..24f7835 100644
  
 -export function PropertySetCard({ pset, modelId, entityId, enableEditing, isTypeProperty, typeEditScope, focusedPropKey, projectUnits, unitDisplayOverrides }: PropertySetCardProps) {
 +export function PropertySetCard({ pset, modelId, entityId, enableEditing, isTypeProperty, typeEditScope, focusedPropKey, projectUnits, unitDisplayOverrides, chGroupLabel }: PropertySetCardProps) {
+   const { t } = useTranslation();
    // Check if any property in this set is mutated
    const hasMutations = pset.properties.some(p => p.isMutated);
-   const isNewPset = pset.isNewPset;
-@@ -103,6 +108,13 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
+@@ -105,6 +110,13 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
            </Tooltip>
          )}
-         <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-0">{setDisplayName(pset.name, 'Property Set')}</span>
+         <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-0">{setDisplayName(pset.name, t('properties.propertySet.unnamed'))}</span>
 +        {/* Trassia: names WHY this set is at the top of the panel. Data
 +            provenance is the first question on a converted Swiss model. */}
 +        {chGroupLabel && (

@@ -1,21 +1,20 @@
 diff --git a/apps/viewer/src/components/viewer/PropertiesPanel.tsx b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-index 7c6b12b..54a3601 100644
+index 36f5a3f..6a51624 100644
 --- a/apps/viewer/src/components/viewer/PropertiesPanel.tsx
 +++ b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-@@ -41,7 +41,10 @@ import { ZoneVolumeBreakdown } from './ZoneVolumeBreakdown';
+@@ -27,7 +27,9 @@ import type { EntityRef, FederatedModel } from '@/store/types';
+ import { ZoneVolumeBreakdown } from './ZoneVolumeBreakdown';
  import type { ZoneSet } from '@/lib/zones';
  import { withInheritedTypeQuantities } from '@/lib/zones/inherited-quantities';
- 
 -import { CoordVal, CoordRow } from './properties/CoordinateDisplay';
 +import { CoordRow } from './properties/CoordinateDisplay';
-+// Trassia overlay — the World row used to print the model's own world
-+// coordinates under the letters E/N beside an EPSG chip. See the file.
++// Trassia overlay — projected coordinates with their actual reference frame.
 +import { ChWorldSummary, ChWorldRows } from './properties/ChWorldPosition';
- import { renderToWorldViewer, viewerToIfcAxes } from './tools/measure-modes/coordinates';
- import { useRenderFrameOffsets } from '@/hooks/useRenderFrameOffsets';
- import { PropertySetCard } from './properties/PropertySetCard';
-@@ -1392,16 +1395,11 @@ export function PropertiesPanel() {
-               <span className="font-bold uppercase tracking-wide shrink-0">World</span>
+ import { renderToWorldViewer } from './tools/measure-modes/coordinates';
+ import { viewerToIfcAxes } from '@/lib/geo/coordinate-frame';
+ import { getEffectiveGeoreference } from '@/lib/geo/effective-georef';
+@@ -1391,16 +1393,11 @@ export function PropertiesPanel() {
+               <span className="font-bold uppercase tracking-wide shrink-0">{t('properties.panel.worldCoordinates')}</span>
                {!coordOpen && (
                  <>
 -                  {entityCoordinates && (
@@ -33,10 +32,10 @@ index 7c6b12b..54a3601 100644
 +                      numbers are actually in — or the model coordinate labelled
 +                      `local` with no EPSG chip at all. */}
 +                  <ChWorldSummary coordinates={entityCoordinates} />
-                   <span className="text-[9px] text-teal-500/0 group-hover/coord:text-teal-500/40 transition-colors shrink-0">details</span>
+                   <span className="text-[9px] text-teal-500/0 group-hover/coord:text-teal-500/40 transition-colors shrink-0">{t('properties.panel.worldCoordinatesDetails')}</span>
                  </>
                )}
-@@ -1409,15 +1407,11 @@ export function PropertiesPanel() {
+@@ -1408,15 +1405,11 @@ export function PropertiesPanel() {
              <CollapsibleContent>
                {entityCoordinates && (
                  <div className="px-2 py-1.5 space-y-0.5">
@@ -58,10 +57,10 @@ index 7c6b12b..54a3601 100644
                      onCopy={copyCoords}
                    />
 diff --git a/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx b/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx
-index dcb3d62..11f804e 100644
+index 0668b0a..b770e66 100644
 --- a/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx
 +++ b/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx
-@@ -990,9 +990,18 @@ describe('guard sanity', () => {
+@@ -1027,9 +1027,18 @@ describe('guard sanity', () => {
  
        const container = renderNode(<PropertiesPanel />);
        const text = container.textContent ?? '';

@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/HierarchyPanel.tsx b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
-index 07c807b..0d62d07 100644
+index 67930ba..6a33e28 100644
 --- a/apps/viewer/src/components/viewer/HierarchyPanel.tsx
 +++ b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
-@@ -39,6 +39,12 @@ import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
+@@ -34,6 +34,12 @@ import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
  // Trassia overlay (Paket V-TILES) — die Kachelsaetze der Projektmappe stehen
  // ueber der Modellliste. Ohne Kachelsatz rendert die Komponente nichts.
  import { ChTileLayers } from './ChTileLayers';
@@ -14,8 +14,8 @@ index 07c807b..0d62d07 100644
 +import { collectAggregatedDescendants, type AggregationRelationships } from '@/utils/aggregation';
  
  export function HierarchyPanel() {
-   const {
-@@ -275,6 +281,33 @@ export function HierarchyPanel() {
+   const { t } = useTranslation();
+@@ -271,6 +277,33 @@ export function HierarchyPanel() {
      }
    }, [getNodeElements, hiddenEntities, hideEntities, showEntities, selectedEntityId, clearSelection]);
  
@@ -49,7 +49,7 @@ index 07c807b..0d62d07 100644
    // Handle model visibility toggle
    const handleModelVisibilityToggle = useCallback((modelId: string, e: React.MouseEvent) => {
      e.stopPropagation();
-@@ -358,6 +391,11 @@ export function HierarchyPanel() {
+@@ -350,6 +383,11 @@ export function HierarchyPanel() {
  
    // Handle node click - for selection/isolation or expand/collapse
    const handleNodeClick = useCallback((node: TreeNode, e: React.MouseEvent) => {
@@ -61,12 +61,12 @@ index 07c807b..0d62d07 100644
      if (node.type === 'model-header' && node.id !== 'models-header') {
        // Model header click handled by its own onClick (expand/collapse)
        return;
-@@ -1053,9 +1091,10 @@ export function HierarchyPanel() {
+@@ -1043,9 +1081,10 @@ export function HierarchyPanel() {
              </div>
            </div>
          ) : (
 -          <div className="p-2 border-t-2 border-zinc-200 dark:border-zinc-800 text-[10px] uppercase tracking-wide text-zinc-500 dark:text-zinc-500 text-center bg-zinc-50 dark:bg-black font-mono">
--            {models.size} models · Drag divider to resize
+-            {t('hierarchy.panel.modelsFooterHint', { count: models.size })}
 -          </div>
 +          // Trassia (U3-klein, Marco E21): kein Fussbalken «n models · Drag
 +          // divider to resize» — die Modellzahl steht im Abschnittskopf, der
@@ -75,128 +75,11 @@ index 07c807b..0d62d07 100644
          )}
        </div>
      );
-diff --git a/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx b/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx
-index 65311db..35883e0 100644
---- a/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx
-+++ b/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx
-@@ -18,6 +18,9 @@ import { cn } from '@/lib/utils';
- import type { TreeNode } from './types';
- import { isSpatialContainer } from './types';
- import { IFC_ICON_CODEPOINTS, IFC_ICON_DEFAULT } from './ifc-icons';
-+// Trassia overlay (Paket U3-klein): Zeilen-Auswahl fuer die Leertaste —
-+// Hervorhebung gewaehlter Zeilen und Ctrl-Klick auf der Modellzeile.
-+import { chZeilenKlick, useChZeileGewaehlt } from '@/lib/ch/zeilen-auswahl';
- 
- /**
-  * Resolve the Material Symbols code point for a given IFC type string.
-@@ -75,6 +78,8 @@ export function HierarchyNode({
-   // Use Lucide icon for non-IFC structural nodes, Material Symbols for IFC classes
-   const LucideIcon = NODE_TYPE_ICONS[node.type];
-   const iconCodepoint = getIfcIconCodepoint(resolvedType);
-+  // Trassia (U3-klein): steht die Zeile in der Zeilen-Auswahl (Leertaste)?
-+  const chGewaehlt = useChZeileGewaehlt(node.id);
- 
-   // Spatial containers, storeys, spaces, and grouping headers get the emphasized
-   // label treatment; element rows stay lighter.
-@@ -108,14 +113,19 @@ export function HierarchyNode({
-       >
-         <div
-           className={cn(
--            'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group',
-+            'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group ch-zeile',
-             'hover:bg-zinc-50 dark:hover:bg-zinc-900',
-             'border-transparent',
-             !modelVisible && 'opacity-50',
--            node.hasChildren && 'cursor-pointer'
-+            node.hasChildren && 'cursor-pointer',
-+            chGewaehlt && 'ch-zeile-gewaehlt'
-           )}
-           style={{ paddingLeft: '8px' }}
--          onClick={() => onModelHeaderClick(modelId, node.id, node.hasChildren)}
-+          onClick={(e) => {
-+            // Trassia (U3-klein): Ctrl-Klick = Zeile in die Auswahl, sonst Upstream.
-+            if (!chZeilenKlick(node, e)) return;
-+            onModelHeaderClick(modelId, node.id, node.hasChildren);
-+          }}
-         >
-           {/* Expand/collapse chevron */}
-           {node.hasChildren ? (
-@@ -130,14 +140,26 @@ export function HierarchyNode({
-           )}
- 
-           <FileBox className="h-3.5 w-3.5 text-primary shrink-0" />
--          <span className="flex-1 text-sm truncate ml-1.5 text-zinc-900 dark:text-zinc-100">
-+          <span className="flex-1 min-w-0 text-sm truncate ml-1.5 text-zinc-900 dark:text-zinc-100">
-             {node.name}
-           </span>
- 
-           {node.elementCount !== undefined && (
--            <span className="text-[10px] font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-zinc-500 dark:text-zinc-400 rounded-none">
--              {node.elementCount.toLocaleString()}
--            </span>
-+            // Trassia (U3-klein, TODO #29): klein und grau, mit Zaehlweise im
-+            // Tooltip — die Zahl der Modellzeile sind ALLE IFC-Entitaeten.
-+            <Tooltip>
-+              <TooltipTrigger asChild>
-+                {/* Tester U3 M-1/N-2/N-4: eine Zahl darf weder den Namen auf 0 px druecken noch gekuerzt
-+                    werden (eine Ziffer ohne Auslassung ist eine falsche Zahl). Sie faellt weg, wenn die
-+                    ZEILE schmal ist (Container-Query in ch-dichte.css Regel 10) — nicht das Fenster. */}
-+                <span className="ch-zeilenzahl text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500 px-1 shrink-0">
-+                  {node.elementCount.toLocaleString()}
-+                </span>
-+              </TooltipTrigger>
-+              <TooltipContent>
-+                <p className="text-xs">{node.elementCount.toLocaleString()} IFC entities in this model (all entity types, not only building elements)</p>
-+              </TooltipContent>
-+            </Tooltip>
-           )}
- 
-           <button className="p-0.5" aria-label={`Reposition model ${node.name}`} title="Reposition model"
-@@ -239,7 +261,7 @@ export function HierarchyNode({
-     >
-       <div
-         className={cn(
--          'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group hierarchy-item',
-+          'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group hierarchy-item ch-zeile',
-           // No selection styling for spatial containers in multi-model mode
-           isMultiModel && isSpatialContainer(node.type)
-             ? 'border-transparent cursor-default'
-@@ -247,7 +269,8 @@ export function HierarchyNode({
-                 'cursor-pointer',
-                 isSelected ? 'border-l-primary font-medium selected' : 'border-transparent'
-               ),
--          nodeHidden && 'opacity-50 grayscale'
-+          nodeHidden && 'opacity-50 grayscale',
-+          chGewaehlt && 'ch-zeile-gewaehlt'
-         )}
-         style={{
-           paddingLeft: `${node.depth * 16 + 8}px`,
-@@ -384,12 +407,18 @@ export function HierarchyNode({
-         {node.elementCount !== undefined && (
-           <Tooltip>
-             <TooltipTrigger asChild>
--              <span className="text-[10px] font-mono bg-zinc-100 dark:bg-zinc-950 px-1.5 py-0.5 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-none">
-+              {/* Trassia (U3-klein, TODO #29): klein und grau statt Kasten mit Rahmen; in schmalen Zeilen weg statt gekuerzt (Tester N-2/N-4, Container-Query). */}
-+              <span className="ch-zeilenzahl text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500 px-1 shrink-0">
-                 {node.elementCount.toLocaleString()}
-               </span>
-             </TooltipTrigger>
-             <TooltipContent>
--              <p className="text-xs">{node.elementCount.toLocaleString()} {node.elementCount === 1 ? 'element' : 'elements'}</p>
-+              {/* Tester U3 M-2: auf Container-Zeilen zaehlt der Upstream die direkten Eintraege, nicht die Elemente darunter. */}
-+              <p className="text-xs">
-+                {isSpatialContainer(node.type) || node.type === 'element'
-+                  ? `${node.elementCount.toLocaleString()} direct ${node.elementCount === 1 ? 'entry' : 'entries'} under this row (not the elements further down)`
-+                  : `${node.elementCount.toLocaleString()} ${node.elementCount === 1 ? 'element' : 'elements'} in this row`}
-+              </p>
-             </TooltipContent>
-           </Tooltip>
-         )}
 diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-index a01e484..5a32a37 100644
+index 34ac55c..ab73211 100644
 --- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
 +++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-@@ -16,6 +16,10 @@ import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
+@@ -17,6 +17,10 @@ import { bottomPanelFlags } from '@/lib/panels/bottom-panels';
  // Panels, die in der Leiste stehen (nicht versteckt — der Nutzer kann sie im
  // Anpassen-Dialog einblenden); ?voll=1 wie Upstream. Siehe lib/ch/modus.ts.
  import { chVollmodus } from '@/lib/ch/modus';
@@ -205,9 +88,9 @@ index a01e484..5a32a37 100644
 +// eigenem Zustand; ohne Zeilen-Auswahl je gewaehltem Element nach Zustand.
 +import { chElementePlan, chPlanAusfuehren, chZeilenAuswahl, chZeilenAuswahlLeeren, chZeilenSichtbarkeitUmschalten } from '@/lib/ch/zeilen-auswahl';
  import { closeAllPanelWindows } from '@/services/panel-windows';
- import { eventKey, isTextEntryTarget } from '@/lib/keyboard-event';
+ import { eventKey, isTextEntryTarget, WALK_MOVEMENT_KEYS } from '@/lib/keyboard-event';
  import {
-@@ -240,13 +244,32 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+@@ -244,13 +248,32 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
        const ids = getAllSelectedGlobalIds();
        hideEntities(ids);
      }
@@ -246,7 +129,7 @@ index a01e484..5a32a37 100644
        }
      }
      if (key === 'a' && !ctrl && !shift) {
-@@ -389,6 +412,8 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+@@ -384,6 +407,8 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
        // sich selbst per Escape) gehoert dazu.
        if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return;
        e.preventDefault();
@@ -255,14 +138,3 @@ index a01e484..5a32a37 100644
        const now = Date.now();
        const timeSinceLastEscape = now - lastEscapeRef.current;
        lastEscapeRef.current = now;
-@@ -481,7 +506,9 @@ export const KEYBOARD_SHORTCUTS = [
-   { key: '−', description: 'Remove current context from basket', category: 'Visibility' },
-   { key: 'D', description: 'Toggle basket presentation dock', category: 'Visibility' },
-   { key: 'B', description: 'Save basket as presentation view', category: 'Visibility' },
--  { key: 'Del / Space', description: 'Hide selection', category: 'Visibility' },
-+  { key: 'Del', description: 'Hide selection', category: 'Visibility' },
-+  // Trassia (U3-klein): die Leertaste schaltet um, je Zeile nach eigenem Zustand.
-+  { key: 'Space', description: 'Toggle visibility of the selected tree rows (Ctrl-click rows of any level to select them) or of the selected elements — each by its own state; a partly visible group hides, a second press brings it back', category: 'Visibility' },
-   { key: 'A', description: 'Show all (clear filters and basket)', category: 'Visibility' },
-   { key: 'H', description: 'Home (isometric + reset visibility)', category: 'Camera' },
-   { key: 'Z', description: 'Fit all (zoom extents)', category: 'Camera' },

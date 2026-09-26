@@ -1,19 +1,19 @@
 diff --git a/apps/viewer/src/components/viewer/StatusBar.tsx b/apps/viewer/src/components/viewer/StatusBar.tsx
-index 26ff417..4806d1d 100644
+index 4511f25..c08b2d1 100644
 --- a/apps/viewer/src/components/viewer/StatusBar.tsx
 +++ b/apps/viewer/src/components/viewer/StatusBar.tsx
-@@ -12,6 +12,10 @@ import { useWebGPU } from '@/hooks/useWebGPU';
- import { FlavorIndicator } from '@/components/extensions/FlavorIndicator';
- import { FlavorDialog } from '@/components/extensions/FlavorDialog';
- import { createStatusBarStatsAccumulator } from './statusBarStats.js';
+@@ -30,6 +30,10 @@ interface CountedModel {
+   meshedIds: Set<number>;
+   geometryReady: boolean;
+ }
 +// Trassia overlay (Paket UX-KOPF, Marco-Befund 2026-09-02): der Status der
 +// Projektmappe wohnt in der halb leeren Fusszeile statt in einer eigenen
 +// Kopfzeile ueber dem Bild.
 +import { ChProjektFuss } from './ChProjektFuss';
  
  export function StatusBar() {
-   const { loading, geometryResult, ifcDataStore, models } = useIfc();
-@@ -122,7 +126,10 @@ export function StatusBar() {
+   const { t } = useTranslation();
+@@ -258,7 +262,10 @@ export function StatusBar() {
    return (
      <div className="h-7 px-3 border-t bg-muted/30 flex items-center justify-between text-xs text-muted-foreground">
        {/* Left: Status */}
@@ -23,11 +23,11 @@ index 26ff417..4806d1d 100644
 +          und truncat statt die Zeile zu sprengen (Ueberlauf bei 768 px). */}
 +      <div className="flex min-w-0 flex-1 items-center gap-3">
          {loading ? (
-           <span className="text-primary">{progress?.phase || 'Loading...'}</span>
+           <span className="text-primary">{progress?.phase || t('shellChrome.statusBar.loadingFallback')}</span>
          ) : error ? (
-@@ -143,10 +150,12 @@ export function StatusBar() {
-             Cancel
-           </button>
+@@ -312,10 +319,12 @@ export function StatusBar() {
+             </span>
+           </>
          )}
 +        {/* Trassia (UX-KOPF): Projektmappen-Status — Name, n/m, Restphase. */}
 +        <ChProjektFuss />
@@ -39,68 +39,20 @@ index 26ff417..4806d1d 100644
          <div className="flex items-center gap-1.5">
            <Boxes className="h-3.5 w-3.5" />
            <span>
-@@ -167,7 +176,7 @@ export function StatusBar() {
+@@ -338,7 +347,7 @@ export function StatusBar() {
        </div>
  
        {/* Right: Performance */}
 -      <div className="flex items-center gap-3">
 +      <div className="flex shrink-0 items-center gap-3">
          <span className={fps < 30 ? 'text-destructive' : fps < 50 ? 'text-yellow-500' : ''}>
-           {fps} FPS
+           {fps} {t('shellChrome.statusBar.fpsUnit')}
          </span>
-diff --git a/apps/viewer/src/components/viewer/SunSkyPanel.tsx b/apps/viewer/src/components/viewer/SunSkyPanel.tsx
-index 86fdb1e..efb8315 100644
---- a/apps/viewer/src/components/viewer/SunSkyPanel.tsx
-+++ b/apps/viewer/src/components/viewer/SunSkyPanel.tsx
-@@ -26,12 +26,11 @@ import { cn } from '@/lib/utils';
- import type { CesiumDataSource } from '@/store/slices/cesiumSlice';
- import { CustomBasemapEditor } from './CustomBasemapEditor';
- import { CustomTilesetEditor } from './CustomTilesetEditor';
--// Trassia overlay (Pakete V-KONTEXT / V-WFS) — die zuschaltbare
--// swisstopo-Umgebung und die amtlichen WFS-Ebenen. Beide gehoeren in den
--// Weltmodus-Zweig dieses Panels: dort steht schon die verwandte Entscheidung
--// (Basiskarte), und beide Bauteile rendern nichts, was den Upstream stoert.
--import { ChUmgebungSchalter } from './ChUmgebungSchalter';
--import { ChWfsLayers } from './ChWfsLayers';
-+// Trassia (V-WELT-FIX): die Basiskartenwahl haengt hinter
-+// CH_BASISKARTEN_VERFUEGBAR (siehe unten). Die swisstopo-Umgebung und die
-+// WFS-Ebenen wohnen seit Paket UX-KOPF (Marco-Befund 2026-09-02) im eigenen
-+// Umgebungs-Panel (ChUmgebungPanel) — unter dem Blitz-Symbol dieses Panels
-+// suchte sie niemand. Hier blieb die reine Beleuchtung.
- import { CH_BASISKARTEN_VERFUEGBAR } from '@/lib/ch/kontext/basiskarten';
- import type { SolarSweepMode } from '@/store/slices/solarSlice';
- import { LIGHTING_PRESETS, LIGHTING_PRESET_ORDER, isLightingPresetId } from '@/lib/lighting-presets';
-@@ -164,9 +163,9 @@ export function SunSkyPanel() {
-                   (api.cesium.com), eine einen frei eingetippten Fremdhost.
-                   Der Tester-Befund dazu war „schwarze Kugel". Ein Knopf, der
-                   nachweislich nichts tun kann, ist schlimmer als kein Knopf.
--                  An seiner Stelle steht das SWISSIMAGE-Orthofoto in
--                  <ChUmgebungSchalter />. Begruendung und der Weg zurueck:
--                  lib/ch/kontext/basiskarten.ts. */}
-+                  An seiner Stelle steht das SWISSIMAGE-Orthofoto im
-+                  Umgebungs-Panel (ChUmgebungPanel). Begruendung und der Weg
-+                  zurueck: lib/ch/kontext/basiskarten.ts. */}
-               {CH_BASISKARTEN_VERFUEGBAR && (
-                 <>
-                   <label className="flex flex-col gap-0.5">
-@@ -187,12 +186,6 @@ export function SunSkyPanel() {
-                   {dataSource === 'custom-3dtiles' && <CustomTilesetEditor />}
-                 </>
-               )}
--              {/* Trassia: swisstopo-Umgebung (Gebaeude/Vegetation/Terrain),
--                  per Vorgabe aus, mit Quellenangabe. */}
--              <ChUmgebungSchalter />
--              {/* Trassia: amtliche WFS-Ebenen, auf den Kartenausschnitt
--                  zugeschnitten. Zugeklappt, bis jemand sie braucht. */}
--              <ChWfsLayers />
-             </>
-           ) : (
-             <label className="flex flex-col gap-0.5">
 diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-index 4aecc43..73fd880 100644
+index 077ca57..ce405a7 100644
 --- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
 +++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-@@ -35,13 +35,16 @@ import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
+@@ -38,13 +38,16 @@ import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
  // Trassia overlay (Phase 1.1) — `?project=<slug>` opens a curated set of
  // models from a manifest instead of one file. See hooks/useChProjectLoader.ts.
  import { useChProjectLoader } from '@/hooks/useChProjectLoader';
@@ -123,7 +75,7 @@ index 4aecc43..73fd880 100644
  import { ChMobileHint } from './ChMobileHint';
  import { ChPanelStackKeeper } from './ChPanelStackKeeper';
  import { chReadProjectParam } from '@/lib/ch/project-manifest';
-@@ -436,14 +439,15 @@ export function ViewerLayout() {
+@@ -351,14 +354,15 @@ export function ViewerLayout() {
              </span>
            </div>
          )}
@@ -148,34 +100,34 @@ index 4aecc43..73fd880 100644
          {/* Trassia: unter 30 rem blendet die Anwendung ihre Werkzeuge aus.
              Das darf sie — aber nicht stumm (U4). */}
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index 21ed175..9bb21f0 100644
+index 75f193e..5b7b448 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -29,6 +29,8 @@ import { BCFOverlay } from './bcf/BCFOverlay';
+@@ -33,6 +33,8 @@ import { DrawingRuntimeHost } from './drawing/DrawingRuntimeHost';
+ import { BCFOverlay } from './bcf/BCFOverlay';
  import { CesiumOverlay } from './CesiumOverlay';
- import { CesiumPlacementEditor } from './CesiumPlacementEditor';
- import { SunSkyPanel } from './SunSkyPanel';
+ import { CesiumPlacementGizmo } from './placement/CesiumPlacementGizmo';
 +// Trassia overlay (Paket UX-KOPF): eigenes Panel fuer die Schweizer Umgebung.
 +import { ChUmgebungPanel } from './ChUmgebungPanel';
- import { SpaceMousePanel } from './SpaceMousePanel';
  import { useSolarEnvironment } from '@/hooks/useSolarEnvironment';
  import { useSolarSweep } from '@/hooks/useSolarSweep';
-@@ -1349,6 +1351,10 @@ export function ViewportContainer() {
-           Self-anchored below the ViewCube (top-6 right-6 cube) at top-32 right-4
-           so it never covers navigation; draggable from its header (#1107). */}
-       <SunSkyPanel />
+ import { getViewerStoreApi, useViewerStore } from '@/store';
+@@ -1118,6 +1120,10 @@ export function ViewportContainer() {
+           storeyElevations={georef.storeyElevations}
+         />
+       )}
 +      {/* Trassia (UX-KOPF): Schweizer Umgebung (swisstopo-Gebaeude/Vegetation/
 +          Terrain + amtliche WFS-Ebenen) — eigenes kleines Panel, gleicher
 +          Ankerbereich; geoeffnet ueber den Umgebungs-Knopf im View-Tab. */}
 +      <ChUmgebungPanel />
-       {/* SpaceMouse panel — WebHID 3D mouse connection + sensitivity (#1677).
-           Anchored below the Sun & Sky spot so both can be open; draggable. */}
-       <SpaceMousePanel />
+       {cesiumEnabled && georef?.mapConversion && georef.baseMapConversion && (
+         <CesiumPlacementGizmo
+           modelId={georef.sourceModelId}
 diff --git a/apps/viewer/src/components/viewer/ribbon/tabs/ViewTab.tsx b/apps/viewer/src/components/viewer/ribbon/tabs/ViewTab.tsx
-index c852272..32eeb54 100644
+index 34459f0..5b425b8 100644
 --- a/apps/viewer/src/components/viewer/ribbon/tabs/ViewTab.tsx
 +++ b/apps/viewer/src/components/viewer/ribbon/tabs/ViewTab.tsx
-@@ -19,6 +19,12 @@ import {
+@@ -22,6 +22,12 @@ import {
    RibbonSmallButton,
    RibbonSmallStack,
  } from '../primitives';
@@ -187,8 +139,8 @@ index c852272..32eeb54 100644
 +import { ChUmgebungKnopf } from '../../ChUmgebungKnopf';
  
  export function ViewTab() {
-   // Camera, preset views and the 90° rotations come from the shared
-@@ -125,6 +131,10 @@ export function ViewTab() {
+   const { t } = useTranslation();
+@@ -131,6 +137,10 @@ export function ViewTab() {
            ))}
        </RibbonGroup>
  
@@ -198,10 +150,10 @@ index c852272..32eeb54 100644
 +
        <RibbonGroupDivider />
  
-       <RibbonGroup label="Context">
-@@ -156,6 +166,9 @@ export function ViewTab() {
+       <RibbonGroup label={t('ribbon.view.contextGroup')}>
+@@ -162,6 +172,9 @@ export function ViewTab() {
            activeClassName="bg-amber-500/20 text-foreground ring-1 ring-inset ring-amber-500/50"
-           onClick={toggleEnvPanel}
+           onClick={() => useViewerStore.getState().toggleWorkspacePanel('environment')}
          />
 +        {/* Trassia (UX-KOPF): Schweizer Umgebung (swisstopo + WFS) — eigener
 +            Knopf statt versteckt im Lighting-Panel; nur im Weltmodus. */}

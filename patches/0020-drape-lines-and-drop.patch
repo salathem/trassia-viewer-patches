@@ -1,17 +1,17 @@
 diff --git a/apps/viewer/src/components/viewer/Viewport.tsx b/apps/viewer/src/components/viewer/Viewport.tsx
-index 840c2ce..604f2df 100644
+index f8eed29..f4af857 100644
 --- a/apps/viewer/src/components/viewer/Viewport.tsx
 +++ b/apps/viewer/src/components/viewer/Viewport.tsx
-@@ -67,6 +67,8 @@ import {
- import { useAlignmentLines3D } from '../../hooks/useAlignmentLines3D.js';
- import { useDxfUnderlays3DLines } from '../../hooks/useDxfUnderlay.js';
+@@ -69,6 +69,8 @@ import { useDxfUnderlays3DLines } from '../../hooks/useDxfUnderlay.js';
+ import { useLandXmlRendererOverlay } from '../../hooks/useLandXmlOverlayLines.js';
+ import { selectLandXmlViewportPick } from './landXmlViewportSelection.js';
  import { uploadDxfLines3DGuarded } from './dxf-lines-3d-upload.js';
 +// Trassia overlay (not upstream) — Paket V-DRAPE, siehe hooks/useChDrapeLines.ts.
 +import { chDrapeMergeLines, useChDrapeLines } from '@/hooks/useChDrapeLines';
  import { subscribeViewportHealth } from './device-loss-report.js';
- 
- interface ViewportProps {
-@@ -1503,7 +1505,20 @@ export function Viewport({
+ import { runGpuUpload } from './gpu-upload-guard.js';
+ import { anchorWorldLineVertices, rendererLineVertexData } from '@/lib/renderer/line-overlay-rte';
+@@ -1476,7 +1478,20 @@ export function Viewport({
    // a load-time choice — see DxfUnderlayPanel.tsx), independent of the 2D
    // drawing panel's underlay. Only line paths are lifted to 3D; fills/text
    // are not (see dxfUnderlayToWorldLines3D's doc).
@@ -34,19 +34,19 @@ index 840c2ce..604f2df 100644
      const renderer = rendererRef.current;
      if (!renderer || !isInitialized) return;
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index 78d4a65..21ed175 100644
+index cbfdc53..75f193e 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -56,6 +56,8 @@ import { recordDownloadedSourceFile } from '@/lib/sources/persistence';
+@@ -60,6 +60,8 @@ import { recordDownloadedSourceFile } from '@/lib/sources/persistence';
  import { sanitizeFilename } from '@/lib/export/download';
  import { enqueueSourceLoad } from '@/lib/sources/loadQueue';
- import { toast } from '@/components/ui/toast';
+ import { toast, Toaster } from '@/components/ui/toast';
 +// Trassia overlay (not upstream) — Paket V-DRAPE, siehe lib/ch/drape-ingest.ts.
 +import { chDrapeTakeDroppedFiles, chDrapeUnderlayCandidates } from '@/lib/ch/drape-ingest';
- import { TourInvite } from '@/components/tours/TourInvite';
- import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
  import { describeUnsupportedFormat } from '@/hooks/ingest/unsupportedFormat';
-@@ -466,7 +468,24 @@ export function ViewportContainer() {
+ import { Upload, Command, AlertTriangle, ChevronDown, ExternalLink, Plus } from 'lucide-react';
+ import { createBlankIfcFile } from '@/utils/createBlankIfc';
+@@ -477,7 +479,24 @@ export function ViewportContainer() {
      // a dropped site plan must never replace or federate with the model.
      const allDropped0 = Array.from(e.dataTransfer.files);
      const { dxfFiles, modelFiles: allDropped } = splitDxfFiles(allDropped0);
@@ -71,4 +71,4 @@ index 78d4a65..21ed175 100644
 +    });
      if (allDropped.length === 0) return;
  
-     // Filter to supported files (IFC, IFCX, GLB, point clouds)
+     // Keep glTF sidecars beside the document until they are packed into GLB.

@@ -1,17 +1,17 @@
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index 4e731f4..f089feb 100644
+index 235ed99..d2b53f3 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
-@@ -38,6 +38,8 @@ import {
+@@ -23,6 +23,8 @@ import { BarChart3, Box, CalendarRange, ClipboardCheck, Cloud, Coins, Crosshair,
+ import {
+   // Trassia overlay (not upstream) — Paket V-DRAPE.
    Mountain,
-   // Trassia overlay (not upstream) — Paket V-KUBATUR.
-   Ruler,
 +  // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
 +  ChartSpline,
-   type LucideIcon,
  } from 'lucide-react';
  
-@@ -67,7 +69,9 @@ export type WorkspacePanelId =
+ /** Every panel reachable from the unified sidebar rail. `properties` is the
+@@ -61,7 +63,9 @@ export type WorkspacePanelId =
    // Trassia overlay (not upstream) — Paket V-DRAPE.
    | 'drape'
    // Trassia overlay (not upstream) — Paket V-KUBATUR.
@@ -22,7 +22,7 @@ index 4e731f4..f089feb 100644
  
  /** Activity-bar clustering — a divider is drawn whenever the group changes. */
  export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
-@@ -137,6 +141,15 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+@@ -190,6 +194,15 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
    // einer Achse. ANGEHAENGT, aus demselben Grund wie `drape` — keine Ziffer,
    // erreichbar ueber die Leiste.
    { id: 'kubatur', title: 'Cut and fill', short: 'Cut/fill', Icon: Ruler, group: 'author', region: 'side' },
@@ -37,12 +37,12 @@ index 4e731f4..f089feb 100644
 +  { id: 'laengsschnitt', title: 'Longitudinal profile', short: 'Profile', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
  ];
  
- /** The bottom-strip panel ids, mapped to their store visibility flag + setter
+ // The bottom strip (Script / Schedule / Lists) is table-driven; the id union and
 diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-index 4f3504d..2742124 100644
+index c50a1dc..1c2e74d 100644
 --- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
 +++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-@@ -32,6 +32,9 @@ import { LoadReportPanel } from '@/components/viewer/LoadReportPanel';
+@@ -38,6 +38,9 @@ import { useViewerStore } from '@/store';
  import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
  // Trassia overlay (not upstream) — Paket V-KUBATUR, siehe ChKubaturPanel.tsx.
  import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
@@ -52,7 +52,7 @@ index 4f3504d..2742124 100644
  // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
  // dynamic chunk keeps it out of the initial bundle until first opened.
  const LayersPanel = lazy(() =>
-@@ -87,6 +90,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+@@ -151,6 +154,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
      case 'drape': return <ChDrapePanel onClose={onClose} />;
      // Trassia (Paket V-KUBATUR).
      case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
@@ -60,4 +60,4 @@ index 4f3504d..2742124 100644
 +    case 'laengsschnitt': return <ChLaengsschnittPanel onClose={onClose} />;
      case 'layers': return <LayersPanelBody onClose={onClose} />;
      case 'sources': return <SourcesPanelBody onClose={onClose} />;
-   }
+     case 'charts': return <ChartsPanelBody />;

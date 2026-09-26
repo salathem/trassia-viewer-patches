@@ -1,17 +1,17 @@
 diff --git a/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx b/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx
-index eb94cdc..11baa7b 100644
+index f326ad2..11daac5 100644
 --- a/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx
 +++ b/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx
-@@ -20,6 +20,8 @@ import {
-   reprojectionInputKey,
-   type LatLon,
- } from '@/lib/geo/reproject';
+@@ -24,6 +24,8 @@ import { useTranslation } from '@/i18n/useTranslation';
+ // Side-effect import: merges the measure catalogue into the runtime `en`
+ // object so `t('measure.*')` resolves under the real 'en' locale (see that
+ // module's own doc comment).
 +// Trassia overlay (not upstream) — see overlay/apps/viewer/src/lib/geo/ch-coordinates.ts
 +import { formatSwissEnh, isSwissProjectedCrs } from '@/lib/geo/ch-coordinates';
  
  export interface Vec3Like { x: number; y: number; z: number }
  export interface Enh { e: string; n: string; h: string }
-@@ -34,11 +36,15 @@ export interface Enh { e: string; n: string; h: string }
+@@ -38,11 +40,15 @@ export interface Enh { e: string; n: string; h: string }
  export function projectedEnh(point: Vec3Like, anchor: AnchorGeoreference): Enh {
    const proj = viewerPointToProjected(point, anchor.eff, anchor.originViewer);
    const { projectedCRS, lengthUnitScale } = anchor.eff;

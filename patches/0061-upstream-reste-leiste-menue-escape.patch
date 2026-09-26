@@ -1,61 +1,8 @@
-diff --git a/apps/viewer/src/components/viewer/DrawingSettingsPanel.tsx b/apps/viewer/src/components/viewer/DrawingSettingsPanel.tsx
-index 9ceef27..d7be6ae 100644
---- a/apps/viewer/src/components/viewer/DrawingSettingsPanel.tsx
-+++ b/apps/viewer/src/components/viewer/DrawingSettingsPanel.tsx
-@@ -11,7 +11,7 @@
-  * - Color, line weight, hatch controls
-  */
- 
--import React, { useCallback, useState, useMemo } from 'react';
-+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
- import { X, Palette, Plus, Trash2, ChevronDown, ChevronRight, GripVertical, Eye, EyeOff, Check, Copy, PenTool, Flame, Building2, Wrench, Printer, type LucideIcon } from 'lucide-react';
- import { Button } from '@/components/ui/button';
- import { Input } from '@/components/ui/input';
-@@ -139,8 +139,38 @@ export function DrawingSettingsPanel({ onClose }: DrawingSettingsPanelProps) {
-     setCustomRulesOpen(true);
-   }, [activePreset, customOverrideRules.length, addCustomRule, setActivePreset]);
- 
-+  // Trassia (UPSTREAM-RESTE, TODO #47, Tester M-4 04.09.): dieses Fenster ist
-+  // ein eigener schwebender Kasten ohne Escape-Weg — Escape lief durch bis zum
-+  // globalen Kuerzel, schaltete das Schnittwerkzeug ab, und das Fenster blieb
-+  // stehen. Wie der Anpassen-Dialog der Leiste (CustomizeSidebar): Fokus beim
-+  // Oeffnen hinein (einmal), Escape schliesst NUR dieses Fenster und markiert
-+  // die Taste per `preventDefault` als verbraucht (Riegel in
-+  // useKeyboardShortcuts). Ein offenes Radix-Aufklappfeld (Select) im Fenster
-+  // behaelt sein Escape: Radix schliesst zuerst und setzt `defaultPrevented`.
-+  const wurzelRef = useRef<HTMLDivElement>(null);
-+  useEffect(() => {
-+    wurzelRef.current?.focus();
-+  }, []);
-+  useEffect(() => {
-+    const onKey = (e: KeyboardEvent) => {
-+      if (e.key !== 'Escape' || e.defaultPrevented) return;
-+      const ziel = e.target as HTMLElement | null;
-+      if (ziel?.closest?.('[data-radix-popper-content-wrapper], [role="listbox"], [role="menu"]')) return;
-+      e.preventDefault();
-+      onClose();
-+    };
-+    document.addEventListener('keydown', onKey);
-+    return () => document.removeEventListener('keydown', onKey);
-+  }, [onClose]);
-+
-   return (
--    <div className="flex flex-col h-full bg-background border-l">
-+    <div
-+      ref={wurzelRef}
-+      role="dialog"
-+      aria-label="Drawing Settings"
-+      tabIndex={-1}
-+      className="flex flex-col h-full bg-background border-l outline-none"
-+    >
-       {/* Header */}
-       <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50">
-         <div className="flex items-center gap-2">
 diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-index 73fd880..086c947 100644
+index ce405a7..d810ad1 100644
 --- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
 +++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-@@ -499,10 +499,19 @@ export function ViewerLayout() {
+@@ -413,10 +413,19 @@ export function ViewerLayout() {
                <div className="flex-1 min-w-0">
                  <PanelGroup orientation="horizontal" className="h-full">
                    {/* Left Panel - Hierarchy */}
@@ -70,14 +17,14 @@ index 73fd880..086c947 100644
 +                      Der Doppelklick stellt damit die Vorgabebreite her. */}
                    <Panel
                      id="left-panel"
--                    defaultSize={22}
+-                    defaultSize={LEFT_PANEL_DEFAULT_SIZE}
 -                    minSize={10}
-+                    defaultSize="22%"
++                    defaultSize={`${LEFT_PANEL_DEFAULT_SIZE}%`}
 +                    minSize="120px"
                      collapsible
                      collapsedSize={0}
                      panelRef={leftPanelRef}
-@@ -524,7 +533,8 @@ export function ViewerLayout() {
+@@ -438,7 +447,8 @@ export function ViewerLayout() {
                    <PanelResizeHandle className="w-1.5 bg-border hover:bg-primary/50 active:bg-primary/70 transition-colors cursor-col-resize" />
  
                    {/* Center - Viewport */}
@@ -88,18 +35,18 @@ index 73fd880..086c947 100644
                          (#1201) snap to THIS region, not the whole window, so a
                          dock never hides under the toolbar (its own close control
 diff --git a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
-index 0617a56..b28ca75 100644
+index 45bc3a8..262587d 100644
 --- a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
-@@ -27,6 +27,7 @@ import { getPanelDef, type WorkspacePanelId } from '@/lib/panels/registry';
+@@ -29,6 +29,7 @@ import { resetLayout } from '@/store/layoutReset';
  // Anpassen-Dialog listet ALLE Panels — die Kundenleiste ist nur die Vorgabe der
  // Verstecktliste (store/slices/sidebarSlice.ts); «Hidden» ist der Weg, ein
  // Panel einzublenden. Siehe lib/ch/modus.ts.
 +import { CH_HIDE_NACHHALTEN_MS, chAnpassenZeilen } from '@/lib/ch/leiste-anpassen';
  
  export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
-   const order = useViewerStore((s) => s.sidebarOrder);
-@@ -41,9 +42,25 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+   const { t } = useTranslation();
+@@ -43,9 +44,25 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
    const [dragId, setDragId] = useState<string | null>(null);
    const [overId, setOverId] = useState<string | null>(null);
  
@@ -127,7 +74,7 @@ index 0617a56..b28ca75 100644
  
    // Move focus into the popover on open and restore it to the trigger on close.
    useEffect(() => {
-@@ -113,12 +130,14 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+@@ -115,12 +132,14 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
            if (!def) return null;
            const Icon = def.Icon;
            const locked = id === 'properties';
@@ -143,7 +90,7 @@ index 0617a56..b28ca75 100644
                onDragStart={() => setDragId(id)}
                onDragEnd={() => {
                  setDragId(null);
-@@ -136,6 +155,7 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+@@ -138,6 +157,7 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
                className={cn(
                  'group flex items-center gap-1.5 px-2 py-1.5 mx-1 rounded-md cursor-grab active:cursor-grabbing',
                  dragId === id && 'opacity-40',
@@ -151,7 +98,7 @@ index 0617a56..b28ca75 100644
                  overId === id && dragId && dragId !== id && 'ring-1 ring-primary/60',
                )}
              >
-@@ -162,8 +182,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+@@ -164,8 +184,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
                </button>
                <button
                  type="button"
@@ -159,14 +106,14 @@ index 0617a56..b28ca75 100644
 -                onClick={() => setShown(id, false)}
 +                disabled={locked || nachgehalten}
 +                onClick={() => verstecken(id)}
-                 aria-label={locked ? `${def.title} is always shown` : `Hide ${def.title}`}
-                 title={locked ? 'Always shown' : 'Hide from sidebar'}
-                 className={cn(
+                 aria-label={
+                   locked
+                     ? t('shellChrome.customizeSidebar.alwaysShownAriaLabel', { title: def.title })
 diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-index 5a32a37..d381df1 100644
+index ab73211..7094e0e 100644
 --- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
 +++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-@@ -408,6 +408,11 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+@@ -403,6 +403,11 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
        // Dialog gehoert dem Menue (Radix schliesst es selbst) — sonst schloss
        // ein Escape im Export-Menue des 2D-Panels das ganze Schnittwerkzeug.
        const ziel = e.target as HTMLElement | null;

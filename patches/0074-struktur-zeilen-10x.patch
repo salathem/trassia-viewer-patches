@@ -1,0 +1,149 @@
+diff --git a/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx b/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx
+index d5675f4..366fc32 100644
+--- a/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx
++++ b/apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx
+@@ -5,6 +5,9 @@
+ import { ChevronRight, Layers, Eye, EyeOff, FileBox } from 'lucide-react';
+ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+ import { cn } from '@/lib/utils';
++// Trassia overlay (Paket U3-klein): Hervorhebung der Zeilen-Auswahl, siehe lib/ch/zeilen-auswahl.ts.
++import { useChZeileGewaehlt } from '@/lib/ch/zeilen-auswahl';
++import { chZahlExakt } from '@/lib/ch/gesamt-statistik';
+ import { useTranslation } from '@/i18n';
+ import { formatLocaleNumber } from '@/i18n/intlFormat';
+ import { isNoGeometryNode, isSpatialContainer, type TreeNode } from './types';
+@@ -70,6 +73,8 @@ export function HierarchyNode({
+   sourceSyncing = false,
+ }: HierarchyNodeProps) {
+   const { t, locale } = useTranslation();
++  // Trassia (U3-klein): steht die Zeile in der Zeilen-Auswahl (Leertaste)?
++  const chGewaehlt = useChZeileGewaehlt(node.id);
+   const resolvedType = node.ifcType || node.type;
+   // Use Lucide icon for non-IFC structural nodes, Material Symbols for IFC classes
+   const LucideIcon = NODE_TYPE_ICONS[node.type];
+@@ -136,7 +141,8 @@ export function HierarchyNode({
+     >
+       <div
+         className={cn(
+-          'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group hierarchy-item',
++          'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group hierarchy-item ch-zeile',
++          chGewaehlt && 'ch-zeile-gewaehlt',
+           // No selection styling for spatial containers in multi-model mode
+           isMultiModel && isSpatialContainer(node.type)
+             ? 'border-transparent cursor-default'
+@@ -308,7 +314,8 @@ export function HierarchyNode({
+               {/* Yields first when the tree is narrow (#5394): below 18rem the
+                   name needs the room more than the count does. */}
+               <span data-hierarchy-count-badge className="hidden @2xs:inline text-[10px] font-mono bg-zinc-100 dark:bg-zinc-950 px-1.5 py-0.5 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-none">
+-                {formatLocaleNumber(locale, node.elementCount)}
++                {/* Trassia: Schweizer Tausendertrennung wie Fusszeile und Koordinaten. */}
++                {chZahlExakt(node.elementCount)}
+               </span>
+             </TooltipTrigger>
+             <TooltipContent>
+diff --git a/apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx b/apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx
+index 7757a5a..41bc1ed 100644
+--- a/apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx
++++ b/apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx
+@@ -15,9 +15,17 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
+ import { openRepositionModels } from '@/lib/model-placement/commands';
+ import { cn } from '@/lib/utils';
+ import { useTranslation } from '@/i18n';
+-import { formatLocaleNumber } from '@/i18n/intlFormat';
+ import type { TreeNode } from './types';
+ import { ModelRowTags } from './ModelRowTags';
++// Trassia overlay (Paket U3-klein): Zeilen-Auswahl fuer die Leertaste — Hervorhebung
++// gewaehlter Zeilen und Ctrl-Klick auf der Modellzeile. Siehe lib/ch/zeilen-auswahl.ts.
++import { chZeilenKlick, useChZeileGewaehlt } from '@/lib/ch/zeilen-auswahl';
++import { chZahlExakt } from '@/lib/ch/gesamt-statistik';
++
++// Trassia (Paket V-UX, P6 / Befund R-9): Zeilenschalter dauerhaft sichtbar und
++// mindestens 24x24 px; upstream 18x18 px und erst beim Hovern eingeblendet — auf
++// einem Zeigegeraet ohne Hover gab es sie gar nicht.
++const CH_SCHALTER = 'inline-flex h-6 w-6 items-center justify-center rounded p-0.5 opacity-70 transition-opacity hover:bg-muted hover:opacity-100 group-hover:opacity-100';
+ 
+ export interface ModelHeaderRowProps {
+   node: TreeNode;
+@@ -44,8 +52,10 @@ export function ModelHeaderRow({
+   sourceBacked = false,
+   sourceSyncing = false,
+ }: ModelHeaderRowProps) {
+-  const { t, locale } = useTranslation();
++  const { t } = useTranslation();
+   const modelId = node.modelIds[0];
++  // Trassia (U3-klein): steht die Zeile in der Zeilen-Auswahl (Leertaste)?
++  const chGewaehlt = useChZeileGewaehlt(node.id);
+ 
+   return (
+     <div
+@@ -60,14 +70,19 @@ export function ModelHeaderRow({
+     >
+       <div
+         className={cn(
+-          'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group',
++          'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group ch-zeile',
+           'hover:bg-zinc-50 dark:hover:bg-zinc-900',
+           'border-transparent',
+           !modelVisible && 'opacity-50',
+-          node.hasChildren && 'cursor-pointer'
++          node.hasChildren && 'cursor-pointer',
++          chGewaehlt && 'ch-zeile-gewaehlt'
+         )}
+         style={{ paddingLeft: '8px' }}
+-        onClick={() => onModelHeaderClick(modelId, node.id, node.hasChildren)}
++        onClick={(e) => {
++          // Trassia (U3-klein): Ctrl-Klick = Zeile in die Auswahl, sonst Upstream.
++          if (!chZeilenKlick(node, e)) return;
++          onModelHeaderClick(modelId, node.id, node.hasChildren);
++        }}
+       >
+         {/* Expand/collapse chevron */}
+         {node.hasChildren ? (
+@@ -82,13 +97,17 @@ export function ModelHeaderRow({
+         )}
+ 
+         <FileBox className="h-3.5 w-3.5 text-primary shrink-0" />
+-        <span className="flex-1 text-sm truncate ml-1.5 text-zinc-900 dark:text-zinc-100">
++        <span className="flex-1 min-w-0 text-sm truncate ml-1.5 text-zinc-900 dark:text-zinc-100">
+           {node.name}
+         </span>
+ 
+         {node.elementCount !== undefined && (
+-          <span className="text-[10px] font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-zinc-500 dark:text-zinc-400 rounded-none">
+-            {formatLocaleNumber(locale, node.elementCount)}
++          // Trassia (U3-klein, TODO #29): klein und grau; die Zahl der Modellzeile
++          // sind ALLE IFC-Entitaeten. Faellt weg, wenn die ZEILE schmal ist
++          // (Container-Query in ch-dichte.css Regel 10), statt den Namen zu kuerzen.
++          <span className="ch-zeilenzahl text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500 px-1 shrink-0">
++            {/* Trassia: Schweizer Tausendertrennung wie Fusszeile und Koordinaten. */}
++            {chZahlExakt(node.elementCount)}
+           </span>
+         )}
+         <ModelRowTags modelId={modelId} modelName={node.name} />
+@@ -113,7 +132,7 @@ export function ModelHeaderRow({
+                   ? t('hierarchy.node.hideModelAriaLabel', { name: node.name })
+                   : t('hierarchy.node.showModelAriaLabel', { name: node.name })
+               }
+-              className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
++              className={CH_SCHALTER}
+             >
+               {modelVisible ? (
+                 <Eye className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100" />
+@@ -137,7 +156,7 @@ export function ModelHeaderRow({
+                 }}
+                 aria-label={t('hierarchy.node.syncModelAriaLabel', { name: node.name })}
+                 className={cn(
+-                  'p-0.5 opacity-0 group-hover:opacity-100 transition-opacity',
++                  CH_SCHALTER,
+                   sourceSyncing && 'opacity-100',
+                 )}
+                 disabled={sourceSyncing}
+@@ -167,7 +186,7 @@ export function ModelHeaderRow({
+                   onRemoveModel(modelId, e);
+                 }}
+                 aria-label={t('hierarchy.node.removeModelAriaLabel', { name: node.name })}
+-                className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
++                className={CH_SCHALTER}
+               >
+                 <X className="h-3.5 w-3.5 text-zinc-400 hover:text-red-500" />
+               </button>

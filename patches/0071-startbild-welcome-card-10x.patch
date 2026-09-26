@@ -1,0 +1,41 @@
+diff --git a/apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx b/apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx
+index 62bba08..312ded3 100644
+--- a/apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx
++++ b/apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx
+@@ -25,6 +25,9 @@ import { WebGpuDisabledCaption } from './WebGpuTroubleshooting';
+ import { TourInvite } from '@/components/tours/TourInvite';
+ import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
+ import { EVENT_SHOW_SHORTCUTS } from '@/lib/tours/events';
++// Trassia overlay (not upstream) — Startkarte und Modusschalter, siehe ChStartkarte.tsx und lib/ch/modus.ts.
++import { ChStartkarte } from './ChStartkarte';
++import { chVollmodus } from '@/lib/ch/modus';
+ 
+ /** Plain CSS text, not UI copy — kept as a module-level constant (rather than
+  *  an inline `<style>{`…`}</style>` template literal) so the i18n literal
+@@ -87,6 +90,11 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
+   return (
+     <div {...tourAnchor(TOUR_ANCHORS.emptyStateCard)} className="max-w-md w-full bg-white dark:bg-[#16161e] border border-zinc-300 dark:border-[#3b4261] p-8 flex flex-col items-center transition-transform hover:-translate-y-1 duration-200 shadow-lg">
+ 
++      {/* Trassia (Pakete U1/U2, Review B3 «Startbild: fremdes Produkt»): im
++          Trassia-Modus ersetzt die Startkarte Logo, Titel und Aktionen der
++          Upstream-Karte (Cloud, LLM, Demo-Stack, Tour-Einladung); die Liste der
++          zuletzt geoeffneten Dateien darunter bleibt. `?voll=1` zeigt den Upstream. */}
++      {chVollmodus() ? (<>
+       <style>{FLOAT_SLOW_KEYFRAMES}</style>
+ 
+       {/* Logo Section */}
+@@ -245,6 +253,14 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
+       {/* First-run tour invite — needs loadFile, so it shares the
+           WebGPU gate of every other action on this card. */}
+       {webgpu.supported && !webgpu.checking && <TourInvite />}
++      </>) : (
++        <ChStartkarte
++          onOpen={onOpenClick}
++          onBlank={onStartBlank}
++          webgpuSupported={webgpu.supported}
++          webgpuChecking={webgpu.checking}
++        />
++      )}
+ 
+       {recentFiles.length > 0 && (
+         <div className="mt-6 w-full border-t border-zinc-200 dark:border-[#3b4261] pt-4">

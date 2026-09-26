@@ -3,18 +3,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useTranslation } from '@/i18n';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import {
-  Search,
-  Building2,
-  Layers,
-  LayoutTemplate,
-  FileBox,
-  GripHorizontal,
-  Palette,
-  Network,
-} from 'lucide-react';
-import { extractGroupMembersOnDemand, type IfcDataStore } from '@ifc-lite/parser';
+import { Search, Building2, Layers, LayoutTemplate, FileBox, GripHorizontal, Palette, Network } from 'lucide-react';
+import type { IfcDataStore } from '@ifc-lite/parser';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -22,17 +14,20 @@ import { useViewerStore, resolveEntityRef } from '@/store';
 import { toGlobalIdFromModels } from '@/store/globalId';
 import { useIfc } from '@/hooks/useIfc';
 import { useEntityListMultiSelect, type MultiSelectItem } from '@/hooks/useEntityListMultiSelect';
-import { Rule, addHierarchyStoreyToRule, type FilterRule } from '@/lib/search/filter-rules';
+import { Rule, addHierarchyStoreyToRule, activeGroupRules, type FilterRule } from '@ifc-lite/rules';
 import { toast } from '@/components/ui/toast';
 import { useSourceHost } from '@/services/sources/SourceHostProvider';
 import { syncSourceModel } from '@/lib/sources/syncSourceModel';
 
-import type { TreeNode } from './hierarchy/types';
-import { isSpatialContainer } from './hierarchy/types';
+import { isSpatialContainer, type TreeNode } from './hierarchy/types';
 import { useHierarchyTree } from './hierarchy/useHierarchyTree';
+import { effectiveGroupAssignments, effectiveGroupMembers } from './hierarchy/effectiveGroupEntities';
 import { computeTypeIsolationLabel } from './hierarchy/typeIsolationLabel';
 import { HierarchyNode } from './hierarchy/HierarchyNode';
+import { useConfirmRemoveModel } from './hierarchy/useConfirmRemoveModel';
 import { SectionHeader } from './hierarchy/SectionHeader';
+import { useModelRowSize } from './hierarchy/ModelRowTags';
+import { ModelsSectionHeader, useModelTagView } from './hierarchy/ModelsSectionHeader';
 import { StoreyDisplayControls } from './hierarchy/StoreyDisplayControls';
 import { HierarchySortControl } from './hierarchy/HierarchySortControl';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
@@ -47,6 +42,7 @@ import { chNachkommenElemente, type ChRaumKnoten } from '@/lib/ch/container-elem
 import { collectAggregatedDescendants, type AggregationRelationships } from '@/utils/aggregation';
 
 export function HierarchyPanel() {
+  const { t } = useTranslation();
   const {
     ifcDataStore,
     geometryResult,
@@ -167,7 +163,7 @@ export function HierarchyPanel() {
   );
   const filteredNodes = useMemo(() => stripPartNodes(rawFilteredNodes), [stripPartNodes, rawFilteredNodes]);
   const storeysNodes = useMemo(() => stripPartNodes(rawStoreysNodes), [stripPartNodes, rawStoreysNodes]);
-  const modelsNodes = useMemo(() => stripPartNodes(rawModelsNodes), [stripPartNodes, rawModelsNodes]);
+  const modelsNodes = useModelTagView(useMemo(() => stripPartNodes(rawModelsNodes), [stripPartNodes, rawModelsNodes])); // #4215 tag filter / By tag: rows only
 
   // Explorer-style multi-select over the leaf element / space rows: Ctrl/Cmd
   // toggles, Shift selects the contiguous range in the visible order. Built
@@ -218,7 +214,7 @@ export function HierarchyPanel() {
   const modelsVirtualizer = useVirtualizer({
     count: modelsNodes.length,
     getScrollElement: () => modelsRef.current,
-    estimateSize: () => 36,
+    estimateSize: useModelRowSize(modelsNodes, () => modelsVirtualizer.measure()), // #4215: a tagged model row carries a chips line
     overscan: 10,
   });
 
@@ -317,11 +313,7 @@ export function HierarchyPanel() {
     }
   }, [models, setModelVisibility]);
 
-  // Remove model
-  const handleRemoveModel = useCallback((modelId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    removeModel(modelId);
-  }, [removeModel]);
+  const { handleRemoveModel, removeModelDialog } = useConfirmRemoveModel(removeModel);
 
   const handleSyncSourceModel = useCallback(async (modelId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -371,8 +363,8 @@ export function HierarchyPanel() {
   // makes two ifcType rules match nothing. Pass `null` to clear the dimension.
   const upsertSearchRule = useCallback(
     (matches: (r: FilterRule) => boolean, rule: FilterRule | null) => {
-      const rules = useViewerStore.getState().searchFilter.rules;
-      const idx = rules.findIndex(matches);
+      const hs = useViewerStore.getState(); // targets the ACTIVE group only (#4904)
+      const idx = activeGroupRules(hs.searchFilter.groups, hs.searchFilterActiveGroup).findIndex(matches);
       if (rule === null) {
         if (idx < 0) return; // nothing to clear — don't arm an empty run
         removeFilterRule(idx);
@@ -487,12 +479,11 @@ export function HierarchyPanel() {
         ? toGlobalIdFromModels(models, modelId, groupExpressId)
         : groupExpressId;
 
-      // Members can be hidden-by-default classes (IfcSpace / IfcSpatialZone in
-      // an IfcZone): flip only the toggles the group actually needs, or the
-      // isolated set would render nothing (lifted from PropertiesPanel's
-      // handleIsolateGroupMembers, #1075 / PR #1094 review).
+      // Reveal hidden-by-default classes among the effective members before
+      // isolating; otherwise spaces or zones in an edited assignment stay invisible.
       if (dataStore) {
-        const members = extractGroupMembersOnDemand(dataStore, groupExpressId);
+        const view = useViewerStore.getState().mutationViews.get(modelId);
+        const members = effectiveGroupMembers(dataStore, groupExpressId, view, effectiveGroupAssignments(dataStore, view));
         if (!typeVisibility.spaces && members.some((m) => m.type === 'IfcSpace')) {
           toggleTypeVisibility('spaces');
         }
@@ -647,8 +638,8 @@ export function HierarchyPanel() {
       if (e.ctrlKey || e.metaKey) {
         // Add to storey filter selection
         setStoreysSelection([...Array.from(selectedStoreys), ...storeyIds]);
-        // Mirror to the advanced filter — accumulate the storey name (issue #1107).
-        const cur = useViewerStore.getState().searchFilter.rules.find((r) => r.kind === 'storey' && r.op === 'in');
+        // Mirror to the advanced filter's ACTIVE group — accumulate the storey name (issue #1107, #4904).
+        const cur = activeGroupRules(useViewerStore.getState().searchFilter.groups, useViewerStore.getState().searchFilterActiveGroup).find((r) => r.kind === 'storey' && r.op === 'in');
         upsertSearchRule(
           (r) => r.kind === 'storey' && r.op === 'in',
           addHierarchyStoreyToRule(cur && cur.kind === 'storey' ? cur : undefined, node.name, storeyRefs),
@@ -822,15 +813,15 @@ export function HierarchyPanel() {
     return (
       <div className="h-full flex flex-col border-r-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-black">
         <div className="p-3 border-b-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-black">
-          <h2 className="font-bold uppercase tracking-wider text-xs text-zinc-900 dark:text-zinc-100">Hierarchy</h2>
+          <h2 className="font-bold uppercase tracking-wider text-xs text-zinc-900 dark:text-zinc-100">{t('hierarchy.panel.title')}</h2>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center text-center p-6 bg-white dark:bg-black">
           <div className="w-16 h-16 border-2 border-dashed border-zinc-300 dark:border-zinc-800 flex items-center justify-center mb-4 bg-zinc-100 dark:bg-zinc-950">
             <LayoutTemplate className="h-8 w-8 text-zinc-400 dark:text-zinc-500" />
           </div>
-          <p className="font-bold uppercase text-zinc-900 dark:text-zinc-100 mb-2">No Model</p>
+          <p className="font-bold uppercase text-zinc-900 dark:text-zinc-100 mb-2">{t('hierarchy.panel.noModelTitle')}</p>
           <p className="text-xs font-mono text-zinc-500 dark:text-zinc-400 max-w-[150px]">
-            Structure will appear here when loaded
+            {t('hierarchy.panel.noModelHint')}
           </p>
         </div>
       </div>
@@ -847,7 +838,7 @@ export function HierarchyPanel() {
     return (
       <div className="h-full flex flex-col border-r-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-black">
         <div className="p-3 border-b-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-black">
-          <h2 className="font-bold uppercase tracking-wider text-xs text-zinc-900 dark:text-zinc-100">Hierarchy</h2>
+          <h2 className="font-bold uppercase tracking-wider text-xs text-zinc-900 dark:text-zinc-100">{t('hierarchy.panel.title')}</h2>
         </div>
         <div className="flex-1 flex items-center justify-center p-6 text-center">
           <div className="max-w-[220px] text-xs text-zinc-500 dark:text-zinc-400">
@@ -897,50 +888,50 @@ export function HierarchyPanel() {
         size="sm"
         className="h-6 text-[10px] flex-1 min-w-0 rounded-none uppercase tracking-wider"
         onClick={() => setGroupingMode('spatial')}
-        title="Spatial"
+        title={t('hierarchy.panel.grouping.spatial')}
       >
         <Building2 className="h-3 w-3 shrink-0 panel-compact-icon" />
-        <span className="panel-compact-text">Spatial</span>
+        <span className="panel-compact-text">{t('hierarchy.panel.grouping.spatial')}</span>
       </Button>
       <Button
         variant={groupingMode === 'type' ? 'default' : 'outline'}
         size="sm"
         className="h-6 text-[10px] flex-1 min-w-0 rounded-none uppercase tracking-wider"
         onClick={() => setGroupingMode('type')}
-        title="Class"
+        title={t('hierarchy.panel.grouping.class')}
       >
         <Layers className="h-3 w-3 shrink-0 panel-compact-icon" />
-        <span className="panel-compact-text">Class</span>
+        <span className="panel-compact-text">{t('hierarchy.panel.grouping.class')}</span>
       </Button>
       <Button
         variant={groupingMode === 'ifc-type' ? 'default' : 'outline'}
         size="sm"
         className="h-6 text-[10px] flex-1 min-w-0 rounded-none uppercase tracking-wider"
         onClick={() => setGroupingMode('ifc-type')}
-        title="Type"
+        title={t('hierarchy.panel.grouping.type')}
       >
         <FileBox className="h-3 w-3 shrink-0 panel-compact-icon" />
-        <span className="panel-compact-text">Type</span>
+        <span className="panel-compact-text">{t('hierarchy.panel.grouping.type')}</span>
       </Button>
       <Button
         variant={groupingMode === 'material' ? 'default' : 'outline'}
         size="sm"
         className="h-6 text-[10px] flex-1 min-w-0 rounded-none uppercase tracking-wider"
         onClick={() => setGroupingMode('material')}
-        title="Materials"
+        title={t('hierarchy.panel.grouping.materialsTooltip')}
       >
         <Palette className="h-3 w-3 shrink-0 panel-compact-icon" />
-        <span className="panel-compact-text">Material</span>
+        <span className="panel-compact-text">{t('hierarchy.panel.grouping.material')}</span>
       </Button>
       <Button
         variant={groupingMode === 'groups' ? 'default' : 'outline'}
         size="sm"
         className="h-6 text-[10px] flex-1 min-w-0 rounded-none uppercase tracking-wider"
         onClick={() => setGroupingMode('groups')}
-        title="Groups, systems and zones"
+        title={t('hierarchy.panel.grouping.groupsTooltip')}
       >
         <Network className="h-3 w-3 shrink-0 panel-compact-icon" />
-        <span className="panel-compact-text">Groups</span>
+        <span className="panel-compact-text">{t('hierarchy.panel.grouping.groups')}</span>
       </Button>
     </div>
   );
@@ -949,11 +940,9 @@ export function HierarchyPanel() {
   const groupFilterChips = groupingMode === 'groups' ? (
     <div className="flex gap-1 mt-2">
       {([
-        ['all', 'All'],
-        ['systems', 'Systems'],
-        ['zones', 'Zones'],
-        ['other', 'Other'],
-      ] as const).map(([value, label]) => (
+        ['all', 'hierarchy.panel.groupFilter.all'], ['systems', 'hierarchy.panel.groupFilter.systems'],
+        ['zones', 'hierarchy.panel.groupFilter.zones'], ['other', 'hierarchy.panel.groupFilter.other'],
+      ] as const).map(([value, labelKey]) => (
         <Button
           key={value}
           variant={groupFilter === value ? 'default' : 'outline'}
@@ -967,7 +956,7 @@ export function HierarchyPanel() {
           )}
           onClick={() => setGroupFilter(value)}
         >
-          {label}
+          {t(labelKey)}
         </Button>
       ))}
     </div>
@@ -977,10 +966,11 @@ export function HierarchyPanel() {
   if (isMultiModel && groupingMode === 'spatial') {
     return (
       <div ref={containerRef} {...tourAnchor(TOUR_ANCHORS.hierarchyPanel)} className="h-full flex flex-col border-r-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-black">
+        {removeModelDialog}
         {/* Search Header */}
         <div className="p-3 border-b-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-black">
           <Input
-            placeholder="Search..."
+            placeholder={t('hierarchy.panel.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             leftIcon={<Search className="h-4 w-4" />}
@@ -996,7 +986,7 @@ export function HierarchyPanel() {
         <div className="flex-1 flex flex-col min-h-0">
           {/* Storeys Section */}
           <div style={{ height: `${splitRatio * 100}%` }} className="flex flex-col min-h-0">
-            <SectionHeader icon={Layers} title="Building Storeys" count={storeysNodes.length} />
+            <SectionHeader icon={Layers} title={t('hierarchy.panel.buildingStoreysTitle')} count={storeysNodes.length} />
             <StoreyDisplayControls />
             <div ref={storeysRef} className="flex-1 overflow-auto scrollbar-thin bg-white dark:bg-black">
               <div
@@ -1029,7 +1019,7 @@ export function HierarchyPanel() {
           <div style={{ height: `${(1 - splitRatio) * 100}%` }} className="flex flex-col min-h-0">
             {/* Trassia: Kachelsaetze der Mappe, ueber den Modellen. */}
             <ChTileLayers />
-            <SectionHeader icon={FileBox} title="Models" count={models.size} />
+            <ModelsSectionHeader count={models.size} />
             <div ref={modelsRef} className="flex-1 overflow-auto scrollbar-thin bg-white dark:bg-black">
               <div
                 style={{
@@ -1054,8 +1044,8 @@ export function HierarchyPanel() {
               <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                 {selectedStoreys.size > 0 && (
                   <span className="inline-flex items-center gap-1 bg-white/15 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
-                    {selectedStoreys.size} {selectedStoreys.size === 1 ? 'Storey' : 'Storeys'}
-                    <button onClick={clearStoreySelection} className="ml-0.5 opacity-60 hover:opacity-100 text-xs leading-none" aria-label="Clear storey filter">&times;</button>
+                    {t('hierarchy.panel.storeyCount', { count: selectedStoreys.size })}
+                    <button onClick={clearStoreySelection} className="ml-0.5 opacity-60 hover:opacity-100 text-xs leading-none" aria-label={t('hierarchy.panel.clearStoreyFilterAriaLabel')}>&times;</button>
                   </span>
                 )}
                 {classFilter !== null && (
@@ -1063,7 +1053,7 @@ export function HierarchyPanel() {
                     {selectedStoreys.size > 0 && <span className="text-[10px] opacity-50">+</span>}
                     <span className="inline-flex items-center gap-1 bg-white/15 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
                       {classFilter.label}
-                      <button onClick={clearClassFilter} className="ml-0.5 opacity-60 hover:opacity-100 text-xs leading-none" aria-label="Clear class filter">&times;</button>
+                      <button onClick={clearClassFilter} className="ml-0.5 opacity-60 hover:opacity-100 text-xs leading-none" aria-label={t('hierarchy.panel.clearClassFilterAriaLabel')}>&times;</button>
                     </span>
                   </>
                 )}
@@ -1072,20 +1062,20 @@ export function HierarchyPanel() {
                     {(selectedStoreys.size > 0 || classFilter !== null) && <span className="text-[10px] opacity-50">+</span>}
                     <span className="inline-flex items-center gap-1 bg-white/15 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
                       {typeIsolationLabel}
-                      <button onClick={clearIsolation} className="ml-0.5 opacity-60 hover:opacity-100 text-xs leading-none" aria-label="Clear type filter">&times;</button>
+                      <button onClick={clearIsolation} className="ml-0.5 opacity-60 hover:opacity-100 text-xs leading-none" aria-label={t('hierarchy.panel.clearTypeFilterAriaLabel')}>&times;</button>
                     </span>
                   </>
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <span className="opacity-70 text-[10px] font-mono">ESC</span>
+                <span className="opacity-70 text-[10px] font-mono">{t('hierarchy.panel.escHint')}</span>
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-6 text-[10px] uppercase border border-white/20 hover:bg-white/20 hover:text-white rounded-none px-2"
                   onClick={() => { clearStoreySelection(); clearAllFilters(); }}
                 >
-                  Clear all
+                  {t('hierarchy.panel.clearAllButton')}
                 </Button>
               </div>
             </div>
@@ -1103,10 +1093,11 @@ export function HierarchyPanel() {
   // Single model layout
   return (
     <div {...tourAnchor(TOUR_ANCHORS.hierarchyPanel)} className="h-full flex flex-col border-r-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-black">
+      {removeModelDialog}
       {/* Header */}
       <div className="p-3 border-b-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-black">
         <Input
-          placeholder="Search..."
+          placeholder={t('hierarchy.panel.searchPlaceholder')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           leftIcon={<Search className="h-4 w-4" />}
@@ -1126,7 +1117,7 @@ export function HierarchyPanel() {
       {/* Section Header */}
       <SectionHeader
         icon={groupingMode === 'spatial' ? Building2 : groupingMode === 'type' ? Layers : groupingMode === 'material' ? Palette : groupingMode === 'groups' ? Network : FileBox}
-        title={groupingMode === 'spatial' ? 'Hierarchy' : groupingMode === 'type' ? 'By Class' : groupingMode === 'material' ? 'By Material' : groupingMode === 'groups' ? 'By Group' : 'By Type'}
+        title={groupingMode === 'spatial' ? t('hierarchy.panel.sectionTitle.spatial') : groupingMode === 'type' ? t('hierarchy.panel.sectionTitle.byClass') : groupingMode === 'material' ? t('hierarchy.panel.sectionTitle.byMaterial') : groupingMode === 'groups' ? t('hierarchy.panel.sectionTitle.byGroup') : t('hierarchy.panel.sectionTitle.byType')}
         count={filteredNodes.length}
       />
 
@@ -1157,8 +1148,8 @@ export function HierarchyPanel() {
             <div className="flex items-center gap-1.5 flex-wrap min-w-0">
               {selectedStoreys.size > 0 && (
                 <span className="inline-flex items-center gap-1 bg-white/15 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
-                  {selectedStoreys.size} {selectedStoreys.size === 1 ? 'Storey' : 'Storeys'}
-                  <button onClick={clearStoreySelection} className="ml-0.5 opacity-60 hover:opacity-100 text-xs leading-none" aria-label="Clear storey filter">&times;</button>
+                  {t('hierarchy.panel.storeyCount', { count: selectedStoreys.size })}
+                  <button onClick={clearStoreySelection} className="ml-0.5 opacity-60 hover:opacity-100 text-xs leading-none" aria-label={t('hierarchy.panel.clearStoreyFilterAriaLabel')}>&times;</button>
                 </span>
               )}
               {classFilter !== null && (
@@ -1166,7 +1157,7 @@ export function HierarchyPanel() {
                   {selectedStoreys.size > 0 && <span className="text-[10px] opacity-50">+</span>}
                   <span className="inline-flex items-center gap-1 bg-white/15 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
                     {classFilter.label}
-                    <button onClick={clearClassFilter} className="ml-0.5 opacity-60 hover:opacity-100 text-xs leading-none" aria-label="Clear class filter">&times;</button>
+                    <button onClick={clearClassFilter} className="ml-0.5 opacity-60 hover:opacity-100 text-xs leading-none" aria-label={t('hierarchy.panel.clearClassFilterAriaLabel')}>&times;</button>
                   </span>
                 </>
               )}
@@ -1175,27 +1166,27 @@ export function HierarchyPanel() {
                   {(selectedStoreys.size > 0 || classFilter !== null) && <span className="text-[10px] opacity-50">+</span>}
                   <span className="inline-flex items-center gap-1 bg-white/15 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
                     {typeIsolationLabel}
-                    <button onClick={clearIsolation} className="ml-0.5 opacity-60 hover:opacity-100 text-xs leading-none" aria-label="Clear type filter">&times;</button>
+                    <button onClick={clearIsolation} className="ml-0.5 opacity-60 hover:opacity-100 text-xs leading-none" aria-label={t('hierarchy.panel.clearTypeFilterAriaLabel')}>&times;</button>
                   </span>
                 </>
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <span className="opacity-70 text-[10px] font-mono">ESC</span>
+              <span className="opacity-70 text-[10px] font-mono">{t('hierarchy.panel.escHint')}</span>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-6 text-[10px] uppercase border border-white/20 hover:bg-white/20 hover:text-white rounded-none px-2"
                 onClick={() => { clearStoreySelection(); clearAllFilters(); }}
               >
-                Clear all
+                {t('hierarchy.panel.clearAllButton')}
               </Button>
             </div>
           </div>
         </div>
       ) : (
         <div className="p-2 border-t-2 border-zinc-200 dark:border-zinc-800 text-[10px] uppercase tracking-wide text-zinc-600 dark:text-zinc-500 text-center bg-zinc-50 dark:bg-black font-mono">
-          Click to filter · Ctrl toggle
+          {t('hierarchy.panel.clickToFilterHint')}
         </div>
       )}
     </div>

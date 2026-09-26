@@ -1,0 +1,71 @@
+diff --git a/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx b/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
+index 05c148e..c9a2749 100644
+--- a/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
++++ b/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
+@@ -13,9 +13,17 @@ import { Drawing2DCanvas } from '../Drawing2DCanvas';
+ import { TextAnnotationEditor } from '../TextAnnotationEditor';
+ import type { DrawingViewModel } from './useDrawingViewModel';
+ import type { DrawingLayers } from './useDrawingLayers';
++// Trassia overlay (not upstream) — Querprofil: Beschriftungsstreifen (Achse,
++// Station, Serienplatz, LV95; Paket V-QP) und die NP-Bemassung zwischen den
++// Bruchkanten (Paket P3-NP). Seit Pin 10.x sitzt die 2D-Leinwand hier statt im
++// frueheren Section2DPanel. Siehe ChQpStamp.tsx und hooks/useChNpZeichnung.ts.
++import { ChQpStamp, ChQpSheetTitle } from '@/components/viewer/ChQpStamp';
++import { useChNpZeichnung } from '@/hooks/useChNpZeichnung';
+ 
+ export function DrawingCanvasView({ vm, layers }: { vm: DrawingViewModel; layers: DrawingLayers }) {
+   const { t } = useTranslation();
++  // Trassia (Paket P3-NP): Bruchkanten und Masse dieser Station.
++  const chNp = useChNpZeichnung();
+   const { drawing, status, sectionPlane, viewTransform, displayOptions } = vm;
+   const hasContent = !!drawing && (drawing.cutPolygons.length > 0 || drawing.lines?.length > 0 || layers.dxfUnderlayData.length > 0 || vm.hasReferences);
+   const editingAnnotation = vm.textAnnotation2DEditing
+@@ -29,6 +37,14 @@ export function DrawingCanvasView({ vm, layers }: { vm: DrawingViewModel; layers
+       className={`relative min-h-0 flex-1 overflow-hidden bg-white dark:bg-zinc-950 ${vm.cursorClass}`}
+       {...vm.canvasMouseHandlers}
+     >
++      {/* Trassia: was dieses Querprofil IST — Achse/Linie, Station,
++          Serienplatz, LV95. Liegt ueber dem Kanevas und laesst Maus und Rad
++          durch; die Zeichnung bleibt unangetastet, damit der Export Geometrie
++          enthaelt und keine Bildschirmbeschriftung. Im Blattmodus traegt das
++          Schriftfeld denselben Text (`ChQpSheetTitle`). */}
++      <ChQpStamp />
++      <ChQpSheetTitle />
++
+       {status === 'generating' && (
+         <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80">
+           <Loader2 className="mb-4 h-8 w-8 animate-spin text-primary" />
+@@ -89,6 +105,10 @@ export function DrawingCanvasView({ vm, layers }: { vm: DrawingViewModel; layers
+           scanOpacity={displayOptions.scanSectionOpacity}
+           unitDisplayOverrides={vm.unitDisplayOverrides}
+           paperTheme={vm.paperTheme}
++          chNpMarken={chNp.marken}
++          chNpBemassungen={chNp.bemassungen}
++          chNpKlassenLabel={chNp.klassenLabel}
++          chNpHerkunft={chNp.herkunft}
+         />
+       )}
+ 
+diff --git a/apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx b/apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx
+index 0be05c9..002f909 100644
+--- a/apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx
++++ b/apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx
+@@ -19,6 +19,8 @@ import { useTranslation } from '@/i18n';
+ import type { TranslationKey } from '@/i18n/en';
+ import type { DrawingDrawer } from './useDrawingViewModel';
+ import { DrawerToggle, IconAction, ToggleChip, ToolSegment, ToolbarDivider } from './DrawingToolbarControls';
++// Trassia overlay (not upstream): Ausdock-Knopf, siehe lib/ch/ausdock.ts.
++import { ChAusdockRahmen } from '@/components/viewer/ChAusdockRahmen';
+ 
+ export type DrawingWidthTier = 'wide' | 'compact' | 'narrow';
+ 
+@@ -134,6 +136,9 @@ export function DrawingToolbar(p: DrawingToolbarProps) {
+         {!narrow && <IconAction icon={ZoomIn} label={t('section2d.zoom.in')} onClick={p.onZoomIn} />}
+         <IconAction icon={Maximize2} label={t('section2d.zoom.fit')} onClick={p.onFit} />
+         {!narrow && <IconAction icon={p.pinned ? Pin : PinOff} label={pinLabel} pressed={p.pinned} onClick={p.onTogglePinned} />}
++        {/* Trassia (Pin 10.x, Nachfolger von 0027): die Zeichnung in ein eigenes
++            Fenster auskoppeln — immer sichtbar, gerade im schmalen Panel. */}
++        <ChAusdockRahmen panelId="drawing" />
+         {narrow && (
+           <DropdownMenu>
+             <DropdownMenuTrigger asChild>

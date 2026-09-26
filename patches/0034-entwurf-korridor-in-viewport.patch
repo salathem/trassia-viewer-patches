@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/Viewport.tsx b/apps/viewer/src/components/viewer/Viewport.tsx
-index 604f2df..ab60306 100644
+index f4af857..4f5be90 100644
 --- a/apps/viewer/src/components/viewer/Viewport.tsx
 +++ b/apps/viewer/src/components/viewer/Viewport.tsx
-@@ -69,6 +69,11 @@ import { useDxfUnderlays3DLines } from '../../hooks/useDxfUnderlay.js';
+@@ -71,6 +71,11 @@ import { selectLandXmlViewportPick } from './landXmlViewportSelection.js';
  import { uploadDxfLines3DGuarded } from './dxf-lines-3d-upload.js';
  // Trassia overlay (not upstream) — Paket V-DRAPE, siehe hooks/useChDrapeLines.ts.
  import { chDrapeMergeLines, useChDrapeLines } from '@/hooks/useChDrapeLines';
@@ -12,9 +12,9 @@ index 604f2df..ab60306 100644
 +// er tut nichts.
 +import { useChEntwurfKorridor } from '@/hooks/useChEntwurfKorridor';
  import { subscribeViewportHealth } from './device-loss-report.js';
- 
- interface ViewportProps {
-@@ -1515,9 +1520,19 @@ export function Viewport({
+ import { runGpuUpload } from './gpu-upload-guard.js';
+ import { anchorWorldLineVertices, rendererLineVertexData } from '@/lib/renderer/line-overlay-rte';
+@@ -1488,9 +1493,19 @@ export function Viewport({
    // Renderdurchlauf eine neue Identitaet und der Effekt unten wuerde bei jedem
    // Durchlauf neu auf die GPU schreiben.
    const chDrape = useChDrapeLines();

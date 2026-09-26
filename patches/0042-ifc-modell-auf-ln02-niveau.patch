@@ -1,17 +1,17 @@
 diff --git a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
-index 2a679bd..89a75ed 100644
+index 9464e12..70c967f 100644
 --- a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
 +++ b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
-@@ -29,6 +29,8 @@ import {
-   orthometricTargetForTerrain,
+@@ -30,6 +30,8 @@ import {
  } from '@/lib/geo/cesium-placement';
  import { egm96Undulation } from '@/lib/geo/egm96-undulation';
+ import { holdCameraY, type ViewerHeightFrame } from '@/lib/geo/viewer-up-scale';
 +// Trassia (V-WELT-FIX-2): in dieser Szene ist die Cesium-Hoehenachse LN02.
 +import { chCesiumGeoidAnteil } from '@/lib/ch/kontext/hoehenbezug';
  import { getGlobalRenderer } from '@/hooks/useBCF';
  import { getCesiumModule } from './cesium-module';
- 
-@@ -200,8 +202,13 @@ export function useCesiumBridge({
+ import type { CesiumViewerLifetime } from './cesium-viewer-lifetime';
+@@ -212,8 +214,13 @@ export function useCesiumBridge({
          // was actually applied to this model. N mirrors the bridge: the EGM96
          // undulation, or 0 when heights are flagged ellipsoidal. Keeps the snap
          // button round-tripping (#1456).
@@ -27,11 +27,11 @@ index 2a679bd..89a75ed 100644
          setCesiumTerrainSaveHeight(
            terrainHForFrame !== null
 diff --git a/apps/viewer/src/lib/geo/cesium-bridge.ts b/apps/viewer/src/lib/geo/cesium-bridge.ts
-index 7180cde..31f394d 100644
+index 4883a4d..85690e3 100644
 --- a/apps/viewer/src/lib/geo/cesium-bridge.ts
 +++ b/apps/viewer/src/lib/geo/cesium-bridge.ts
 @@ -37,6 +37,8 @@ import {
- import { getEffectiveHorizontalScale, resolveMapUnitToMetreScale } from './geo-scale';
+ import { getEffectiveAxisScales, resolveMapUnitToMetreScale } from './geo-scale';
  import { shouldApplyGeoidUndulation } from './cesium-placement';
  import { egm96Undulation } from './egm96-undulation';
 +// Trassia (V-WELT-FIX-2): in dieser Szene ist die Cesium-Hoehenachse LN02.
@@ -39,7 +39,7 @@ index 7180cde..31f394d 100644
  import { viewerToEnuRotation, type ViewerToEnuRotation } from './viewer-enu-rotation';
  import { ecefCameraFrame } from './ecef-camera-frame';
  import { viewBasis } from '@ifc-lite/renderer';
-@@ -156,8 +158,14 @@ export async function computeCesiumModelOrigin(
+@@ -157,8 +159,14 @@ export async function computeCesiumModelOrigin(
      // — the authored altitude is orthometric by spec, whether or not a
      // VerticalDatum is declared (it is optional and routinely omitted). The
      // only opt-out is a file whose heights are already ellipsoidal. (#1355)

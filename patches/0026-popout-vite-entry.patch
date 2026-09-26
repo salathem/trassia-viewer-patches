@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/vite.config.ts b/apps/viewer/vite.config.ts
-index dcbd223..5c282a8 100644
+index 0e273db..bf7ebae 100644
 --- a/apps/viewer/vite.config.ts
 +++ b/apps/viewer/vite.config.ts
-@@ -345,6 +345,17 @@ export default defineConfig({
+@@ -336,6 +336,17 @@ export default defineConfig({
          // asset pipeline through the real build so
          // tests/e2e/laz-wasm.e2e.spec.ts can assert it end to end (#2097).
          lazProbe: path.resolve(__dirname, 'laz-probe.html'),

@@ -1,11 +1,11 @@
 diff --git a/apps/viewer/src/components/viewer/CesiumOverlay.tsx b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-index 22a9add..6b315e3 100644
+index b821220..4214934 100644
 --- a/apps/viewer/src/components/viewer/CesiumOverlay.tsx
 +++ b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-@@ -32,6 +32,10 @@ import { useCesiumBridge } from './cesium/useCesiumBridge';
- import { useCesiumModel } from './cesium/useCesiumModel';
+@@ -36,6 +36,10 @@ import { useCesiumModel } from './cesium/useCesiumModel';
  import { useCesiumSolar } from './cesium/useCesiumSolar';
  import { useCesiumCameraSync } from './cesium/useCesiumCameraSync';
+ import { CesiumViewerLifetime } from './cesium/cesium-viewer-lifetime';
 +// Trassia overlay (Paket V-TILES) — die Kachelsaetze der Projektmappe als
 +// ZUSAETZLICHE Primitive in derselben Szene. Warum nicht als weiterer Fall in
 +// addDataSourceLayer(): siehe cesium/useChCesiumTiles.ts.
@@ -13,7 +13,7 @@ index 22a9add..6b315e3 100644
  
  export interface CesiumOverlayProps {
    mapConversion?: MapConversion;
-@@ -439,6 +443,11 @@ export function CesiumOverlay({
+@@ -449,6 +453,11 @@ export function CesiumOverlay({
    // ─── Camera sync: mirror the viewport's pose onto the globe, per frame ──
    useCesiumCameraSync({ status, viewerRef, bridgeRef, cameraBridgeRef, terrainClipY, rafRef });
  

@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/HierarchyPanel.tsx b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
-index b1578f9..07c807b 100644
+index 532fac3..67930ba 100644
 --- a/apps/viewer/src/components/viewer/HierarchyPanel.tsx
 +++ b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
-@@ -36,6 +36,9 @@ import { SectionHeader } from './hierarchy/SectionHeader';
+@@ -31,6 +31,9 @@ import { ModelsSectionHeader, useModelTagView } from './hierarchy/ModelsSectionH
  import { StoreyDisplayControls } from './hierarchy/StoreyDisplayControls';
  import { HierarchySortControl } from './hierarchy/HierarchySortControl';
  import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
@@ -11,17 +11,17 @@ index b1578f9..07c807b 100644
 +import { ChTileLayers } from './ChTileLayers';
  
  export function HierarchyPanel() {
-   const {
-@@ -986,6 +989,8 @@ export function HierarchyPanel() {
+   const { t } = useTranslation();
+@@ -976,6 +979,8 @@ export function HierarchyPanel() {
  
            {/* Models Section */}
            <div style={{ height: `${(1 - splitRatio) * 100}%` }} className="flex flex-col min-h-0">
 +            {/* Trassia: Kachelsaetze der Mappe, ueber den Modellen. */}
 +            <ChTileLayers />
-             <SectionHeader icon={FileBox} title="Models" count={models.size} />
+             <ModelsSectionHeader count={models.size} />
              <div ref={modelsRef} className="flex-1 overflow-auto scrollbar-thin bg-white dark:bg-black">
                <div
-@@ -1075,6 +1080,10 @@ export function HierarchyPanel() {
+@@ -1066,6 +1071,10 @@ export function HierarchyPanel() {
          )}
        </div>
  

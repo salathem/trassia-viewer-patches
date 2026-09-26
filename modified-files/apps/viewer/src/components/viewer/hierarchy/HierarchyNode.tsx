@@ -2,25 +2,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {
-  Move3D,
-  ChevronRight,
-  Layers,
-  Eye,
-  EyeOff,
-  FileBox,
-  RefreshCw,
-  X,
-} from 'lucide-react';
+import { ChevronRight, Layers, Eye, EyeOff, FileBox } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { openRepositionModels } from '@/lib/model-placement/commands';
 import { cn } from '@/lib/utils';
-import type { TreeNode } from './types';
-import { isSpatialContainer } from './types';
+// Trassia overlay (Paket U3-klein): Hervorhebung der Zeilen-Auswahl, siehe lib/ch/zeilen-auswahl.ts.
+import { useChZeileGewaehlt } from '@/lib/ch/zeilen-auswahl';
+import { chZahlExakt } from '@/lib/ch/gesamt-statistik';
+import { useTranslation } from '@/i18n';
+import { formatLocaleNumber } from '@/i18n/intlFormat';
+import { isNoGeometryNode, isSpatialContainer, type TreeNode } from './types';
+import { CountBadgeTooltip } from './CountBadgeTooltip';
 import { IFC_ICON_CODEPOINTS, IFC_ICON_DEFAULT } from './ifc-icons';
-// Trassia overlay (Paket U3-klein): Zeilen-Auswahl fuer die Leertaste —
-// Hervorhebung gewaehlter Zeilen und Ctrl-Klick auf der Modellzeile.
-import { chZeilenKlick, useChZeileGewaehlt } from '@/lib/ch/zeilen-auswahl';
+import { ModelTagGroupRow } from './ModelTagGroupRow';
+import { ModelHeaderRow } from './ModelHeaderRow';
 
 /**
  * Resolve the Material Symbols code point for a given IFC type string.
@@ -36,6 +30,10 @@ const NODE_TYPE_ICONS: Record<string, React.ElementType> = {
   'unified-storey': Layers,
   'model-header': FileBox,
 };
+
+/** Indent per tree level. 12 px (was 16) still reads as a hierarchy and gives
+ *  a storey row 12 px more for its name (#5394). */
+const HIERARCHY_INDENT_STEP_PX = 12;
 
 export interface HierarchyNodeProps {
   node: TreeNode;
@@ -74,12 +72,13 @@ export function HierarchyNode({
   sourceBacked = false,
   sourceSyncing = false,
 }: HierarchyNodeProps) {
+  const { t, locale } = useTranslation();
+  // Trassia (U3-klein): steht die Zeile in der Zeilen-Auswahl (Leertaste)?
+  const chGewaehlt = useChZeileGewaehlt(node.id);
   const resolvedType = node.ifcType || node.type;
   // Use Lucide icon for non-IFC structural nodes, Material Symbols for IFC classes
   const LucideIcon = NODE_TYPE_ICONS[node.type];
   const iconCodepoint = getIfcIconCodepoint(resolvedType);
-  // Trassia (U3-klein): steht die Zeile in der Zeilen-Auswahl (Leertaste)?
-  const chGewaehlt = useChZeileGewaehlt(node.id);
 
   // Spatial containers, storeys, spaces, and grouping headers get the emphasized
   // label treatment; element rows stay lighter.
@@ -91,165 +90,46 @@ export function HierarchyNode({
     node.type === 'unified-storey' ||
     node.type === 'type-group' ||
     node.type === 'material-group' ||
-    node.type === 'group'
+    node.type === 'group' ||
+    node.type === 'other-group'
       ? 'font-medium text-zinc-900 dark:text-zinc-100'
       : 'text-zinc-700 dark:text-zinc-300';
   const strikeWhenHidden = nodeHidden && 'line-through decoration-zinc-400 dark:decoration-zinc-600';
-
+  const noGeometry = isNoGeometryNode(node);
+  if (node.type === 'model-tag-group') return <ModelTagGroupRow node={node} virtualRow={virtualRow} />;
   // Model header nodes (for visibility control and expansion)
   if (node.type === 'model-header' && node.id.startsWith('model-')) {
-    const modelId = node.modelIds[0];
-
     return (
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: `${virtualRow.size}px`,
-          transform: `translateY(${virtualRow.start}px)`,
-        }}
-      >
-        <div
-          className={cn(
-            'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group ch-zeile',
-            'hover:bg-zinc-50 dark:hover:bg-zinc-900',
-            'border-transparent',
-            !modelVisible && 'opacity-50',
-            node.hasChildren && 'cursor-pointer',
-            chGewaehlt && 'ch-zeile-gewaehlt'
-          )}
-          style={{ paddingLeft: '8px' }}
-          onClick={(e) => {
-            // Trassia (U3-klein): Ctrl-Klick = Zeile in die Auswahl, sonst Upstream.
-            if (!chZeilenKlick(node, e)) return;
-            onModelHeaderClick(modelId, node.id, node.hasChildren);
-          }}
-        >
-          {/* Expand/collapse chevron */}
-          {node.hasChildren ? (
-            <ChevronRight
-              className={cn(
-                'h-3.5 w-3.5 text-zinc-400 transition-transform shrink-0',
-                node.isExpanded && 'rotate-90'
-              )}
-            />
-          ) : (
-            <div className="w-3.5" />
-          )}
-
-          <FileBox className="h-3.5 w-3.5 text-primary shrink-0" />
-          <span className="flex-1 min-w-0 text-sm truncate ml-1.5 text-zinc-900 dark:text-zinc-100">
-            {node.name}
-          </span>
-
-          {node.elementCount !== undefined && (
-            // Trassia (U3-klein, TODO #29): klein und grau, mit Zaehlweise im
-            // Tooltip — die Zahl der Modellzeile sind ALLE IFC-Entitaeten.
-            <Tooltip>
-              <TooltipTrigger asChild>
-                {/* Tester U3 M-1/N-2/N-4: eine Zahl darf weder den Namen auf 0 px druecken noch gekuerzt
-                    werden (eine Ziffer ohne Auslassung ist eine falsche Zahl). Sie faellt weg, wenn die
-                    ZEILE schmal ist (Container-Query in ch-dichte.css Regel 10) — nicht das Fenster. */}
-                <span className="ch-zeilenzahl text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500 px-1 shrink-0">
-                  {node.elementCount.toLocaleString()}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">{node.elementCount.toLocaleString()} IFC entities in this model (all entity types, not only building elements)</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
-
-          <button className="p-0.5" aria-label={`Reposition model ${node.name}`} title="Reposition model"
-            onClick={(event) => { event.stopPropagation(); openRepositionModels([modelId]); }}>
-            <Move3D className="h-3.5 w-3.5" />
-          </button>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onModelVisibilityToggle(modelId, e);
-                }}
-                aria-label={modelVisible ? `Hide model ${node.name}` : `Show model ${node.name}`}
-                /* Trassia (Paket V-UX, P6 / Befund R-9): dauerhaft sichtbar
-                   und mindestens 24x24 px. Vorher 18x18 px und erst beim
-                   Hovern eingeblendet — der Tester fand die Schalter nicht,
-                   und auf einem Zeigegeraet ohne Hover gibt es sie gar nicht. */
-                className="inline-flex h-6 w-6 items-center justify-center rounded p-0.5 opacity-70 transition-opacity hover:bg-muted hover:opacity-100 group-hover:opacity-100"
-              >
-                {modelVisible ? (
-                  <Eye className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100" />
-                ) : (
-                  <EyeOff className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100" />
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">{modelVisible ? 'Hide model' : 'Show model'}</p>
-            </TooltipContent>
-          </Tooltip>
-
-          {sourceBacked && onSyncSourceModel && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSyncSourceModel(modelId, e);
-                  }}
-                  aria-label={`Sync model ${node.name} from source`}
-                  className={cn(
-                    'inline-flex h-6 w-6 items-center justify-center rounded p-0.5 opacity-70 transition-opacity hover:bg-muted hover:opacity-100 group-hover:opacity-100',
-                    sourceSyncing && 'opacity-100',
-                  )}
-                  disabled={sourceSyncing}
-                >
-                  <RefreshCw
-                    className={cn(
-                      'h-3.5 w-3.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100',
-                      sourceSyncing && 'animate-spin',
-                    )}
-                  />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">
-                  {sourceSyncing ? 'Syncing model…' : 'Sync from source'}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          )}
-
-          {modelsCount > 1 && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveModel(modelId, e);
-                  }}
-                  aria-label={`Remove model ${node.name}`}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded p-0.5 opacity-70 transition-opacity hover:bg-muted hover:opacity-100 group-hover:opacity-100"
-                >
-                  <X className="h-3.5 w-3.5 text-zinc-400 hover:text-red-500" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">Remove model</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-      </div>
+      <ModelHeaderRow
+        node={node}
+        virtualRow={virtualRow}
+        modelsCount={modelsCount}
+        modelVisible={modelVisible}
+        onModelVisibilityToggle={onModelVisibilityToggle}
+        onRemoveModel={onRemoveModel}
+        onSyncSourceModel={onSyncSourceModel}
+        onModelHeaderClick={onModelHeaderClick}
+        sourceBacked={sourceBacked}
+        sourceSyncing={sourceSyncing}
+      />
     );
   }
+
+  // The visibility toggle shares the type icon's slot (#5394); spatial
+  // containers in multi-model mode have none.
+  const hasToggle = !(isMultiModel && isSpatialContainer(node.type));
+  const iconClass = cn(
+    'text-zinc-500 dark:text-zinc-400 transition-opacity',
+    hasToggle && 'group-hover:opacity-0',
+    hasToggle && nodeHidden && 'opacity-0',
+  );
 
   // Regular node rendering (spatial hierarchy nodes and elements)
   return (
     <div
+      // Query container for the badges below (#5394): its width is the tree
+      // panel's, whatever the row's depth.
+      className="@container"
       style={{
         position: 'absolute',
         top: 0,
@@ -262,6 +142,7 @@ export function HierarchyNode({
       <div
         className={cn(
           'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group hierarchy-item ch-zeile',
+          chGewaehlt && 'ch-zeile-gewaehlt',
           // No selection styling for spatial containers in multi-model mode
           isMultiModel && isSpatialContainer(node.type)
             ? 'border-transparent cursor-default'
@@ -269,11 +150,10 @@ export function HierarchyNode({
                 'cursor-pointer',
                 isSelected ? 'border-l-primary font-medium selected' : 'border-transparent'
               ),
-          nodeHidden && 'opacity-50 grayscale',
-          chGewaehlt && 'ch-zeile-gewaehlt'
+          (nodeHidden || noGeometry) && 'opacity-50 grayscale'
         )}
         style={{
-          paddingLeft: `${node.depth * 16 + 8}px`,
+          paddingLeft: `${node.depth * HIERARCHY_INDENT_STEP_PX + 8}px`,
           // No selection highlighting for spatial containers in multi-model mode
           backgroundColor: isSelected && !(isMultiModel && isSpatialContainer(node.type))
             ? 'var(--hierarchy-selected-bg)' : undefined,
@@ -298,7 +178,11 @@ export function HierarchyNode({
               e.stopPropagation();
               onToggleExpand(node.id);
             }}
-            aria-label={node.isExpanded ? `Collapse ${node.name}` : `Expand ${node.name}`}
+            aria-label={
+              node.isExpanded
+                ? t('hierarchy.node.collapseAriaLabel', { name: node.name })
+                : t('hierarchy.node.expandAriaLabel', { name: node.name })
+            }
             aria-expanded={node.isExpanded}
             className="p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-none mr-1"
           >
@@ -313,64 +197,76 @@ export function HierarchyNode({
           <div className="w-5" />
         )}
 
-        {/* Visibility Toggle - hide for spatial containers (Project/Site/Building) in multi-model mode */}
-        {!(isMultiModel && isSpatialContainer(node.type)) && (
+        {/* Type icon, with the visibility toggle overlaid in the same 14 px slot
+            (#5394). The toggle used to reserve its own slot while invisible;
+            now it replaces the icon on row hover, and stays shown while the node
+            is hidden. Spatial containers in multi-model mode have no toggle. */}
+        <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center">
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onVisibilityToggle(node);
-                }}
-                aria-label={node.isVisible ? `Hide ${node.name}` : `Show ${node.name}`}
-                className={cn(
-                  'mr-1 inline-flex h-6 w-6 items-center justify-center rounded p-0.5 opacity-70 transition-opacity hover:bg-muted hover:opacity-100 group-hover:opacity-100',
-                  nodeHidden && 'opacity-100'
-                )}
-              >
-                {node.isVisible ? (
-                  <Eye className="h-3 w-3 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100" />
-                ) : (
-                  <EyeOff className="h-3 w-3 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100" />
-                )}
-              </button>
+              {LucideIcon ? (
+                <LucideIcon data-hierarchy-type-icon className={cn('h-3.5 w-3.5 shrink-0', iconClass)} />
+              ) : (
+                <span
+                  data-hierarchy-type-icon
+                  className={cn('material-symbols-outlined shrink-0 leading-none', iconClass)}
+                  style={{ fontSize: '14px' }}
+                  aria-hidden="true"
+                >
+                  {iconCodepoint}
+                </span>
+              )}
             </TooltipTrigger>
             <TooltipContent>
-              <p className="text-xs">
-                {node.isVisible ? 'Hide' : 'Show'}
-              </p>
+              <p className="text-xs">{resolvedType}</p>
             </TooltipContent>
           </Tooltip>
-        )}
-
-        {/* Type Icon */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {LucideIcon ? (
-              <LucideIcon className="h-3.5 w-3.5 shrink-0 text-zinc-500 dark:text-zinc-400" />
-            ) : (
-              <span
-                className="material-symbols-outlined shrink-0 leading-none text-zinc-500 dark:text-zinc-400"
-                style={{ fontSize: '14px' }}
-                aria-hidden="true"
-              >
-                {iconCodepoint}
-              </span>
-            )}
-          </TooltipTrigger>
-          <TooltipContent>
-            <p className="text-xs">{resolvedType}</p>
-          </TooltipContent>
-        </Tooltip>
+          {hasToggle && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onVisibilityToggle(node);
+                  }}
+                  aria-label={
+                    node.isVisible
+                      ? t('hierarchy.node.hideAriaLabel', { name: node.name })
+                      : t('hierarchy.node.showAriaLabel', { name: node.name })
+                  }
+                  className={cn(
+                    'absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity',
+                    nodeHidden && 'opacity-100'
+                  )}
+                >
+                  {node.isVisible ? (
+                    <Eye className="h-3 w-3 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100" />
+                  ) : (
+                    <EyeOff className="h-3 w-3 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">
+                  {node.isVisible ? t('hierarchy.node.hide') : t('hierarchy.node.show')}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </span>
 
         {/* Name (+ optional muted LongName for spatial nodes carrying an ISO
             19650 code in Name and the descriptive label in LongName, #1634) */}
         {node.secondaryName ? (
           <span
             className="flex-1 min-w-0 flex items-baseline text-sm ml-1.5"
-            title={`${node.name} - ${node.secondaryName}`}
+            title={t('hierarchy.node.nameAndSecondaryTitle', { name: node.name, secondaryName: node.secondaryName ?? '' })}
           >
-            <span className={cn('shrink-0 max-w-[55%] truncate', primaryNameClass, strikeWhenHidden)}>
+            {/* The Name takes its full width first and the LongName gets the
+                rest (#5394). A 55% cap truncated a descriptive Name to make
+                room for a LongName that was often an id; the #1634 case, a
+                short ISO code, still leaves the LongName its room. */}
+            <span className={cn('shrink-0 max-w-full truncate', primaryNameClass, strikeWhenHidden)}>
               {node.name}
             </span>
             <span className={cn('truncate min-w-0 ml-1.5 font-normal text-zinc-400 dark:text-zinc-500', strikeWhenHidden)}>
@@ -390,15 +286,23 @@ export function HierarchyNode({
         )}
 
         {/* Storey Elevation */}
-        {node.storeyElevation !== undefined && (
+        {node.storeyDisplayElevation !== undefined && (
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="text-[10px] font-mono bg-emerald-100 dark:bg-emerald-950 px-1.5 py-0.5 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-none">
-                {node.storeyElevation >= 0 ? '+' : ''}{node.storeyElevation.toFixed(2)}m
+                {t('hierarchy.node.elevationBadge', {
+                  sign: node.storeyDisplayElevation >= 0 ? '+' : '',
+                  value: formatLocaleNumber(locale, node.storeyDisplayElevation, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                })}
               </span>
             </TooltipTrigger>
             <TooltipContent>
-              <p className="text-xs">Elevation: {node.storeyElevation >= 0 ? '+' : ''}{node.storeyElevation.toFixed(2)}m</p>
+              <p className="text-xs">
+                {t('hierarchy.node.elevationTooltip', {
+                  sign: node.storeyDisplayElevation >= 0 ? '+' : '',
+                  value: formatLocaleNumber(locale, node.storeyDisplayElevation, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                })}
+              </p>
             </TooltipContent>
           </Tooltip>
         )}
@@ -407,18 +311,15 @@ export function HierarchyNode({
         {node.elementCount !== undefined && (
           <Tooltip>
             <TooltipTrigger asChild>
-              {/* Trassia (U3-klein, TODO #29): klein und grau statt Kasten mit Rahmen; in schmalen Zeilen weg statt gekuerzt (Tester N-2/N-4, Container-Query). */}
-              <span className="ch-zeilenzahl text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500 px-1 shrink-0">
-                {node.elementCount.toLocaleString()}
+              {/* Yields first when the tree is narrow (#5394): below 18rem the
+                  name needs the room more than the count does. */}
+              <span data-hierarchy-count-badge className="hidden @2xs:inline text-[10px] font-mono bg-zinc-100 dark:bg-zinc-950 px-1.5 py-0.5 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-none">
+                {/* Trassia: Schweizer Tausendertrennung wie Fusszeile und Koordinaten. */}
+                {chZahlExakt(node.elementCount)}
               </span>
             </TooltipTrigger>
             <TooltipContent>
-              {/* Tester U3 M-2: auf Container-Zeilen zaehlt der Upstream die direkten Eintraege, nicht die Elemente darunter. */}
-              <p className="text-xs">
-                {isSpatialContainer(node.type) || node.type === 'element'
-                  ? `${node.elementCount.toLocaleString()} direct ${node.elementCount === 1 ? 'entry' : 'entries'} under this row (not the elements further down)`
-                  : `${node.elementCount.toLocaleString()} ${node.elementCount === 1 ? 'element' : 'elements'} in this row`}
-              </p>
+              <CountBadgeTooltip elementCount={node.elementCount} summary={node.countSummary} />
             </TooltipContent>
           </Tooltip>
         )}

@@ -1,39 +1,32 @@
-diff --git a/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx b/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx
-index cd33930..b18b1a1 100644
---- a/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx
-+++ b/apps/viewer/src/components/viewer/tools/MeasurePanel.tsx
-@@ -125,6 +125,8 @@ import {
-   EnhLine,
-   type Vec3Like,
- } from './measure-modes/geo-readout';
+diff --git a/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx b/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx
+index c639f78..d86d3d0 100644
+--- a/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx
++++ b/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx
+@@ -16,6 +16,8 @@ import { useAnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
+ import { HudHint, HudItem, HudSurface } from '../../viewport-ui/hud';
+ import { measureHintKey } from './measure-modes/readouts';
+ import { projectedEnh, useProjectedLatLon, type Vec3Like } from './measure-modes/geo-readout';
 +// Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-geo-status.tsx
-+import { ChGeoBanner } from './measure-modes/ch-geo-status';
- import { useDraggablePanel } from '@/hooks/useDraggablePanel';
- import { useAnchorGeoreference, type AnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
++import { ChGeoBannerHud } from './measure-modes/ch-geo-status';
  
-@@ -683,6 +685,16 @@ export function MeasureOverlay() {
-         </div>
-       )}
+ export function MeasureHint() {
+   const { t } = useTranslation();
+@@ -50,7 +52,8 @@ export function MeasureGeoReadout() {
+   // Hook order is fixed: called unconditionally, gated by its arguments.
+   // Non-blocking: null until proj4 resolves, so E/N/H is unaffected.
+   const latLon = useProjectedLatLon(showGeo ? livePoint : null, showGeo ? anchor : null);
+-  if (!showGeo || !anchor || !livePoint) return null;
++  // Trassia: ohne IfcMapConversion statt Stille ein sichtbarer Hinweis.
++  if (!showGeo || !anchor || !livePoint) return <ChGeoBannerHud anchor={anchor} point={livePoint} enabled={geoReadoutEnabled} />;
+   const enh = projectedEnh(livePoint, anchor);
  
-+      {/* Trassia: the other half of the box above — when the model carries no
-+          IfcMapConversion, upstream renders nothing at all and the user cannot
-+          tell an un-georeferenced model from a georeferenced one near zero. */}
-+      <ChGeoBanner
-+        anchor={anchor}
-+        point={livePoint}
-+        enabled={geoReadoutEnabled}
-+        bottomClass={readoutBottomClass}
-+      />
-+
-       {/* Render measurement lines, labels, and snap indicators */}
-       <MeasurementOverlays
-         measurements={measurements}
+   return (
 diff --git a/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx b/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx
-index 8250a85..20f8718 100644
+index 4337460..30e2654 100644
 --- a/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx
 +++ b/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx
-@@ -52,6 +52,8 @@ import {
- } from './measure-modes/coordinates';
+@@ -56,6 +56,8 @@ import {
+ import { viewerToIfcAxes } from '@/lib/geo/coordinate-frame';
  import { formatDistance, formatSignedTriple } from './formatDistance';
  import { projectedEnh, useProjectedLatLon, type Vec3Like } from './measure-modes/geo-readout';
 +// Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-geo-status.tsx
@@ -41,7 +34,7 @@ index 8250a85..20f8718 100644
  
  /** One labelled coordinate row. */
  function CoordRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
-@@ -196,6 +198,11 @@ export function MeasurePointReadout() {
+@@ -205,6 +207,11 @@ export function MeasurePointReadout() {
            {anchor.eff.projectedCRS.name}
          </div>
        )}

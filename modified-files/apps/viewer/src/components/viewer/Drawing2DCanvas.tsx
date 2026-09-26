@@ -22,47 +22,13 @@ import type { ScanBandPoint } from '@/hooks/scanSectionMath';
 import { type CachedSheetTransform } from '@/lib/drawing/sheet-geometry-key';
 import { resolveSheetTransform } from '@/lib/drawing/sheet-transform';
 import { useDrawingElementPropertiesLookup } from '@/hooks/useDrawingElementPropertiesLookup';
+import { markActiveDrawingCanvasRendered, registerActiveDrawingCanvas } from '@/lib/drawing/active-canvas-snapshot';
 // Trassia overlay (not upstream) — Paket P3-NP: Bemassung zwischen Bruchkanten.
 import { chNpLayout, chNpZeichnen, type ChNpFarben } from '@/lib/ch/np/np-zeichnen';
 
-// Fill colors for IFC types (architectural convention)
-const IFC_TYPE_FILL_COLORS: Record<string, string> = {
-  // Structural elements - solid gray
-  IfcWall: '#b0b0b0',
-  IfcWallStandardCase: '#b0b0b0',
-  IfcColumn: '#909090',
-  IfcBeam: '#909090',
-  IfcSlab: '#c8c8c8',
-  IfcRoof: '#d0d0d0',
-  IfcFooting: '#808080',
-  IfcPile: '#707070',
-
-  // Windows/Doors - lighter
-  IfcWindow: '#e8f4fc',
-  IfcDoor: '#f5e6d3',
-
-  // Stairs/Railings
-  IfcStair: '#d8d8d8',
-  IfcStairFlight: '#d8d8d8',
-  IfcRailing: '#c0c0c0',
-
-  // MEP - distinct colors
-  IfcPipeSegment: '#a0d0ff',
-  IfcDuctSegment: '#c0ffc0',
-
-  // Furniture
-  IfcFurnishingElement: '#ffe0c0',
-
-  // Spaces (usually not shown in section)
-  IfcSpace: '#f0f0f0',
-
-  // Default
-  default: '#d0d0d0',
-};
-
-export function getFillColorForType(ifcType: string): string {
-  return IFC_TYPE_FILL_COLORS[ifcType] || IFC_TYPE_FILL_COLORS.default;
-}
+import { getFillColorForType } from './drawing/ifc-fill-colors';
+import { resolveDrawingPaperTheme, type DrawingPaperTheme } from './drawing/paper-theme';
+export { getFillColorForType } from './drawing/ifc-fill-colors';
 
 // ─── IFC annotation overlay helpers (issue #812) ─────────────────────────────
 
@@ -240,7 +206,6 @@ function drawScanSectionScreenSpace(
   ctx.restore();
 }
 
-// Static constants to avoid creating new objects/arrays on every render
 const CANVAS_STYLE = { imageRendering: 'crisp-edges' as const };
 const EMPTY_MEASURE_RESULTS: Measure2DResultData[] = [];
 const EMPTY_UNIT_DISPLAY_OVERRIDES: Record<string, string> = {};
@@ -254,6 +219,7 @@ export interface Measure2DResultData {
 
 interface Drawing2DCanvasProps {
   drawing: Drawing2D;
+  snapshotSourceDrawing?: Drawing2D;
   transform: { x: number; y: number; scale: number };
   showHiddenLines: boolean;
   overrideEngine: GraphicOverrideEngine;
@@ -300,6 +266,11 @@ interface Drawing2DCanvasProps {
   // `unitDisplayOverrides` but left this canvas's own `formatDistance()`
   // calls on the pre-#2199 no-argument (always-metric) form).
   unitDisplayOverrides?: Record<string, string>;
+  // Paper/ink follow the app theme in direct mode; sheet mode's paper stays
+  // white regardless (#5496). Defaults to the light-theme reading so every
+  // existing caller (there is exactly one, `DrawingCanvasView`) that doesn't
+  // pass it yet keeps today's white-paper look.
+  paperTheme?: DrawingPaperTheme;
   // Trassia overlay (not upstream) — Paket P3-NP: die Bemassung zwischen den
   // Bruchkanten der Bestandsanalyse. Fertig gerechnete Bildschirmkoordinaten
   // kommen NICHT herein — nur die Marken und Masse; die Umrechnung braucht
@@ -310,8 +281,11 @@ interface Drawing2DCanvasProps {
   chNpHerkunft?: (marke: import('@/lib/ch/np/np-station').ChNpMarke) => string | null;
 }
 
+const DEFAULT_PAPER_THEME: DrawingPaperTheme = resolveDrawingPaperTheme('light', false);
+
 export function Drawing2DCanvas({
   drawing,
+  snapshotSourceDrawing = drawing,
   transform,
   showHiddenLines,
   overrideEngine,
@@ -344,6 +318,7 @@ export function Drawing2DCanvas({
   scanPoints,
   scanOpacity = 1,
   unitDisplayOverrides = EMPTY_UNIT_DISPLAY_OVERRIDES,
+  paperTheme = DEFAULT_PAPER_THEME,
   // Trassia overlay (not upstream) — Paket P3-NP.
   chNpMarken,
   chNpBemassungen,
@@ -355,8 +330,7 @@ export function Drawing2DCanvas({
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   // Resolved once per (model set, polygon set) change, never per draw frame.
   const getElementProperties = useDrawingElementPropertiesLookup(drawing, overrideEngine, overridesEnabled);
-
-  // ResizeObserver to track canvas size changes
+  useEffect(() => canvasRef.current ? registerActiveDrawingCanvas(canvasRef.current, snapshotSourceDrawing) : undefined, [snapshotSourceDrawing]);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -398,8 +372,10 @@ export function Drawing2DCanvas({
     canvas.height = canvasSize.height * dpr;
     ctx.scale(dpr, dpr);
 
-    // Clear with light gray background (shows paper edge when in sheet mode)
-    ctx.fillStyle = sheetEnabled && activeSheet ? '#e5e5e5' : '#ffffff';
+    // Clear with the desk (shows the paper edge when in sheet mode) or the
+    // theme's paper colour in direct mode (#5496: dark paper in dark theme,
+    // print preview always white).
+    ctx.fillStyle = sheetEnabled && activeSheet ? paperTheme.desk : paperTheme.paper;
     ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -421,6 +397,9 @@ export function Drawing2DCanvas({
       // ─────────────────────────────────────────────────────────────────────
       // 1. Draw paper background (white with shadow)
       // ─────────────────────────────────────────────────────────────────────
+      // Always white regardless of theme (#5496): a sheet models a physical
+      // printed page, and only the desk around it (the clear above) follows
+      // the theme.
       ctx.save();
       // Paper shadow
       ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
@@ -1101,8 +1080,10 @@ export function Drawing2DCanvas({
       // 1. FILL CUT POLYGONS (with color from IFC materials, override engine, or type fallback)
       // ═══════════════════════════════════════════════════════════════════════
       for (const polygon of drawing.cutPolygons) {
-        // Get fill color - priority: IFC materials > override engine > IFC type fallback
-        let fillColor = getFillColorForType(polygon.ifcType), strokeColor = '#000000', opacity = 1;
+        // Get fill color - priority: IFC materials > override engine > IFC type fallback.
+        // Direct mode only (#5496): the dark-paper analogue applies here, never
+        // in sheet mode above, which stays on white paper.
+        let fillColor = getFillColorForType(polygon.ifcType, paperTheme.isDark), strokeColor = paperTheme.ink, opacity = 1;
 
         // Use actual IFC material colors from the mesh data
         if (useIfcMaterials) {
@@ -1159,7 +1140,7 @@ export function Drawing2DCanvas({
       // 2. STROKE CUT POLYGON OUTLINES (with color from override engine)
       // ═══════════════════════════════════════════════════════════════════════
       for (const polygon of drawing.cutPolygons) {
-        let strokeColor = '#000000';
+        let strokeColor = paperTheme.ink;
         let lineWeight = 0.5;
 
         if (overridesEnabled) {
@@ -1224,15 +1205,16 @@ export function Drawing2DCanvas({
           continue;
         }
 
-        // Set line style based on category
-        let strokeColor = '#000000';
+        // Set line style based on category. Ink follows the paper (#5496):
+        // direct mode only, sheet mode above stays black-on-white.
+        let strokeColor = paperTheme.ink;
         let lineWidth = 0.25;
         let dashPattern: number[] = [];
 
         switch (line.category) {
           case 'projection':
             lineWidth = 0.25;
-            strokeColor = '#000000';
+            strokeColor = paperTheme.ink;
             break;
           case 'hidden':
             lineWidth = 0.18;
@@ -1241,19 +1223,19 @@ export function Drawing2DCanvas({
             break;
           case 'silhouette':
             lineWidth = 0.35;
-            strokeColor = '#000000';
+            strokeColor = paperTheme.ink;
             break;
           case 'crease':
             lineWidth = 0.18;
-            strokeColor = '#000000';
+            strokeColor = paperTheme.ink;
             break;
           case 'boundary':
             lineWidth = 0.25;
-            strokeColor = '#000000';
+            strokeColor = paperTheme.ink;
             break;
           case 'annotation':
             lineWidth = 0.13;
-            strokeColor = '#000000';
+            strokeColor = paperTheme.ink;
             break;
         }
 
@@ -1666,7 +1648,6 @@ export function Drawing2DCanvas({
       ctx.setLineDash([]);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
     // 8. RENDER SELECTION HIGHLIGHT
     // ═══════════════════════════════════════════════════════════════════════
     if (selectedAnnotation) {
@@ -1819,7 +1800,8 @@ export function Drawing2DCanvas({
         farben,
       );
     }
-  }, [referenceImages, drawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, unitDisplayOverrides, chNpMarken, chNpBemassungen, chNpKlassenLabel, chNpHerkunft]);
+    markActiveDrawingCanvasRendered(canvas, snapshotSourceDrawing, textAnnotationEditing === null);
+  }, [referenceImages, drawing, snapshotSourceDrawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, unitDisplayOverrides, paperTheme, chNpMarken, chNpBemassungen, chNpKlassenLabel, chNpHerkunft]);
 
   return (
     <canvas

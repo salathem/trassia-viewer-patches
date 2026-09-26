@@ -1,20 +1,21 @@
 diff --git a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
-index 4504eaf..8174c0e 100644
+index f814074..f39175d 100644
 --- a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
 +++ b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
-@@ -22,6 +22,8 @@ import type { ScanBandPoint } from '@/hooks/scanSectionMath';
- import { type CachedSheetTransform } from '@/lib/drawing/sheet-geometry-key';
+@@ -23,6 +23,9 @@ import { type CachedSheetTransform } from '@/lib/drawing/sheet-geometry-key';
  import { resolveSheetTransform } from '@/lib/drawing/sheet-transform';
  import { useDrawingElementPropertiesLookup } from '@/hooks/useDrawingElementPropertiesLookup';
+ import { markActiveDrawingCanvasRendered, registerActiveDrawingCanvas } from '@/lib/drawing/active-canvas-snapshot';
 +// Trassia overlay (not upstream) — Paket P3-NP: Bemassung zwischen Bruchkanten.
 +import { chNpLayout, chNpZeichnen, type ChNpFarben } from '@/lib/ch/np/np-zeichnen';
- 
- // Fill colors for IFC types (architectural convention)
- const IFC_TYPE_FILL_COLORS: Record<string, string> = {
-@@ -298,6 +300,14 @@ interface Drawing2DCanvasProps {
-   // `unitDisplayOverrides` but left this canvas's own `formatDistance()`
-   // calls on the pre-#2199 no-argument (always-metric) form).
-   unitDisplayOverrides?: Record<string, string>;
++
+ import { getFillColorForType } from './drawing/ifc-fill-colors';
+ import { resolveDrawingPaperTheme, type DrawingPaperTheme } from './drawing/paper-theme';
+ export { getFillColorForType } from './drawing/ifc-fill-colors';
+@@ -268,6 +271,14 @@ interface Drawing2DCanvasProps {
+   // existing caller (there is exactly one, `DrawingCanvasView`) that doesn't
+   // pass it yet keeps today's white-paper look.
+   paperTheme?: DrawingPaperTheme;
 +  // Trassia overlay (not upstream) — Paket P3-NP: die Bemassung zwischen den
 +  // Bruchkanten der Bestandsanalyse. Fertig gerechnete Bildschirmkoordinaten
 +  // kommen NICHT herein — nur die Marken und Masse; die Umrechnung braucht
@@ -25,11 +26,11 @@ index 4504eaf..8174c0e 100644
 +  chNpHerkunft?: (marke: import('@/lib/ch/np/np-station').ChNpMarke) => string | null;
  }
  
- export function Drawing2DCanvas({
-@@ -334,6 +344,11 @@ export function Drawing2DCanvas({
-   scanPoints,
+ const DEFAULT_PAPER_THEME: DrawingPaperTheme = resolveDrawingPaperTheme('light', false);
+@@ -308,6 +319,11 @@ export function Drawing2DCanvas({
    scanOpacity = 1,
    unitDisplayOverrides = EMPTY_UNIT_DISPLAY_OVERRIDES,
+   paperTheme = DEFAULT_PAPER_THEME,
 +  // Trassia overlay (not upstream) — Paket P3-NP.
 +  chNpMarken,
 +  chNpBemassungen,
@@ -38,11 +39,10 @@ index 4504eaf..8174c0e 100644
  }: Drawing2DCanvasProps): React.ReactElement {
    const referenceImages = useReferenceImagesForDrawing(drawing.config.plane);
    const canvasRef = useRef<HTMLCanvasElement>(null);
-@@ -1747,7 +1762,64 @@ export function Drawing2DCanvas({
+@@ -1727,8 +1743,65 @@ export function Drawing2DCanvas({
          }
        }
      }
--  }, [referenceImages, drawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, unitDisplayOverrides]);
 +
 +    // ═══════════════════════════════════════════════════════════════════════
 +    // Trassia overlay (not upstream) — Paket P3-NP:
@@ -100,42 +100,9 @@ index 4504eaf..8174c0e 100644
 +        farben,
 +      );
 +    }
-+  }, [referenceImages, drawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, unitDisplayOverrides, chNpMarken, chNpBemassungen, chNpKlassenLabel, chNpHerkunft]);
+     markActiveDrawingCanvasRendered(canvas, snapshotSourceDrawing, textAnnotationEditing === null);
+-  }, [referenceImages, drawing, snapshotSourceDrawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, unitDisplayOverrides, paperTheme]);
++  }, [referenceImages, drawing, snapshotSourceDrawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, unitDisplayOverrides, paperTheme, chNpMarken, chNpBemassungen, chNpKlassenLabel, chNpHerkunft]);
  
    return (
      <canvas
-diff --git a/apps/viewer/src/components/viewer/Section2DPanel.tsx b/apps/viewer/src/components/viewer/Section2DPanel.tsx
-index de0cb12..12aafa9 100644
---- a/apps/viewer/src/components/viewer/Section2DPanel.tsx
-+++ b/apps/viewer/src/components/viewer/Section2DPanel.tsx
-@@ -70,6 +70,10 @@ import { useChHeaderDrag } from '@/hooks/useChPanelChrome';
- import {
-   chPanelBreite, chPanelIstSchmal, chPanelOrt, useChPanelBreiten, useChPanelOrte,
- } from '@/lib/ch/panel-breite';
-+// Trassia overlay (not upstream) — Paket P3-NP: Marken und Bemassung der
-+// Bestandsanalyse an der Station dieses Schnitts. Die Entscheidungen stehen
-+// im Haken, damit dieser Patch klein bleibt.
-+import { useChNpZeichnung } from '@/hooks/useChNpZeichnung';
- 
- interface Section2DPanelProps {
-   mergedGeometry?: GeometryResult | null;
-@@ -249,6 +253,8 @@ export function Section2DPanel({
-   const chGemessen = chPanelBreite(chBreiten, 'drawing2d');
-   // Wechselt, sobald das Wurzelelement ausgetauscht wurde (Ortswechsel).
-   const chOrt = chPanelOrt(useChPanelOrte(), 'drawing2d');
-+  // Trassia (Paket P3-NP): Bruchkanten und Masse dieser Station.
-+  const chNp = useChNpZeichnung();
-   useEffect(() => {
-     setIsNarrow(chPanelIstSchmal(chGemessen, panelSize.width));
-   }, [chGemessen, panelSize.width]);
-@@ -1229,6 +1235,10 @@ export function Section2DPanel({
-               scanPoints={displayOptions.showScanSection ? scanSectionLayer.points : undefined}
-               scanOpacity={displayOptions.scanSectionOpacity}
-               unitDisplayOverrides={unitDisplayOverrides}
-+              chNpMarken={chNp.marken}
-+              chNpBemassungen={chNp.bemassungen}
-+              chNpKlassenLabel={chNp.klassenLabel}
-+              chNpHerkunft={chNp.herkunft}
-             />
-             {/* Subtle updating indicator - shows while regenerating without hiding the drawing */}
-             {isRegenerating && (

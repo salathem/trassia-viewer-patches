@@ -1,0 +1,117 @@
+diff --git a/apps/viewer/src/components/viewer/properties/modelMetadataStats.test.tsx b/apps/viewer/src/components/viewer/properties/modelMetadataStats.test.tsx
+index 2b9b8c4..02c66d9 100644
+--- a/apps/viewer/src/components/viewer/properties/modelMetadataStats.test.tsx
++++ b/apps/viewer/src/components/viewer/properties/modelMetadataStats.test.tsx
+@@ -183,7 +183,7 @@ END-ISO-10303-21;`;
+       instancedGeometryHashes: new Map([[7 + offset, 0n]]),
+     } as never;
+     const container = render(model({ geometryResult, idOffset: offset, loadState: 'complete' }));
+-    assert.equal(statistic(container, 'Elements with Geometry'), '6');
++    assert.equal(statistic(container, 'Elements in Storeys'), '6');
+   });
+ 
+   it('excludes a meshed IFCSPACE — the schema filter, not just the shape filter, keeps it out', () => {
+@@ -198,7 +198,7 @@ END-ISO-10303-21;`;
+     } as never;
+     const container = render(model({ geometryResult, idOffset: offset, loadState: 'complete' }));
+     assert.equal(
+-      statistic(container, 'Elements with Geometry'),
++      statistic(container, 'Elements in Storeys'),
+       '6',
+       'the meshed IFCSPACE must not raise the count above the six shaped physical elements',
+     );
+@@ -206,12 +206,12 @@ END-ISO-10303-21;`;
+ 
+   it('treats completed null geometry as known-empty', () => {
+     const container = render(model({ geometryResult: null, loadState: 'complete' }));
+-    assert.equal(statistic(container, 'Elements with Geometry'), '0');
++    assert.equal(statistic(container, 'Elements in Storeys'), '0');
+   });
+ 
+   it('keeps the shape filter provisional while geometry is streaming', () => {
+     const container = render(model({ geometryResult: null, loadState: 'streaming-geometry' }));
+-    assert.equal(statistic(container, 'Elements with Geometry'), '7');
++    assert.equal(statistic(container, 'Elements in Storeys'), '7');
+   });
+ 
+   it('counts a meshed live creation and excludes a tombstoned source element (#5249)', () => {
+@@ -225,11 +225,11 @@ END-ISO-10303-21;`;
+       instancedGeometryHashes: new Map([[7 + offset, 0n]]),
+     } as never;
+     const container = render(model({ geometryResult, idOffset: offset, loadState: 'complete' }));
+-    assert.equal(statistic(container, 'Elements with Geometry'), '7');
++    assert.equal(statistic(container, 'Elements in Storeys'), '7');
+ 
+     view.deleteEntity(2);
+     act(() => useViewerStore.setState({ mutationVersion: 2 }));
+-    assert.equal(statistic(container, 'Elements with Geometry'), '6');
++    assert.equal(statistic(container, 'Elements in Storeys'), '6');
+   });
+ 
+   it('#5477 reuses physical membership across geometry-only updates and refreshes it after an overlay edit', () => {
+@@ -242,7 +242,7 @@ END-ISO-10303-21;`;
+     const offset = federationRegistry.getOffset('stats-model') ?? 0;
+     const first = model({ ifcDataStore: store, geometryResult: geometryFor([1 + offset]), loadState: 'complete' });
+     const container = render(first);
+-    assert.equal(statistic(container, 'Elements with Geometry'), '1');
++    assert.equal(statistic(container, 'Elements in Storeys'), '1');
+     const firstVisits = membershipVisits;
+     assert.ok(firstVisits > 0);
+ 
+@@ -251,14 +251,14 @@ END-ISO-10303-21;`;
+     act(() => root.render(<ModelMetadataPanel model={{
+       ...first, geometryResult: geometryFor([1 + offset, 2 + offset]),
+     }} />));
+-    assert.equal(statistic(container, 'Elements with Geometry'), '2');
++    assert.equal(statistic(container, 'Elements in Storeys'), '2');
+     assert.equal(membershipVisits, firstVisits, 'a new geometry batch must not rescan source membership');
+ 
+     act(() => {
+       view.deleteEntity(2);
+       useViewerStore.setState({ mutationVersion: 2 });
+     });
+-    assert.equal(statistic(container, 'Elements with Geometry'), '1');
++    assert.equal(statistic(container, 'Elements in Storeys'), '1');
+     assert.ok(membershipVisits > firstVisits, 'an overlay edit recomputes membership');
+   });
+ 
+@@ -267,7 +267,7 @@ END-ISO-10303-21;`;
+     view.deleteEntity(1);
+     useViewerStore.setState({ mutationViews: new Map([['__legacy__', view]]), mutationVersion: 1 });
+     const container = render(model({ id: 'default', geometryResult: null, loadState: 'streaming-geometry' }));
+-    assert.equal(statistic(container, 'Elements with Geometry'), '6');
++    assert.equal(statistic(container, 'Elements in Storeys'), '6');
+   });
+ 
+   it('opens preserved-only LandXML surface records, even when they have no overlay or mesh (#5042)', () => {
+diff --git a/apps/viewer/src/hooks/keyboard-shortcuts-list.ts b/apps/viewer/src/hooks/keyboard-shortcuts-list.ts
+index 3c27d71..c57e600 100644
+--- a/apps/viewer/src/hooks/keyboard-shortcuts-list.ts
++++ b/apps/viewer/src/hooks/keyboard-shortcuts-list.ts
+@@ -38,7 +38,9 @@ export const KEYBOARD_SHORTCUTS = [
+   { key: '−', description: 'Remove current context from basket', category: 'Visibility' },
+   { key: 'D', description: 'Toggle basket presentation dock', category: 'Visibility' },
+   { key: 'B', description: 'Save basket as presentation view', category: 'Visibility' },
+-  { key: 'Del / Space', description: 'Hide selection', category: 'Visibility' },
++  { key: 'Del', description: 'Hide selection', category: 'Visibility' },
++  // Trassia (U3-klein): die Leertaste schaltet um, je Zeile nach eigenem Zustand.
++  { key: 'Space', description: 'Toggle visibility of the selected tree rows (Ctrl-click rows of any level to select them) or of the selected elements — each by its own state; a partly visible group hides, a second press brings it back', category: 'Visibility' },
+   { key: 'A', description: 'Show all (clear filters and basket)', category: 'Visibility' },
+   { key: 'H', description: 'Home (isometric + reset visibility)', category: 'Camera' },
+   { key: 'Z', description: 'Fit all (zoom extents)', category: 'Camera' },
+diff --git a/apps/viewer/src/i18n/catalogues/properties.en.ts b/apps/viewer/src/i18n/catalogues/properties.en.ts
+index 9e9c990..1adf751 100644
+--- a/apps/viewer/src/i18n/catalogues/properties.en.ts
++++ b/apps/viewer/src/i18n/catalogues/properties.en.ts
+@@ -246,7 +246,10 @@ export const propertiesEn = {
+   'properties.modelMetadata.totalEntities': 'Total Entities',
+   'properties.modelMetadata.notAvailable': 'N/A',
+   'properties.modelMetadata.buildingStoreys': 'Building Storeys',
+-  'properties.modelMetadata.elementsWithGeometry': 'Elements with Geometry',
++  // Trassia (QA S-02): gezaehlt werden Elemente IN GESCHOSSEN, nicht Elemente mit
++  // Geometrie; in einem Infrastrukturmodell ohne Geschosse stand sonst «0» neben
++  // einer Statusleiste mit Tausenden Elementen. Die Zahl stimmte, die Beschriftung nicht.
++  'properties.modelMetadata.elementsWithGeometry': 'Elements in Storeys',
+   'properties.modelMetadata.maxExpressId': 'Max Express ID',
+   'properties.modelMetadata.classificationSystemsHeading': 'Classification Systems',
+   'properties.modelMetadata.classificationUnresolved': 'Classification systems present, but unavailable on this data source',

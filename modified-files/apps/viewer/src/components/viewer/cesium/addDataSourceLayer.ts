@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import type { CesiumViewerLifetime } from './cesium-viewer-lifetime';
+
 /**
  * Add the selected built-in 3D context tileset to the Cesium viewer. Returns
  * the created tileset so callers can toggle its shadow casting/receiving for
@@ -25,6 +27,7 @@ export async function addDataSourceLayer(
   viewer: InstanceType<typeof import('cesium').Viewer>,
   dataSource: string,
   ionToken: string,
+  lifetime: CesiumViewerLifetime,
 ): Promise<InstanceType<typeof import('cesium').Cesium3DTileset> | null> {
   // Trassia (V-WELT-FIX): die zweite Haelfte des fail-closed-Riegels. Ohne
   // diese Zeile liefe der `default`-Zweig unten in
@@ -48,6 +51,10 @@ export async function addDataSourceLayer(
         // OpenStreetMap Buildings — flat-shaded extruded footprints, the grey
         // massing context used for sun-path / overshadowing studies.
         const tileset = await Cesium.createOsmBuildingsAsync();
+        if (!lifetime.isLive(viewer)) {
+          tileset.destroy();
+          return null;
+        }
         viewer.scene.primitives.add(tileset);
         return tileset;
       }
@@ -55,11 +62,19 @@ export async function addDataSourceLayer(
       default: {
         try {
           const tileset = await Cesium.createGooglePhotorealistic3DTileset();
+          if (!lifetime.isLive(viewer)) {
+            tileset.destroy();
+            return null;
+          }
           viewer.scene.primitives.add(tileset);
           return tileset;
         } catch {
           if (ionToken) {
             const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(2275207);
+            if (!lifetime.isLive(viewer)) {
+              tileset.destroy();
+              return null;
+            }
             viewer.scene.primitives.add(tileset);
             return tileset;
           }

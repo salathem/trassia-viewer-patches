@@ -1,0 +1,66 @@
+diff --git a/apps/viewer/src/components/viewer/EnvironmentPanel.tsx b/apps/viewer/src/components/viewer/EnvironmentPanel.tsx
+index 4f2fcd3..956765c 100644
+--- a/apps/viewer/src/components/viewer/EnvironmentPanel.tsx
++++ b/apps/viewer/src/components/viewer/EnvironmentPanel.tsx
+@@ -28,6 +28,9 @@ import { cn } from '@/lib/utils';
+ import type { CesiumDataSource } from '@/store/slices/cesiumSlice';
+ import { CustomBasemapEditor } from './CustomBasemapEditor';
+ import { CustomTilesetEditor } from './CustomTilesetEditor';
++// Trassia (V-WELT-FIX): die Basiskartenwahl haengt hinter CH_BASISKARTEN_VERFUEGBAR.
++// swisstopo-Umgebung und WFS-Ebenen wohnen im eigenen Umgebungs-Panel (ChUmgebungPanel).
++import { CH_BASISKARTEN_VERFUEGBAR } from '@/lib/ch/kontext/basiskarten';
+ import type { SolarSweepMode } from '@/store/slices/solarSlice';
+ import { LIGHTING_PRESETS, LIGHTING_PRESET_ORDER, isLightingPresetId } from '@/lib/lighting-presets';
+ import { LightingTrimControls } from './LightingTrimControls';
+@@ -141,23 +144,34 @@ export function EnvironmentPanel({ onClose }: EnvironmentPanelProps) {
+             {/* Base map — pick the real-world backdrop. Photorealistic can
+                 be overwhelming; the plain OSM map is a simple flat
+                 alternative (#1744). Lives here (not just in the sun study)
+-                so the choice is available whenever the world context is on. */}
+-            <label className="flex flex-col gap-0.5">
+-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{t('viewportLighting.sunSkyPanel.cesium.baseMapLabel')}</span>
+-              <select
+-                aria-label={t('viewportLighting.sunSkyPanel.cesium.baseMapAria')}
+-                value={dataSource}
+-                onChange={(e) => setDataSource(e.target.value as CesiumDataSource)}
+-                title={t(CONTEXT_SOURCES.find((s) => s.value === dataSource)?.hintKey ?? 'viewportLighting.sunSkyPanel.cesium.contextSources.osmMap.hint')}
+-                className="w-full bg-muted/40 rounded px-1.5 py-1 border text-foreground text-[10px]"
+-              >
+-                {CONTEXT_SOURCES.map((src) => (
+-                  <option key={src.value} value={src.value}>{t(src.labelKey)}</option>
+-                ))}
+-              </select>
+-            </label>
+-            {dataSource === 'custom' && <CustomBasemapEditor />}
+-            {dataSource === 'custom-3dtiles' && <CustomTilesetEditor />}
++                so the choice is available whenever the world context is on.
++
++                Trassia (V-WELT-FIX): AUSGEBLENDET. Keine der Quellen kann
++                unter unserer CSP laden (Cesium ion, OSM-Kacheln, frei
++                eingetippte Hosts); ein Knopf, der nachweislich nichts tun kann,
++                ist schlimmer als kein Knopf. An seiner Stelle steht das
++                SWISSIMAGE-Orthofoto im Umgebungs-Panel. Begruendung und Weg
++                zurueck: lib/ch/kontext/basiskarten.ts. */}
++            {CH_BASISKARTEN_VERFUEGBAR && (
++              <>
++                <label className="flex flex-col gap-0.5">
++                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{t('viewportLighting.sunSkyPanel.cesium.baseMapLabel')}</span>
++                  <select
++                    aria-label={t('viewportLighting.sunSkyPanel.cesium.baseMapAria')}
++                    value={dataSource}
++                    onChange={(e) => setDataSource(e.target.value as CesiumDataSource)}
++                    title={t(CONTEXT_SOURCES.find((s) => s.value === dataSource)?.hintKey ?? 'viewportLighting.sunSkyPanel.cesium.contextSources.osmMap.hint')}
++                    className="w-full bg-muted/40 rounded px-1.5 py-1 border text-foreground text-[10px]"
++                  >
++                    {CONTEXT_SOURCES.map((src) => (
++                      <option key={src.value} value={src.value}>{t(src.labelKey)}</option>
++                    ))}
++                  </select>
++                </label>
++                {dataSource === 'custom' && <CustomBasemapEditor />}
++                {dataSource === 'custom-3dtiles' && <CustomTilesetEditor />}
++              </>
++            )}
+           </>
+         ) : (
+           <label className="flex flex-col gap-0.5">

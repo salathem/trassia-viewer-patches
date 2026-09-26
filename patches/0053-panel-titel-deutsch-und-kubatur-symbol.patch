@@ -1,20 +1,18 @@
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index 35cbcaf..66dc806 100644
+index 7a929d4..f0cc06b 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
-@@ -36,8 +36,9 @@ import {
-   FileWarning,
+@@ -23,6 +23,9 @@ import { BarChart3, Box, CalendarRange, ClipboardCheck, Cloud, Coins, Crosshair,
+ import {
    // Trassia overlay (not upstream) — Paket V-DRAPE.
    Mountain,
--  // Trassia overlay (not upstream) — Paket V-KUBATUR.
--  Ruler,
 +  // Trassia overlay (not upstream) — Paket V-KUBATUR; Symbol seit U4
 +  // Auf/Ab statt Lineal (Review B5: das Lineal sagte «Messen»).
 +  ArrowUpDown,
    // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
    ChartSpline,
    // Trassia overlay (not upstream) — Trassierungs-Spike S0 (Paket ENTWURF).
-@@ -144,11 +145,13 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+@@ -197,11 +200,13 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
    // Gelaendeoberflaeche legen. ANGEHAENGT, damit die eingefrorene
    // Alt+1..0-Zuordnung der ersten zehn Eintraege unberuehrt bleibt — dieses
    // Panel bekommt keine Ziffer und ist ueber die Leiste erreichbar.
@@ -30,7 +28,7 @@ index 35cbcaf..66dc806 100644
    // Trassia (Paket V-LAENGSSCHNITT): Hoehenprofil entlang einer Achse.
    // ANGEHAENGT wie `drape` und `kubatur` — keine Ziffer, erreichbar ueber die
    // Leiste. `prefersWide`, weil eine Profilzeichnung Breite braucht: ein
-@@ -157,7 +160,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+@@ -210,7 +215,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
    // Seitenleiste wirkt das Feld nicht — `SIDEBAR_WIDE_WIDTH_PCT` steht
    // zwar unten in dieser Datei, wird aber nirgends gelesen (geprueft im
    // Pin 989da893: einzige Fundstelle ist die Deklaration selbst).

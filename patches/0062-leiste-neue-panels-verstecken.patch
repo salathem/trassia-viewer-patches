@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/store/slices/sidebarSlice.ts b/apps/viewer/src/store/slices/sidebarSlice.ts
-index ab1238d..9be646b 100644
+index 3188abf..a4c9177 100644
 --- a/apps/viewer/src/store/slices/sidebarSlice.ts
 +++ b/apps/viewer/src/store/slices/sidebarSlice.ts
 @@ -31,7 +31,7 @@ import {
@@ -11,7 +11,7 @@ index ab1238d..9be646b 100644
  
  /** Clamp the docked-split ratio so neither half can collapse to nothing. */
  const MIN_SPLIT_RATIO = 0.2;
-@@ -218,9 +218,16 @@ function loadPersisted(): SidebarLayoutSnapshot {
+@@ -222,9 +222,16 @@ function loadPersisted(): SidebarLayoutSnapshot {
        order: normalizeOrder(parsed?.order),
        hiddenIds: uebernommen
          ? chLeisteUeberfuehren(normalizeHidden(parsed?.hiddenIds), DEFAULT_ORDER)
@@ -30,7 +30,7 @@ index ab1238d..9be646b 100644
      return snap;
    } catch (error) {
      console.warn('[sidebar] ignoring malformed persisted layout:', error);
-@@ -232,7 +239,9 @@ function persist(snap: SidebarLayoutSnapshot): void {
+@@ -236,7 +243,9 @@ function persist(snap: SidebarLayoutSnapshot): void {
    if (typeof window === 'undefined') return;
    try {
      // Trassia: je Modus ein eigener Schluessel (siehe chSpeicherSchluessel).

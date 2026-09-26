@@ -1,4 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
+index 70c967f..5edb06d 100644
 --- a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
 +++ b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
 @@ -19,6 +19,7 @@
@@ -9,7 +10,7 @@ diff --git a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts b/apps/
  import type { MapConversion, ProjectedCRS } from '@ifc-lite/parser';
  import type { CoordinateInfo } from '@ifc-lite/geometry';
  import { createCesiumBridge, type CesiumBridge } from '@/lib/geo/cesium-bridge';
-@@ -101,6 +102,11 @@
+@@ -106,6 +107,11 @@ export function useCesiumBridge({
    //   5. Push terrain-derived state (height, clip Y) and
    //      install the bridge.
    useEffect(() => {
@@ -21,7 +22,7 @@ diff --git a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts b/apps/
      if (status !== 'ready' || !mapConversion || !projectedCRS) {
        bridgeRef.current = null;
        cameraBridgeRef.current = null;
-@@ -136,14 +142,14 @@
+@@ -142,7 +148,7 @@ export function useCesiumBridge({
        const preferOrthometricTerrain = shouldPreferOrthometricTerrain(projectedCRS);
        let terrainSample = null;
        try {
@@ -30,18 +31,20 @@ diff --git a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts b/apps/
            cacheNamespace: [
              terrainEnabled ? 'terrain' : 'ellipsoid',
              dataSource,
-             preferOrthometricTerrain ? 'orthometric' : 'visual-surface',
-           ].join(':'),
-           preferOrthometric: preferOrthometricTerrain,
+@@ -153,7 +159,7 @@ export function useCesiumBridge({
+             isCancelled: () => cancelled || !lifetime.isLive(viewer),
+             onCancel: (stop) => lifetime.onRetire(stop),
+           },
 -        });
 +        }));
        }
        catch (err) { console.warn('[CesiumOverlay] terrain query failed:', err); }
-       if (cancelled) return;
+       if (cancelled || !lifetime.isLive(viewer)) return;
 diff --git a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx b/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx
+index a26c84b..d33d82e 100644
 --- a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx
 +++ b/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx
-@@ -13,6 +13,7 @@
+@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
  import { Badge } from '@/components/ui/badge';
  import { computeAngleToGridNorth, type GeoreferenceInfo, type MapConversion, type ProjectedCRS } from '@ifc-lite/parser';
  import { useViewerStore } from '@/store';
@@ -49,25 +52,25 @@ diff --git a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.ts
  import { posthog } from '@/lib/analytics';
  import type { CoordinateInfo, GeometryResult } from '@ifc-lite/geometry';
  import { EpsgLookupDialog, type EpsgResult } from './EpsgLookupDialog';
-@@ -892,7 +893,9 @@
+@@ -879,7 +880,9 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
            <div className="flex items-center gap-2">
              <Mountain className="h-3 w-3 text-teal-500 shrink-0" />
-             <span className="text-[10px] text-zinc-600 dark:text-zinc-400 flex-1">Visible surface height</span>
+             <span className="text-[10px] text-zinc-600 dark:text-zinc-400 flex-1">{t('properties.georef.visibleSurfaceHeight')}</span>
 -            {cesiumTerrainHeight !== null ? (
 +            {!CH_AUTOMATIC_TERRAIN_HEIGHT ? (
 +              <span className="text-[9px] text-zinc-500 dark:text-zinc-400">{CH_TERRAIN_HEIGHT_NOTICE}</span>
 +            ) : cesiumTerrainHeight !== null ? (
                <span className="text-[9px] font-mono text-teal-500" title={cesiumTerrainSource ?? undefined}>
-                 {cesiumTerrainHeight.toFixed(1)} m
+                 {t('properties.georef.heightMeters', { value: formatLocaleNumber(locale, cesiumTerrainHeight, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })}
                </span>
-@@ -900,12 +903,12 @@
-               <span className="text-[9px] font-mono text-zinc-400">querying...</span>
+@@ -887,12 +890,12 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
+               <span className="text-[9px] font-mono text-zinc-400">{t('properties.georef.queryingEllipsis')}</span>
              )}
            </div>
 -          {cesiumTerrainSource && (
 +          {CH_AUTOMATIC_TERRAIN_HEIGHT && cesiumTerrainSource && (
              <div className="ml-5 text-[9px] text-zinc-500 dark:text-zinc-400">
-               sampled via {cesiumTerrainSource}
+               {t('properties.georef.sampledVia', { source: cesiumTerrainSource })}
              </div>
            )}
 -          {cesiumTerrainHeight !== null && cesiumTerrainSaveHeight !== null && editable && modelId && (
@@ -75,7 +78,7 @@ diff --git a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.ts
              <div className="flex items-center gap-1 ml-5">
                <button
                  onClick={() => handleSave('mapConversion', 'orthogonalHeight', oHeightForBaseAltitude(cesiumTerrainSaveHeight))}
-@@ -972,7 +975,7 @@
+@@ -959,7 +962,7 @@ function TerrainHeightButton({ modelId, editable, onApply }: {
    // Only show when this panel's model is the active Cesium model and the
    // geoid-corrected snap target is ready (#1456): never fall back to the raw
    // ellipsoidal sample, which would skip the correction.

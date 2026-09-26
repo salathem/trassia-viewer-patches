@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
-index 82752e0..77215d0 100644
+index 72d9b46..73c7406 100644
 --- a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
-@@ -30,6 +30,24 @@ const ACTIVITY_BAR_PX = 48; // w-12
+@@ -31,6 +31,24 @@ const ACTIVITY_BAR_PX = 48; // w-12
  // Mirrors the clamp in sidebarSlice so the live drag matches what is persisted.
  const MIN_WIDTH_PCT = 14;
  const MAX_WIDTH_PCT = 60;
@@ -26,8 +26,8 @@ index 82752e0..77215d0 100644
 +const MIN_WIDTH_PX = 240;
  
  export function SidebarDock() {
-   const mode = useViewerStore((s) => s.sidebarMode);
-@@ -68,7 +86,11 @@ export function SidebarDock() {
+   const { t } = useTranslation();
+@@ -70,7 +88,11 @@ export function SidebarDock() {
          // the store enforces so the pane doesn't rubber-band past the limits.
          const contentPx = rect.right - ACTIVITY_BAR_PX - ev.clientX;
          const pct = (contentPx / rect.width) * 100;
@@ -41,7 +41,7 @@ index 82752e0..77215d0 100644
        const teardown = () => {
          document.removeEventListener('mousemove', move);
 diff --git a/apps/viewer/src/store/slices/sidebarSlice.test.ts b/apps/viewer/src/store/slices/sidebarSlice.test.ts
-index 7ba80d7..4025c49 100644
+index 747d999..23385d4 100644
 --- a/apps/viewer/src/store/slices/sidebarSlice.test.ts
 +++ b/apps/viewer/src/store/slices/sidebarSlice.test.ts
 @@ -59,7 +59,16 @@ describe('sidebarSlice (#1208)', () => {
@@ -63,7 +63,7 @@ index 7ba80d7..4025c49 100644
  
    it('reorders a panel to the front', () => {
 diff --git a/apps/viewer/src/store/slices/sidebarSlice.ts b/apps/viewer/src/store/slices/sidebarSlice.ts
-index 742575b..a7a6145 100644
+index 3c97ffe..900eb7d 100644
 --- a/apps/viewer/src/store/slices/sidebarSlice.ts
 +++ b/apps/viewer/src/store/slices/sidebarSlice.ts
 @@ -57,7 +57,19 @@ export interface SidebarLayoutSnapshot {

@@ -1,9 +1,9 @@
 diff --git a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
-index 753ae83..82752e0 100644
+index df65d40..72d9b46 100644
 --- a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
-@@ -21,6 +21,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
- import { useViewerStore } from '@/store';
+@@ -22,6 +22,10 @@ import { useViewerStore } from '@/store';
+ import { useTranslation } from '@/i18n';
  import { ActivityBar } from './ActivityBar';
  import { SidebarPanelHost } from './SidebarPanelHost';
 +// Trassia overlay (not upstream) — Paket V-UX (P4): der Platz, in den das
@@ -13,8 +13,8 @@ index 753ae83..82752e0 100644
  
  const ACTIVITY_BAR_PX = 48; // w-12
  // Mirrors the clamp in sidebarSlice so the live drag matches what is persisted.
-@@ -105,10 +109,13 @@ export function SidebarDock() {
-             aria-label="Resize sidebar"
+@@ -107,10 +111,13 @@ export function SidebarDock() {
+             aria-label={t('shellChrome.sidebarDock.resizeAriaLabel')}
            />
            <div
 -            className="h-full min-w-0 overflow-hidden panel-container"

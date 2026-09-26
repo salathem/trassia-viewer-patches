@@ -1,10 +1,10 @@
 diff --git a/apps/viewer/src/components/viewer/StatusBar.tsx b/apps/viewer/src/components/viewer/StatusBar.tsx
-index 4806d1d..83505c9 100644
+index c08b2d1..25d0978 100644
 --- a/apps/viewer/src/components/viewer/StatusBar.tsx
 +++ b/apps/viewer/src/components/viewer/StatusBar.tsx
-@@ -123,8 +123,11 @@ export function StatusBar() {
-     return count || stats.elements;
-   }, [selectedStoreys, ifcDataStore, models, stats.elements]);
+@@ -259,8 +259,11 @@ export function StatusBar() {
+     return selectedRefs.size > 0 ? count : totalObjects;
+   }, [selectedStoreys, activeStorey, selectedEntities, countedModels, models, physicalIdsByModel, totalObjects]);
  
 +  // Trassia (UX-KOPF-Nachschliff, Marco 2026-09-02): gap-3 auf dem Root,
 +  // damit Statistik- und Perf-Block denselben Abstand tragen wie die
@@ -15,7 +15,7 @@ index 4806d1d..83505c9 100644
        {/* Left: Status */}
        {/* Trassia (UX-KOPF, Tester-Auflage M-2): min-w-0 + flex-1 links und
            shrink-0 auf den festen Bloecken, damit das Projektsegment schrumpft
-@@ -155,7 +158,8 @@ export function StatusBar() {
+@@ -324,7 +327,8 @@ export function StatusBar() {
        </div>
  
        {/* Center: Model Stats */}
@@ -25,7 +25,7 @@ index 4806d1d..83505c9 100644
          <div className="flex items-center gap-1.5">
            <Boxes className="h-3.5 w-3.5" />
            <span>
-@@ -177,6 +181,9 @@ export function StatusBar() {
+@@ -348,6 +352,9 @@ export function StatusBar() {
  
        {/* Right: Performance */}
        <div className="flex shrink-0 items-center gap-3">
@@ -33,5 +33,5 @@ index 4806d1d..83505c9 100644
 +            und Default — sonst stossen «tris» und «FPS» ohne Strich aneinander. */}
 +        <Separator orientation="vertical" className="h-3.5" />
          <span className={fps < 30 ? 'text-destructive' : fps < 50 ? 'text-yellow-500' : ''}>
-           {fps} FPS
+           {fps} {t('shellChrome.statusBar.fpsUnit')}
          </span>

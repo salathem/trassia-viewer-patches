@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-index a2f7def..7f12a50 100644
+index 0789153..c9b349a 100644
 --- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
 +++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-@@ -32,6 +32,12 @@ import { parseRoleFromToken } from '@/lib/collab/share-link';
+@@ -35,6 +35,12 @@ import { parseRoleFromToken } from '@/lib/collab/share-link';
  import { chIsHtmlResponse } from '@/lib/ch/ch-file-validation';
  import { chSetLoadNotice } from '@/lib/ch/ch-load-notice';
  import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
@@ -15,7 +15,7 @@ index a2f7def..7f12a50 100644
  import { EntityContextMenu } from './EntityContextMenu';
  import { AnonymizedExportDialog } from './anonymized-export/AnonymizedExportDialog';
  import { useDuplicateShortcut } from './useDuplicateShortcut';
-@@ -98,10 +104,30 @@ export function ViewerLayout() {
+@@ -96,10 +102,30 @@ export function ViewerLayout() {
    // against the current document and require its origin to match
    // window.location.origin; a cross-origin URL is refused, never fetched.
    const { addModel: autoloadAddModel } = useIfc();
@@ -46,7 +46,7 @@ index a2f7def..7f12a50 100644
      const modelUrl = params.get('model');
      if (!modelUrl) return;
      autoloadDoneRef.current = true;
-@@ -403,6 +429,16 @@ export function ViewerLayout() {
+@@ -318,6 +344,16 @@ export function ViewerLayout() {
              </span>
            </div>
          )}
@@ -63,33 +63,3 @@ index a2f7def..7f12a50 100644
          {/* Trassia: a link that yielded no model, or a model that loaded
              incomplete. Its own row, above everything, until dismissed. */}
          <ChLoadNoticeBanner />
-diff --git a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
-index 71d8c9a..c18540c 100644
---- a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
-+++ b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
-@@ -17,6 +17,8 @@ import { SectionPlaneVisualization } from './SectionVisualization';
- import { SectionCapControls } from './SectionCapControls';
- // Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/ChAlignmentSection.tsx
- import { ChAlignmentSection } from './ChAlignmentSection';
-+import { chPeekProjectSection } from '@/lib/ch/ch-project-section';
-+import { useChSectionPanelAutoCollapse } from '@/hooks/useChNarrowPanels';
- 
- export function SectionOverlay() {
-   const sectionPlane = useViewerStore((s) => s.sectionPlane);
-@@ -34,7 +36,15 @@ export function SectionOverlay() {
-   const setDrawingPanelVisible = useViewerStore((s) => s.setDrawing2DPanelVisible);
-   const drawingPanelVisible = useViewerStore((s) => s.drawing2DPanelVisible);
-   const clearDrawing = useViewerStore((s) => s.clearDrawing2D);
--  const [isPanelCollapsed, setIsPanelCollapsed] = useState(true);
-+  // Trassia (Phase 1.1): the panel ships collapsed, and the station block
-+  // lives INSIDE the collapsed part — it is not rendered until the user opens
-+  // it. A project manifest that asks for a cross-section would therefore wait
-+  // forever for a click. When such a request is pending, the panel opens.
-+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(() => !chPeekProjectSection());
-+  // Trassia (finding M-2): having opened for the manifest's cross-section, the
-+  // panel folds itself away again on a narrow viewport — there it covers the
-+  // whole canvas and the model would never be seen. See the hook.
-+  useChSectionPanelAutoCollapse(setIsPanelCollapsed);
-   const isCustom = sectionPlane.custom !== undefined;
- 
-   const handleClose = useCallback(() => {

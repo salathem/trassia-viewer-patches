@@ -1,0 +1,25 @@
+diff --git a/apps/viewer/src/store/store-sync.ts b/apps/viewer/src/store/store-sync.ts
+index 278d254..163ef72 100644
+--- a/apps/viewer/src/store/store-sync.ts
++++ b/apps/viewer/src/store/store-sync.ts
+@@ -22,6 +22,9 @@ export const SIDEBAR_PANEL_FLAGS: ReadonlyArray<readonly [keyof ViewerState, Wor
+ /** Keep the unified sidebar to one docked panel when flags change (#1208). */
+ export function registerSidebarExclusivity(store: StoreApi<ViewerState>): void {
+   store.subscribe((state, prev) => {
++    // Trassia (Paket PANEL-STAPEL, 0064): ein Schliessen setzt Slots und Flaggen
++    // gemeinsam (`closeDockedSidebarPanel`); diese Absicht nicht neu aufloesen.
++    if (state.sidebarCloseRevision !== prev.sidebarCloseRevision) return;
+     let opened: WorkspacePanelId | null = null;
+     for (const [flag, id] of SIDEBAR_PANEL_FLAGS) {
+       if (state[flag] && !prev[flag]) { opened = id; break; }
+@@ -44,6 +47,10 @@ export function registerSidebarExclusivity(store: StoreApi<ViewerState>): void {
+       if (flag && !state[flag] && prev[flag]) {
+         const next = SIDEBAR_PANEL_FLAGS.find(([f]) => state[f]);
+         state.setSidebarActivePanel(next ? next[1] : 'properties');
++        // Trassia (Paket SEITENLEISTE, 0048): schliesst das letzte offene Panel
++        // (auch ueber sein eigenes X), bleibt der Bereich leer statt Information
++        // zu zeigen — die Leiste klappt auf die Symbolspalte zusammen.
++        if (!next && state.sidebarMode === 'expanded') state.setSidebarMode('collapsed');
+       }
+     }
+   });

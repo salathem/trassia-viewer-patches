@@ -1,0 +1,24 @@
+diff --git a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
+index 2053651..7605f87 100644
+--- a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
++++ b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
+@@ -20,6 +20,9 @@ import { useEffect } from 'react';
+ import { useViewerStore, loadLastSectionMode } from '@/store';
+ import { SectionPlaneVisualization } from './SectionVisualization';
+ import { SectionHint } from './SectionHint';
++// Trassia overlay (not upstream) — Achsschnitt, Querprofil-Werkzeuge und Profil-Reiter
++// als eigenes HUD-Element; siehe overlay/apps/viewer/src/components/viewer/tools/ChSchnittKarte.tsx
++import { ChSchnittKarte } from './ChSchnittKarte';
+ 
+ export function SectionOverlay() {
+   const sectionEnabled = useViewerStore((s) => s.sectionPlane.enabled);
+@@ -82,6 +85,9 @@ export function SectionOverlay() {
+   return (
+     <>
+       <SectionHint />
++      {/* Trassia: Stationsschnitt entlang einer IfcAlignment-Achse, Querprofil-
++          Korridor/Ueberhoehung/Linienschnitt und der Reiter Laengsprofil. */}
++      <ChSchnittKarte />
+ 
+       {/* Section plane visualization overlay */}
+       <SectionPlaneVisualization enabled={sectionEnabled} />

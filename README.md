@@ -9,31 +9,31 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0067`) applied, in numeric order, on top of
-  upstream commit `83888869d3aad3a5cf173068be51021c95148aab` (tag `@ifc-lite/wasm@6.5.0`)
-- `modified-files/` — the sixty modified files in full source form
+- `patches/` — the exact patches (`0001`–`0076`, numbers no longer in use are listed below)
+  applied, in numeric order, on top of upstream commit
+  `ca6fef8d72176bd83127e20a314e4fad9c0acf59` (tag `@ifc-lite/wasm@10.1.2`)
+- `modified-files/` — the sixty-five modified files in full source form
   (base commit + all patches applied):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/Drawing2DCanvas.tsx`
-  - `apps/viewer/src/components/viewer/DrawingSettingsPanel.tsx`
+  - `apps/viewer/src/components/viewer/EnvironmentPanel.tsx`
   - `apps/viewer/src/components/viewer/HierarchyPanel.tsx`
   - `apps/viewer/src/components/viewer/LensPanel.tsx`
   - `apps/viewer/src/components/viewer/PropertiesPanel.tsx`
-  - `apps/viewer/src/components/viewer/Section2DPanel.tsx`
   - `apps/viewer/src/components/viewer/StatusBar.tsx`
-  - `apps/viewer/src/components/viewer/SunSkyPanel.tsx`
   - `apps/viewer/src/components/viewer/ViewerLayout.tsx`
   - `apps/viewer/src/components/viewer/Viewport.tsx`
   - `apps/viewer/src/components/viewer/ViewportContainer.tsx`
+  - `apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx`
   - `apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts`
   - `apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts`
-  - `apps/viewer/src/components/viewer/dock/FloatingPanelHost.tsx`
-  - `apps/viewer/src/components/viewer/dock/floating-panel-geometry.test.ts`
-  - `apps/viewer/src/components/viewer/dock/floating-panel-geometry.ts`
+  - `apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx`
+  - `apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx`
   - `apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx`
+  - `apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx`
   - `apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx`
-  - `apps/viewer/src/components/viewer/properties/ModelMetadataPanel.tsx`
   - `apps/viewer/src/components/viewer/properties/PropertySetCard.tsx`
+  - `apps/viewer/src/components/viewer/properties/modelMetadataStats.test.tsx`
   - `apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx`
   - `apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx`
   - `apps/viewer/src/components/viewer/ribbon/tabs/ViewTab.tsx`
@@ -41,8 +41,9 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx`
   - `apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx`
   - `apps/viewer/src/components/viewer/sidebar/SidebarPanelHost.tsx`
-  - `apps/viewer/src/components/viewer/tools/MeasurePanel.tsx`
+  - `apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx`
+  - `apps/viewer/src/components/viewer/tools/MeasurementList.tsx`
   - `apps/viewer/src/components/viewer/tools/MeasurementVisuals.tsx`
   - `apps/viewer/src/components/viewer/tools/SectionPanel.tsx`
   - `apps/viewer/src/components/viewer/tools/formatDistance.ts`
@@ -51,6 +52,7 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/tools/measure-parity.test.tsx`
   - `apps/viewer/src/components/viewer/useRenderUpdates.ts`
   - `apps/viewer/src/hooks/dxfExportGeoref.test.ts`
+  - `apps/viewer/src/hooks/keyboard-shortcuts-list.ts`
   - `apps/viewer/src/hooks/useAnnotation2D.ts`
   - `apps/viewer/src/hooks/useDrawingExport.ts`
   - `apps/viewer/src/hooks/useDrawingGeneration.ts`
@@ -59,7 +61,10 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/hooks/useMeasure2D.ts`
   - `apps/viewer/src/hooks/usePanelControls.ts`
   - `apps/viewer/src/hooks/useViewControls.ts`
+  - `apps/viewer/src/i18n/catalogues/properties.en.ts`
   - `apps/viewer/src/lib/geo/cesium-bridge.ts`
+  - `apps/viewer/src/lib/geo/ifc-spatial-reference.test.ts`
+  - `apps/viewer/src/lib/geo/ifc-spatial-reference.ts`
   - `apps/viewer/src/lib/panels/registry.ts`
   - `apps/viewer/src/lib/panels/renderPanelBody.tsx`
   - `apps/viewer/src/main.tsx`
@@ -67,6 +72,7 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/store/slices/measurementSlice.ts`
   - `apps/viewer/src/store/slices/sidebarSlice.test.ts`
   - `apps/viewer/src/store/slices/sidebarSlice.ts`
+  - `apps/viewer/src/store/store-sync.ts`
   - `apps/viewer/vite.config.ts`
   - `packages/drawing-2d/src/dxf-exporter.test.ts`
   - `packages/drawing-2d/src/dxf-exporter.ts`
@@ -79,15 +85,24 @@ All files in this repository are licensed under the **MPL-2.0**.
 
 ## What the patches do
 
+Upstream 10.x rebuilt the measure, section, 2D drawing, environment and welcome
+screens (HUD regions, a docked `drawing` panel instead of `Section2DPanel`, a docked
+environment panel instead of Sun & Sky). With the move from `@ifc-lite/wasm@9.1.0`
+to `@ifc-lite/wasm@10.1.2` (2026-09-26) the patches `0006`, `0008`, `0014`, `0015`,
+`0027`, `0028`, `0029`, `0032`, `0037`, `0040`, `0049`, `0057`, `0063` and `0067`
+are **no longer applied**: their function either moved to the port patches
+`0068`–`0075` below, or the upstream now provides it itself (docking, floating and the separate window of
+the drawing panel, floating panels clamped below the toolbar). Where a combined
+entry below still names one of these numbers, that part describes the earlier
+upstream layout. The other patches keep their described purpose; some were
+re-anchored to the moved upstream code (e.g. the sidebar exclusivity logic now
+lives in `store/store-sync.ts`).
+
 - `0001`–`0003` — Swiss coordinate readout for the measurement tools
   (LV95/LV03 formatting, georeference status).
 - `0004`–`0005` — property panel: Swiss/Trassia provenance property sets sorted
   to the top with a family badge, a free-text filter over the selected element's
   properties, and a one-click "colour by data origin" row in the Lens panel.
-- `0006` — section panel: a "cross-section at station" block that places the
-  section plane perpendicular to an `IfcAlignment` centreline at a chosen
-  station (import plus one line of JSX; all of the logic lives in newly created
-  files outside this source offer).
 - `0007`–`0010` — corrections from the end-user acceptance test of 2026-08-26:
   - `0007` the object inspector's world position is now the real projected
     coordinate (E/N/H through the model's `IfcMapConversion`) instead of model
@@ -223,15 +238,6 @@ All files in this repository are licensed under the **MPL-2.0**.
   `closePanel` now closes side panels that have no visibility flag of their
   own (upstream's Zones and the Trassia panels) — their header close button
   was a no-op before.
-- `0049` — two tabs in the section panel, "Querprofil" (cross-section: the
-  unchanged upstream content plus the Trassia station/axis blocks) and
-  "Längsprofil" (the existing longitudinal-profile panel, embedded). Two
-  imports, one hook call, the tab strip in the panel header next to the
-  collapse toggle (title and cut readout show only while collapsed), and an
-  opening/closing tab-content element around the upstream content; both tabs
-  stay mounted and are only hidden.
-  No upstream line removed. The tab components and the tab store are overlay
-  files (`ChProfilTabs.tsx`, `lib/ch/profil-tab.ts`).
 - `0050` — status-bar counts over all loaded models: upstream derives
   "N elements / N tris" from the single active model's geometry result, so a
   federated project with 14 models showed the numbers of model 1. One import,
@@ -263,13 +269,6 @@ All files in this repository are licensed under the **MPL-2.0**.
   only if the rail offers it in the current mode, and the sidebar customizer
   lists only those panels. Two one-line conditions plus imports; `?voll=1`
   keeps everything.
-- `0057` — Trassia welcome card: in Trassia mode the welcome card's logo,
-  title, subtitle and action area are replaced by an overlay component
-  (`ChStartkarte.tsx`: logo, subtitle, three actions, legal links); one
-  import and one conditional wrapper, upstream content kept verbatim for
-  `?voll=1`. Recent files and the shortcuts chip stay upstream. The logo
-  files under `apps/viewer/public/marke/` are trademarks of Trassia, not
-  MPL-licensed code.
 - `0058` — leftovers package: (a) `main.tsx` imports the overlay favicon
   switch; (b) Escape no longer closes the active tool when the key is meant
   for an open menu or dialog (one condition); (c) `DxfWriter` writes a
@@ -310,10 +309,6 @@ All files in this repository are licensed under the **MPL-2.0**.
 - `0062` — persisted sidebar layouts remember the panel registry in `chBekannt`.
   Newly appended upstream panels use the Trassia hidden default when an older
   layout is loaded, while the user's existing visibility choices are kept.
-- `0063` — section-panel controls expose accessible labels: the collapse toggle
-  reports its expand/collapse action and expanded state, and the drawing and
-  close buttons each have an explicit label. Event handlers and geometry logic
-  are unchanged.
 
 - `0064` — closing either half of a split sidebar targets that panel and keeps
   the other panel open. Header close buttons and a second click on the active
@@ -327,10 +322,41 @@ All files in this repository are licensed under the **MPL-2.0**.
   events do not continuously occupy the browser's microtask queue. The next
   event still passes the existing stale-session check before writing state.
 
-- `0067` - free floating panels keep their header below the measured ribbon
-  boundary. The host tracks viewport bounds whenever any floating panel is
-  open; snapped positions are unchanged. Geometry regression tests cover the
-  formerly hidden default header and preserve valid and unmeasured positions.
+
+- `0068` — measure tool on the 10.x HUD: the distance list and the viewport
+  labels show ΔE/ΔN/ΔH instead of renderer axes on a georeferenced model; the
+  list carries LV95 rows for polyline vertices and angle picks; the live
+  coordinate readout also follows polyline, angle and radius measurements.
+- `0069` — cross-section view in the upstream `drawing` panel: caption stamp and
+  sheet title above the 2D canvas and the Normalprofil dimension chains passed
+  to the canvas (four props); an always-visible "open in its own window" button in
+  the drawing toolbar, using the upstream's own panel window. Replaces the former
+  `Section2DPanel` parts of `0014`, `0027` and `0039`.
+- `0070` — environment panel: the base-map picker (including the new
+  `custom-3dtiles` source) stays behind `CH_BASISKARTEN_VERFUEGBAR`, fail-closed
+  under the deployed CSP (successor of `0037`).
+- `0071` — Trassia welcome card in the extracted `ViewportWelcomeCard`: in Trassia
+  mode the logo, title and actions are replaced by the overlay `ChStartkarte`;
+  the recent-files list stays; `?voll=1` shows the upstream card (successor of
+  `0057` and the welcome part of `0052`).
+- `0072` — section tool: mounts the overlay `ChSchnittKarte` (station cut,
+  cross-section tools, longitudinal-profile tab) as a HUD item of the section
+  tool (successor of `0006`, `0015`, `0049`).
+- `0073` — sidebar exclusivity in `store/store-sync.ts`: an explicit close intent
+  is not re-resolved, and closing the last panel collapses the sidebar
+  (successor of the store parts of `0048`/`0064`).
+- `0074` — hierarchy rows: model header buttons 24×24 px and always visible,
+  Ctrl-click row selection with highlight, small grey row counts; the node row
+  gets the row-selection highlight; row counts use the Swiss thousands separator
+  (`4'196`) like the status bar (successor of `0032` and the row part of `0060`).
+- `0075` — texts: `Del` and `Space` listed separately in the shortcut list,
+  `Elements in Storeys` in the English property catalogue and the matching
+  upstream test (successor of the text parts of `0010`/`0060`).
+- `0076` — the Swiss height systems `LN02` (EPSG:5728) and `LHN95` (EPSG:5729) are
+  recognised in `IfcProjectedCRS.VerticalDatum`, next to the upstream's NAVD88/NAP
+  aliases. Upstream 10.x aligns federated models only when both declare a known
+  vertical CRS; without these names every Swiss model beside the anchor stayed in
+  its own local frame. Two assertions added to the existing upstream test.
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil

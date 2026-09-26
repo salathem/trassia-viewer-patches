@@ -7,7 +7,7 @@ import type { IfcSourceBytes } from '@ifc-lite/parser';
 /**
  * useDrawingGeneration - Custom hook for 2D drawing generation logic
  *
- * Extracts the drawing generation pipeline from Section2DPanel, including:
+ * Extracts the drawing generation pipeline from the 2D drawing view, including:
  * - Section cut generation via Drawing2DGenerator
  * - Symbolic representation parsing and caching
  * - Hybrid drawing creation (symbolic + section cut)
@@ -30,17 +30,10 @@ import {
 import { createDrawingRequestQueue } from './drawingRequestQueue.js';
 import { createMeshOutlineProvider, type MeshOutline2dFn } from './meshOutlineProvider.js';
 import { type GeometryResult } from '@ifc-lite/geometry';
-import {
-  getWholeSourceForWorker,
-  parseProfilesFlat,
-  parseSymbolicFlat,
-} from '@/lib/overlay-parse/index.js';
+import { getWholeSourceForWorker, parseProfilesFlat } from '@/lib/overlay-parse/index.js';
 import { placedConstructionProfiles } from '@/lib/model-placement/construction-profiles';
 import { buildProfileEntries, warnAboutSkippedProfiles } from '@/lib/overlay-parse/profile-entries.js';
-import {
-  buildSymbolicDrawingLines,
-  type SymbolicDrawingLine,
-} from '@/lib/overlay-parse/symbolic-drawing-lines.js';
+import { type SymbolicDrawingLine } from '@/lib/overlay-parse/symbolic-drawing-lines.js';
 import type { SpatialHierarchy } from '@ifc-lite/data';
 import * as IfcWasm from '@ifc-lite/wasm';
 import { customPlaneCenter, useViewerStore } from '@/store';
@@ -52,7 +45,10 @@ import { buildModelViewIdFilter, selectModelMeshes } from '@/lib/type-view-visib
 import { chQpShapeDrawing, useChQpView } from '@/lib/ch/qp-corridor';
 import { corridorPlanRect, narrowMeshesToCorridor } from '@/lib/ch/qp-prefilter';
 import { isTypeVisible, type TypeVisibilityGate } from '@/store/typeVisibilityFilter';
-
+import { roomDrawingSymbolic } from '@/lib/collab/room-drawing-symbolic';
+import { ifcToViewerAxes } from '@/lib/geo/coordinate-frame';
+import { useDrawingRtcContext } from './useDrawingRtcContext.js';
+import { markActiveDrawingGenerationCompleted, markActiveDrawingGenerationStarted } from '@/lib/drawing/active-canvas-snapshot';
 // The winding-robust Rust `meshOutline2d` binding (issue #979) is gitignored →
 // CI-built, so reference it defensively: against an older wasm bundle it's
 // undefined and projection falls back to the TS mesh silhouette. The wasm
@@ -167,6 +163,12 @@ export function useDrawingGeneration({
   // geaenderte Breite dieselbe Neuberechnung ausloest wie eine neue Station.
   const chQp = useChQpView();
 
+  // The legacy primary path can publish only `loading: false` when it finishes
+  // without exact RTC metadata. Subscribe to all provenance publication
+  // channels so pending → standalone/explicit retriggers the drawing.
+  const { context: drawingRtcContext, key: drawingRtcContextKey } =
+    useDrawingRtcContext(ifcDataStore);
+
   // Cache for symbolic representations - these don't change with section position
   // Only re-parse when model or display options change
   const symbolicCacheRef = useRef<{
@@ -234,11 +236,9 @@ export function useDrawingGeneration({
     let symbolicLines: SymbolicDrawingLine[] = [];
     let entitiesWithSymbols = new Set<number>();
 
-    // For multi-model: create cache key from model count and visible model IDs
-    // For single-model: use source byteLength as before
-    const modelCacheKey = models.size > 0
-      ? `${models.size}-${[...models.values()].filter(m => m.visible).map(m => m.id).sort().join('|')}`
-      : (ifcDataStore?.source ? String(ifcDataStore.source.byteLength) : null);
+    // Cache by source identity plus the exact parse frame. Equal byte lengths
+    // and sibling federation models are intentionally not interchangeable.
+    const modelCacheKey = drawingRtcContextKey;
 
     const useSymbolic = displayOptions.useSymbolicRepresentations && !!ifcDataStore?.source;
 
@@ -248,7 +248,10 @@ export function useDrawingGeneration({
       cache.sourceId === modelCacheKey &&
       cache.useSymbolic === useSymbolic;
 
-    if (useSymbolic) {
+    // A null key means the legacy load has not published whether its mesh
+    // frame is explicit or unavailable yet. Generate the cut without symbols
+    // for now; the subscribed context transition schedules a clean retry.
+    if (useSymbolic && modelCacheKey !== null) {
       if (cacheValid) {
         // Use cached data - FAST PATH
         symbolicLines = cache.lines;
@@ -270,14 +273,9 @@ export function useDrawingGeneration({
           //
           // `'all'`, not the overlay's IfcAnnotation/IfcGridAxis filter: the
           // drawing renders the symbolic representation of every product type.
-          const flat = await parseSymbolicFlat(
-            getWholeSourceForWorker(ifcDataStore!),
-            false,
-            'all',
-          );
           // Single-model (legacy) mode, so model index is always 0. Multi-model
           // symbolic parsing would require iterating over each model separately.
-          const symbolic = buildSymbolicDrawingLines(flat, 0);
+          const symbolic = await roomDrawingSymbolic(ifcDataStore!, drawingRtcContext!);
           symbolicLines = symbolic.lines;
           entitiesWithSymbols = symbolic.entities;
 
@@ -294,7 +292,7 @@ export function useDrawingGeneration({
           entitiesWithSymbols = new Set<number>();
         }
       }
-    } else {
+    } else if (!useSymbolic) {
       // Clear cache if symbolic is disabled
       if (cache && cache.useSymbolic) {
         symbolicCacheRef.current = null;
@@ -321,7 +319,7 @@ export function useDrawingGeneration({
     // mirroring the symbolic path's federation limitation.
     const profilesNeeded = projectionOn && sectionPlane.axis === 'down';
     let profiles: ProfileEntry[] = [];
-    if (profilesNeeded && ifcDataStore?.source) {
+    if (profilesNeeded && ifcDataStore?.source && modelCacheKey !== null) {
       const pcache = profileCacheRef.current;
       if (pcache && pcache.sourceId === modelCacheKey) {
         profiles = pcache.profiles;
@@ -349,8 +347,7 @@ export function useDrawingGeneration({
           // subtracts `originShift`, already in Y-up. It stays main-side because
           // `coordinateInfo` is main-thread state the worker cannot see.
           const ci = geometryResult.coordinateInfo;
-          const rtc = ci.wasmRtcOffset;
-          const shift = rtc ? { x: rtc.x, y: rtc.z, z: -rtc.y } : ci.originShift;
+          const shift = ci.wasmRtcOffset ? ifcToViewerAxes(ci.wasmRtcOffset) : ci.originShift;
           // Single-model (legacy) mode, so model index is always 0. Multi-model
           // profile extraction would require iterating over each model separately.
           profiles = buildProfileEntries(flat, shift, 0);
@@ -423,7 +420,14 @@ export function useDrawingGeneration({
         !sectionPlane.custom &&
         models.size <= 1 &&
         combinedIsolatedIds === null &&
-        !(computedIsolatedIds && computedIsolatedIds.size > 0) &&
+        // `computedIsolatedIds` is meaningfully nullable: null/undefined means
+        // no isolation channel is active, while a non-null Set — EMPTY
+        // included — means one is (matching the convention
+        // `packages/renderer/src/entity-visibility.ts`'s `isEntityVisible`
+        // uses). A `.size > 0` check here would read an active-but-empty
+        // isolate as "no isolation" and let floor auto-scoping run over the
+        // isolated-to-nothing set.
+        computedIsolatedIds == null &&
         sh !== undefined &&
         sh.byBuilding.size <= 1;
       if (canScopeFloor && sh) {
@@ -534,8 +538,14 @@ export function useDrawingGeneration({
         );
       }
 
-      // Also filter by computedIsolatedIds (storey selection)
-      if (computedIsolatedIds !== null && computedIsolatedIds !== undefined && computedIsolatedIds.size > 0) {
+      // Also filter by computedIsolatedIds (storey selection). Meaningfully
+      // nullable, same convention as `combinedIsolatedIds` above and
+      // `packages/renderer/src/entity-visibility.ts`'s `isEntityVisible`:
+      // null/undefined means no isolation channel is active, while a
+      // non-null Set — EMPTY included — means one is and matches nothing. A
+      // `.size > 0` check here would read an active-but-empty isolate as "no
+      // isolation" and redraw the whole model instead of nothing.
+      if (computedIsolatedIds != null) {
         const isolatedSet = computedIsolatedIds;
         meshesToProcess = meshesToProcess.filter(
           mesh => isolatedSet.has(mesh.expressId)
@@ -594,7 +604,8 @@ export function useDrawingGeneration({
         if (combinedIsolatedIds !== null) {
           projectionProfiles = projectionProfiles.filter((p) => combinedIsolatedIds.has(p.expressId));
         }
-        if (computedIsolatedIds !== null && computedIsolatedIds !== undefined && computedIsolatedIds.size > 0) {
+        // Meaningfully nullable, same convention as the mesh filter above.
+        if (computedIsolatedIds != null) {
           const isolatedSet = computedIsolatedIds;
           projectionProfiles = projectionProfiles.filter((p) => isolatedSet.has(p.expressId));
         }
@@ -629,6 +640,7 @@ export function useDrawingGeneration({
 
       if (!isCurrent()) return;
 
+      let completedDrawing = result;
       // If we have symbolic representations, create a hybrid drawing
       if (symbolicLines.length > 0 && entitiesWithSymbols.size > 0) {
         // Get entity IDs that actually appear in the section cut (these are being cut by the plane)
@@ -881,11 +893,12 @@ export function useDrawingGeneration({
           },
         };
 
-        // Trassia: Korridor + Ueberhoehung, unmittelbar vor dem Store.
-        setDrawing(chQpShapeDrawing(hybridDrawing, chQp, Boolean(sectionPlane.custom)));
-      } else {
-        setDrawing(chQpShapeDrawing(result, chQp, Boolean(sectionPlane.custom)));
+        completedDrawing = hybridDrawing;
       }
+      // Trassia: shape both normal and hybrid output before publishing the
+      // same completed drawing to the store and generation bookkeeping.
+      completedDrawing = chQpShapeDrawing(completedDrawing, chQp, Boolean(sectionPlane.custom));
+      setDrawing(completedDrawing); markActiveDrawingGenerationCompleted(completedDrawing);
 
       // Remember the SectionConfig that produced this view so the markup
       // persistence bridge (issue #4153) can save it alongside the results —
@@ -913,23 +926,28 @@ export function useDrawingGeneration({
     combinedIsolatedIds,
     computedIsolatedIds,
     models,
+    drawingRtcContext,
+    drawingRtcContextKey,
     setDrawing,
     setDrawingStatus,
     setDrawingProgress,
     setDrawingError,
   ]);
 
-  // Every entry point shares one queue. A superseded cut still disposes its
-  // generator, but cannot publish over the newest requested inputs (#3921).
+  // All entry points share one queue; superseded cuts cannot publish over newer inputs (#3921).
   const queueRef = useRef<ReturnType<typeof createDrawingRequestQueue> | null>(null);
   if (!queueRef.current) queueRef.current = createDrawingRequestQueue();
   const queue = queueRef.current;
   const [isRegenerating, setIsRegenerating] = useState(false);
-  const generateDrawing = useCallback((isRegenerate = false) => queue.request(async isCurrent => {
-    setIsRegenerating(isRegenerate);
-    try { await computeDrawing(isRegenerate, isCurrent); }
-    finally { setIsRegenerating(false); }
-  }), [computeDrawing, queue]);
+  // Trassia (NM1): laufende Anfragen, damit das Oeffnen des Panels keine zweite
+  // Erzeugung neben einer schon laufenden startet.
+  const chLaufend = useRef(0);
+  const generateDrawing = useCallback((isRegenerate = false) => {
+    markActiveDrawingGenerationStarted(); chLaufend.current += 1; return queue.request(async isCurrent => {
+      setIsRegenerating(isRegenerate);
+      try { await computeDrawing(isRegenerate, isCurrent); }
+      finally { setIsRegenerating(false); }
+    }).finally(() => { chLaufend.current -= 1; }); }, [computeDrawing, queue]);
   const doRegenerate = useCallback(() => generateDrawing(true), [generateDrawing]);
 
   // Restore the persisted section cut on reload (issue #4153 gap):
@@ -1010,6 +1028,11 @@ export function useDrawingGeneration({
   const drawingActive = panelVisible || (activeTool === 'section' && displayOptions.show3DOverlay);
   const previousInputs = useRef<unknown[]>([]);
   const wasActive = useRef(false);
+  // Trassia (Pin 10.x, Tester-Befund NM1): der 2D-Knopf der Schnittleiste loescht
+  // die Zeichnung und oeffnet das Panel. War die Erzeugung schon aktiv (3D-Overlay
+  // des Schnittwerkzeugs), gab es kein `activated` — die Flaeche blieb leer bis
+  // «Regenerate». Das Sichtbarwerden des Panels loest darum selbst aus.
+  const wasPanelVisible = useRef(false);
   const previousPlane = useRef('');
   useEffect(() => () => {
     queue.cancel();
@@ -1024,22 +1047,26 @@ export function useDrawingGeneration({
       sectionPlane.custom, chQp.key]);
     const inputs = [geometryResult, geometryResult?.meshes.length, ifcDataStore,
       displayOptions, typeVisibility, combinedHiddenIds, combinedIsolatedIds,
-      computedIsolatedIds, models];
+      computedIsolatedIds, models, drawingRtcContextKey];
     const changed = inputs.some((value, index) => value !== previousInputs.current[index]);
     const planeChanged = plane !== previousPlane.current;
     const activated = drawingActive && !wasActive.current;
     const deactivated = !drawingActive && wasActive.current;
+    // Nur wenn es nichts zu zeigen gibt und nichts unterwegs ist: ein zweiter
+    // Betrachter einer fertigen Zeichnung braucht keine neue (Upstream-Test).
+    const panelOpened = panelVisible && !wasPanelVisible.current && !drawing && chLaufend.current === 0;
     previousInputs.current = inputs;
     previousPlane.current = plane;
     wasActive.current = drawingActive;
+    wasPanelVisible.current = panelVisible;
     if (!drawingActive) { if (deactivated) queue.cancel(); return; }
     if (!geometryResult?.meshes.length) {
       queue.cancel();
       if (drawing) { setDrawing(null); setDrawingStatus('idle'); }
       return;
     }
-    if (activated || changed || planeChanged) {
-      const regenerate = !activated && !changed && planeChanged;
+    if (activated || panelOpened || changed || planeChanged) {
+      const regenerate = !activated && !panelOpened && !changed && planeChanged;
       void generateDrawing(regenerate).catch(error => {
         console.error('Automatic drawing request failed:', error);
         setDrawingError(error instanceof Error ? error.message : 'Generation failed');

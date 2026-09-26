@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/store/slices/sidebarSlice.ts b/apps/viewer/src/store/slices/sidebarSlice.ts
-index a7a6145..27ad9b3 100644
+index 900eb7d..1250980 100644
 --- a/apps/viewer/src/store/slices/sidebarSlice.ts
 +++ b/apps/viewer/src/store/slices/sidebarSlice.ts
 @@ -82,8 +82,48 @@ const DEFAULT_ORDER: WorkspacePanelId[] = (() => {
@@ -52,7 +52,7 @@ index a7a6145..27ad9b3 100644
    return Math.max(MIN_WIDTH_PCT, Math.min(MAX_WIDTH_PCT, pct));
  }
  
-@@ -141,7 +181,8 @@ function coerceMode(m: unknown, fallback: SidebarMode): SidebarMode {
+@@ -145,7 +185,8 @@ function coerceMode(m: unknown, fallback: SidebarMode): SidebarMode {
  function loadPersisted(): SidebarLayoutSnapshot {
    const fallback: SidebarLayoutSnapshot = {
      mode: 'expanded',
@@ -62,7 +62,7 @@ index a7a6145..27ad9b3 100644
      order: [...DEFAULT_ORDER],
      hiddenIds: [],
    };
-@@ -152,7 +193,9 @@ function loadPersisted(): SidebarLayoutSnapshot {
+@@ -156,7 +197,9 @@ function loadPersisted(): SidebarLayoutSnapshot {
      const parsed = JSON.parse(raw) as Partial<SidebarLayoutSnapshot>;
      return {
        mode: coerceMode(parsed?.mode, 'expanded'),
@@ -73,7 +73,7 @@ index a7a6145..27ad9b3 100644
        order: normalizeOrder(parsed?.order),
        hiddenIds: normalizeHidden(parsed?.hiddenIds),
      };
-@@ -298,7 +341,8 @@ export const createSidebarSlice: StateCreator<SidebarSlice, [], [], SidebarSlice
+@@ -302,7 +345,8 @@ export const createSidebarSlice: StateCreator<SidebarSlice, [], [], SidebarSlice
      resetSidebarLayout: () => {
        const snap: SidebarLayoutSnapshot = {
          mode: 'expanded',

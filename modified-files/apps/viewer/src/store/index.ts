@@ -6,9 +6,7 @@
 
 import { createAppearanceSlice, type AppearanceSlice } from './slices/appearanceSlice.js';
 import { create } from 'zustand';
-import { chSidebarClosePatch, CH_SIDEBAR_FLAGS } from '@/lib/ch/panel-close';
-
-// Import slices
+import { chSidebarClosePatch } from '@/lib/ch/panel-close';
 import { createLoadingSlice, type LoadingSlice } from './slices/loadingSlice.js';
 import { createSelectionSlice, type SelectionSlice } from './slices/selectionSlice.js';
 import { createVisibilitySlice, type VisibilitySlice } from './slices/visibilitySlice.js';
@@ -16,6 +14,8 @@ import { createUISlice, type UISlice } from './slices/uiSlice.js';
 import { createHoverSlice, type HoverSlice } from './slices/hoverSlice.js';
 import { createCameraSlice, DEFAULT_CONTROLS_MODE, type CameraSlice } from './slices/cameraSlice.js';
 import { createSectionSlice, type SectionSlice, clearLastSectionMode } from './slices/sectionSlice.js';
+import { registerSectionVisibility } from './section-active.js';
+import { registerMutationViewStoreBinding } from './mutation-view-store-binding.js';
 export { customPlaneCenter, loadLastSectionMode } from './slices/sectionSlice.js';
 export type { LastSectionMode } from './slices/sectionSlice.js';
 import { createMeasurementSlice, type MeasurementSlice } from './slices/measurementSlice.js';
@@ -29,13 +29,18 @@ import { createIdsSlice, type IDSSlice } from './slices/idsSlice.js';
 import { createExtensionsSlice, type ExtensionsSlice } from './slices/extensionsSlice.js';
 import { createSourcesSlice, type SourcesSlice } from './slices/sourcesSlice.js';
 import { createListSlice, type ListSlice } from './slices/listSlice.js';
+import { createChartSlice, type ChartSlice } from './slices/chartSlice.js';
+import { createFlowSlice, type FlowSlice } from './slices/flowSlice.js';
+import { createDocumentSlice, type DocumentSlice } from './slices/documentSlice.js';
 import { createPinboardSlice, type PinboardSlice } from './slices/pinboardSlice.js';
 import { createLensSlice, type LensSlice } from './slices/lensSlice.js';
 import { createClashSlice, type ClashSlice } from './slices/clashSlice.js';
 import { createCompareSlice, type CompareSlice } from './slices/compareSlice.js';
 import { createDockSlice, type DockSlice } from './slices/dockSlice.js';
 import { createSidebarSlice, type SidebarSlice } from './slices/sidebarSlice.js';
-import { isBottomPanel, type WorkspacePanelId, type BottomPanelId } from '@/lib/panels/registry';
+import { createDrawingInspectorSlice, type DrawingInspectorSlice } from './slices/drawingInspectorSlice.js';
+import { type WorkspacePanelId } from '@/lib/panels/registry';
+import { bottomPanelFlags, isBottomPanel, isBottomPanelOpen, type BottomPanelId } from '@/lib/panels/bottom-panels';
 import { createScriptSlice, type ScriptSlice } from './slices/scriptSlice.js';
 import { createChatSlice, type ChatSlice } from './slices/chatSlice.js';
 import { createCesiumSlice, type CesiumSlice } from './slices/cesiumSlice.js';
@@ -56,9 +61,11 @@ import { createUnitDisplaySlice, type UnitDisplaySlice } from './slices/unitDisp
 import { createSpaceMouseSlice, type SpaceMouseSlice } from './slices/spaceMouseSlice.js';
 import { createLayerStackSlice, type LayerStackSlice } from './slices/layerStackSlice.js';
 import { createZonesSlice, type ZonesSlice } from './slices/zonesSlice.js';
+import { createModelTagsSlice, type ModelTagsSlice } from './slices/modelTagsSlice.js';
 import { invalidateVisibleBasketCache } from './basketVisibleSet.js';
 import { withPlacementHistory } from './placement-history.js';
 import { withVisibilityOwnershipInvalidation } from './visibility-invalidation.js';
+import { SIDEBAR_PANEL_FLAGS, registerSidebarExclusivity, registerHierarchyLeftSync, registerDrawingInspectorSheetSync, reconcileInitialStoreSync } from './store-sync.js';
 // The composed teardown `resetViewerState` dispatches. Its own module rather
 // than this file: `slices/modelSlice.ts` is another entry point and this file
 // imports that slice, so a registry declared here would be a runtime cycle.
@@ -88,22 +95,19 @@ export type { ForwardModelMapLike } from './globalId.js';
 // Re-export Drawing2D types
 export type { Drawing2DState, Drawing2DStatus, Annotation2DTool, PolygonArea2DResult, TextAnnotation2D, CloudAnnotation2D, SelectedAnnotation2D } from './slices/drawing2DSlice.js';
 
-// Re-export Sheet types
+// Re-export Sheet / Collab / BCF types
 export type { SheetState } from './slices/sheetSlice.js';
-
-// Re-export Collab types
 export type { CollabSlice, CollabRole, CollabStatus, StartCollabOptions } from './slices/collabSlice.js';
-
-// Re-export BCF types
 export type { BCFSlice, BCFSliceState } from './slices/bcfSlice.js';
 
 // Re-export IDS types
 export type { IDSSlice, IDSSliceState, IDSDisplayOptions, IDSFilterMode, IDSFocusMode } from './slices/idsSlice.js';
 
-// Re-export List types
+// Re-export List / Chart / Flow / Document / Pinboard types
 export type { ListSlice } from './slices/listSlice.js';
-
-// Re-export Pinboard types
+export type { ChartSlice, ChartFocusMode } from './slices/chartSlice.js';
+export type { FlowSlice } from './slices/flowSlice.js';
+export type { DocumentSlice } from './slices/documentSlice.js';
 export type { PinboardSlice } from './slices/pinboardSlice.js';
 
 // Re-export Lens types
@@ -112,6 +116,7 @@ export type { CompareSlice, CompareResult } from './slices/compareSlice.js';
 export type { LayerStackSlice, LayerStackEntry, LayerStackDiffResult, LayerAuthorKind } from './slices/layerStackSlice.js';
 export type { DockSlice, FloatingPanelState, SnapZone } from './slices/dockSlice.js';
 export type { SidebarSlice, SidebarMode, SidebarLayoutSnapshot } from './slices/sidebarSlice.js';
+export type { DrawingInspectorSlice, DrawingInspectorTab } from './slices/drawingInspectorSlice.js';
 
 // Re-export Script types
 export type { ScriptSlice } from './slices/scriptSlice.js';
@@ -153,6 +158,9 @@ export type ViewerState = AppearanceSlice & LoadingSlice &
   BCFSlice &
   IDSSlice &
   ListSlice &
+  ChartSlice &
+  FlowSlice &
+  DocumentSlice &
   PinboardSlice &
   LensSlice &
   ClashSlice &
@@ -160,6 +168,7 @@ export type ViewerState = AppearanceSlice & LoadingSlice &
   LayerStackSlice &
   DockSlice &
   SidebarSlice &
+  DrawingInspectorSlice &
   ScriptSlice &
   ChatSlice &
   CesiumSlice &
@@ -175,11 +184,8 @@ export type ViewerState = AppearanceSlice & LoadingSlice &
   SplitToolSlice &
   LevelDisplaySlice &
   PointCloudSlice & ModelPlacementSlice &
-  UnitDisplaySlice &
-  SpaceMouseSlice &
-  ZonesSlice &
-  ExtensionsSlice &
-  SourcesSlice & {
+  UnitDisplaySlice & SpaceMouseSlice & ZonesSlice & ModelTagsSlice &
+  ExtensionsSlice & SourcesSlice & {
     resetViewerState: () => void;
     /** Ephemeral close intent; not persisted in the layout. */
     sidebarCloseRevision: number;
@@ -252,6 +258,9 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
   ...createBcfSlice(...args),
   ...createIdsSlice(...args),
   ...createListSlice(...args),
+  ...createChartSlice(...args),
+  ...createFlowSlice(...args),
+  ...createDocumentSlice(...args),
   ...createPinboardSlice(...args),
   ...createLensSlice(...args),
   ...createClashSlice(...args),
@@ -259,6 +268,7 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
   ...createLayerStackSlice(...args),
   ...createDockSlice(...args),
   ...createSidebarSlice(...args),
+  ...createDrawingInspectorSlice(...args),
   ...createScriptSlice(...args),
   ...createChatSlice(...args),
   ...createCesiumSlice(...args),
@@ -278,6 +288,7 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
   ...createUnitDisplaySlice(...args),
   ...createSpaceMouseSlice(...args),
   ...createZonesSlice(...args),
+  ...createModelTagsSlice(...args),
   ...createExtensionsSlice(...args),
   ...createSourcesSlice(...args),
   ...createAppearanceSlice(...args),
@@ -373,7 +384,7 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
     get().setPanelPoppedOut(panel, false);
     set({
       bcfPanelVisible: panel === 'bcf',
-      idsPanelVisible: panel === 'ids',
+      idsPanelVisible: panel === 'validation',
       lensPanelVisible: panel === 'lens',
       clashPanelVisible: panel === 'clash',
       comparePanelVisible: panel === 'compare',
@@ -411,12 +422,7 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
     // routes through this fn with the panel id), so it must land in its home
     // region instead of flipping side-panel flags it doesn't own (#1208).
     if (isBottomPanel(panel)) {
-      set({
-        scriptPanelVisible: panel === 'script',
-        ganttPanelVisible: panel === 'gantt',
-        listPanelVisible: panel === 'lists',
-        rightPanelCollapsed: false,
-      });
+      set({ ...bottomPanelFlags(panel), rightPanelCollapsed: false });
       return;
     }
     if (panel === 'properties') {
@@ -463,21 +469,16 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
   toggleBottomPanel: (panel) => {
     const [set, get] = args;
     const s = get();
-    const flagActive = panel === 'script' ? s.scriptPanelVisible : panel === 'gantt' ? s.ganttPanelVisible : s.listPanelVisible;
+    const flagActive = isBottomPanelOpen(s, panel);
     const detached = s.floatingPanels.some((p) => p.id === panel) || s.poppedOutIds.includes(panel);
     // Re-dock any float / OS window for it first.
     get().closeFloatingPanel(panel);
     get().setPanelPoppedOut(panel, false);
     if (flagActive && !detached) {
       // Toggle off (only one bottom panel shows at a time).
-      set({ scriptPanelVisible: false, ganttPanelVisible: false, listPanelVisible: false });
+      set(bottomPanelFlags(null));
     } else {
-      set({
-        scriptPanelVisible: panel === 'script',
-        ganttPanelVisible: panel === 'gantt',
-        listPanelVisible: panel === 'lists',
-        rightPanelCollapsed: false,
-      });
+      set({ ...bottomPanelFlags(panel), rightPanelCollapsed: false });
     }
   },
 
@@ -486,12 +487,7 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
     if (isBottomPanel(panel)) {
       get().closeFloatingPanel(panel);
       get().setPanelPoppedOut(panel, false);
-      set({
-        scriptPanelVisible: panel === 'script',
-        ganttPanelVisible: panel === 'gantt',
-        listPanelVisible: panel === 'lists',
-        rightPanelCollapsed: false,
-      });
+      set({ ...bottomPanelFlags(panel), rightPanelCollapsed: false });
     } else {
       get().showWorkspacePanel(panel);
     }
@@ -503,79 +499,6 @@ const globalStoreRegistry = globalThis as typeof globalThis & {
   [STORE_SINGLETON_KEY]?: ReturnType<typeof createViewerStore>;
 };
 
-/**
- * The per-panel visibility flags that drive the single-tenant sidebar,
- * paired with their registry id. `properties` has no flag — it is the
- * fallback shown when none of these are on. (Script / Schedule / Lists are
- * NOT here: they live in the bottom panel and stay independent.)
- */
-const SIDEBAR_PANEL_FLAGS = CH_SIDEBAR_FLAGS;
-
-/**
- * Enforce the "one docked panel at a time" invariant for the unified sidebar
- * (#1208), without having to touch the ~15 call sites that flip a panel flag
- * directly (ChatPanel, IdeasPanel, GenerateScheduleDialog, search-to-list, …).
- *
- * Whenever a panel flag transitions off→on we make it the sole active panel:
- * clear every other flag and record it as `sidebarActivePanel`. When the
- * active panel's flag goes on→off we re-resolve to the next open panel, or the
- * Information fallback. This is the single writer of `sidebarActivePanel`.
- */
-function registerSidebarExclusivity(store: ReturnType<typeof createViewerStore>): void {
-  store.subscribe((state, prev) => {
-    // Closing updates slots and flags together; do not re-resolve that intent.
-    if (state.sidebarCloseRevision !== prev.sidebarCloseRevision) return;
-    // Did any panel just open this tick? (first off→on wins)
-    let opened: WorkspacePanelId | null = null;
-    for (const [flag, id] of SIDEBAR_PANEL_FLAGS) {
-      if (state[flag] && !prev[flag]) { opened = id; break; }
-    }
-
-    if (opened) {
-      const patch: Record<string, boolean> = {};
-      for (const [flag, id] of SIDEBAR_PANEL_FLAGS) {
-        if (id !== opened && state[flag]) patch[flag] = false;
-      }
-      if (Object.keys(patch).length > 0) store.setState(patch as Partial<ViewerState>);
-      state.setSidebarActivePanel(opened);
-      // Opening a panel from anywhere (toolbar, command palette, chat, …) means
-      // the user wants to see it — reveal the sidebar if it was collapsed/hidden.
-      if (state.sidebarMode !== 'expanded') state.setSidebarMode('expanded');
-      return;
-    }
-
-    // Did the active panel just close? Re-resolve the docked slot.
-    const active = state.sidebarActivePanel;
-    if (active !== 'properties') {
-      const flag = SIDEBAR_PANEL_FLAGS.find(([, id]) => id === active)?.[0];
-      if (flag && !state[flag] && prev[flag]) {
-        const next = SIDEBAR_PANEL_FLAGS.find(([f]) => state[f]);
-        state.setSidebarActivePanel(next ? next[1] : 'properties');
-        // Trassia (Paket SEITENLEISTE): schliesst das letzte offene Panel (auch
-        // ueber sein eigenes X), bleibt der Bereich leer statt Information zu
-        // zeigen — die Leiste klappt auf die Symbolspalte zusammen. Ein Klick
-        // auf ein Symbol oeffnet wieder (ActivityBar, collapsed-Zweig).
-        if (!next && state.sidebarMode === 'expanded') state.setSidebarMode('collapsed');
-      }
-    }
-  });
-}
-
-/**
- * Keep the Hierarchy left slot (#1267) in step with its rail visibility: hiding
- * the Hierarchy icon from the activity bar collapses its left slot, and showing
- * it again re-opens the slot, so "hide it" actually hides the panel, not just
- * its rail entry. One-way (hidden-set drives collapse); collapsing via the left
- * drag handle keeps the rail icon so the panel can be re-opened from there.
- */
-function registerHierarchyLeftSync(store: ReturnType<typeof createViewerStore>): void {
-  store.subscribe((state, prev) => {
-    const wasHidden = prev.sidebarHiddenIds.includes('hierarchy');
-    const isHidden = state.sidebarHiddenIds.includes('hierarchy');
-    if (isHidden !== wasHidden) state.setLeftPanelCollapsed(isHidden);
-  });
-}
-
 export function getViewerStoreApi() {
   const existing = globalStoreRegistry[STORE_SINGLETON_KEY];
   if (existing) return existing;
@@ -583,15 +506,10 @@ export function getViewerStoreApi() {
   globalStoreRegistry[STORE_SINGLETON_KEY] = store;
   registerSidebarExclusivity(store);
   registerHierarchyLeftSync(store);
-  // Initial reconcile: a persisted panel flag (e.g. scriptPanelVisible) can be
-  // true at load before any change fires the subscription, so seed the docked
-  // panel from the current flags rather than leaving it on the fallback.
-  const init = store.getState();
-  const initialActive = SIDEBAR_PANEL_FLAGS.find(([flag]) => init[flag])?.[1];
-  if (initialActive) init.setSidebarActivePanel(initialActive);
-  // A persisted "Hierarchy hidden" never fired the subscription above, so seed
-  // the collapsed left slot from it on load (#1267).
-  if (init.sidebarHiddenIds.includes('hierarchy')) init.setLeftPanelCollapsed(true);
+  registerDrawingInspectorSheetSync(store);
+  registerSectionVisibility(store); // `sectionPlane.enabled` === the cut is on screen (#4910)
+  registerMutationViewStoreBinding(store); // views read their model's CURRENT store, not the partial one (#5672)
+  reconcileInitialStoreSync(store);
   return store;
 }
 

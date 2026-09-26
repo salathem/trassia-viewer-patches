@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/hooks/useDrawingGeneration.ts b/apps/viewer/src/hooks/useDrawingGeneration.ts
-index e4ca2f1..46d62a0 100644
+index 90f0343..06f5a0d 100644
 --- a/apps/viewer/src/hooks/useDrawingGeneration.ts
 +++ b/apps/viewer/src/hooks/useDrawingGeneration.ts
-@@ -46,6 +46,11 @@ import * as IfcWasm from '@ifc-lite/wasm';
+@@ -39,6 +39,11 @@ import * as IfcWasm from '@ifc-lite/wasm';
  import { customPlaneCenter, useViewerStore } from '@/store';
  import { notifyDrawing2DSectionConfig, consumeRestoredSectionConfig } from './useDrawing2DPersistence.js';
  import { buildModelViewIdFilter, selectModelMeshes } from '@/lib/type-view-visibility';
@@ -12,9 +12,9 @@ index e4ca2f1..46d62a0 100644
 +import { chQpShapeDrawing, useChQpView } from '@/lib/ch/qp-corridor';
 +import { corridorPlanRect, narrowMeshesToCorridor } from '@/lib/ch/qp-prefilter';
  import { isTypeVisible, type TypeVisibilityGate } from '@/store/typeVisibilityFilter';
- 
- // The winding-robust Rust `meshOutline2d` binding (issue #979) is gitignored →
-@@ -158,6 +163,9 @@ export function useDrawingGeneration({
+ import { roomDrawingSymbolic } from '@/lib/collab/room-drawing-symbolic';
+ import { ifcToViewerAxes } from '@/lib/geo/coordinate-frame';
+@@ -154,6 +159,9 @@ export function useDrawingGeneration({
    setDrawingProgress,
    setDrawingError,
  }: UseDrawingGenerationParams): UseDrawingGenerationResult {
@@ -22,9 +22,9 @@ index e4ca2f1..46d62a0 100644
 +  // geaenderte Breite dieselbe Neuberechnung ausloest wie eine neue Station.
 +  const chQp = useChQpView();
  
-   // Cache for symbolic representations - these don't change with section position
-   // Only re-parse when model or display options change
-@@ -534,6 +542,22 @@ export function useDrawingGeneration({
+   // The legacy primary path can publish only `loading: false` when it finishes
+   // without exact RTC metadata. Subscribe to all provenance publication
+@@ -544,6 +552,22 @@ export function useDrawingGeneration({
          );
        }
  
@@ -47,20 +47,17 @@ index e4ca2f1..46d62a0 100644
        // If all meshes were filtered out by visibility, clear the drawing
        if (meshesToProcess.length === 0) {
          setDrawing(null);
-@@ -857,9 +881,10 @@ export function useDrawingGeneration({
-           },
-         };
+@@ -871,6 +895,9 @@ export function useDrawingGeneration({
  
--        setDrawing(hybridDrawing);
-+        // Trassia: Korridor + Ueberhoehung, unmittelbar vor dem Store.
-+        setDrawing(chQpShapeDrawing(hybridDrawing, chQp, Boolean(sectionPlane.custom)));
-       } else {
--        setDrawing(result);
-+        setDrawing(chQpShapeDrawing(result, chQp, Boolean(sectionPlane.custom)));
+         completedDrawing = hybridDrawing;
        }
++      // Trassia: shape both normal and hybrid output before publishing the
++      // same completed drawing to the store and generation bookkeeping.
++      completedDrawing = chQpShapeDrawing(completedDrawing, chQp, Boolean(sectionPlane.custom));
+       setDrawing(completedDrawing); markActiveDrawingGenerationCompleted(completedDrawing);
  
        // Remember the SectionConfig that produced this view so the markup
-@@ -878,6 +903,7 @@ export function useDrawingGeneration({
+@@ -889,6 +916,7 @@ export function useDrawingGeneration({
        generator?.dispose();
      }
    }, [
@@ -68,7 +65,37 @@ index e4ca2f1..46d62a0 100644
      geometryResult,
      ifcDataStore,
      sectionPlane,
-@@ -991,8 +1017,11 @@ export function useDrawingGeneration({
+@@ -911,12 +939,15 @@ export function useDrawingGeneration({
+   if (!queueRef.current) queueRef.current = createDrawingRequestQueue();
+   const queue = queueRef.current;
+   const [isRegenerating, setIsRegenerating] = useState(false);
++  // Trassia (NM1): laufende Anfragen, damit das Oeffnen des Panels keine zweite
++  // Erzeugung neben einer schon laufenden startet.
++  const chLaufend = useRef(0);
+   const generateDrawing = useCallback((isRegenerate = false) => {
+-    markActiveDrawingGenerationStarted(); return queue.request(async isCurrent => {
++    markActiveDrawingGenerationStarted(); chLaufend.current += 1; return queue.request(async isCurrent => {
+       setIsRegenerating(isRegenerate);
+       try { await computeDrawing(isRegenerate, isCurrent); }
+       finally { setIsRegenerating(false); }
+-    }); }, [computeDrawing, queue]);
++    }).finally(() => { chLaufend.current -= 1; }); }, [computeDrawing, queue]);
+   const doRegenerate = useCallback(() => generateDrawing(true), [generateDrawing]);
+ 
+   // Restore the persisted section cut on reload (issue #4153 gap):
+@@ -997,6 +1028,11 @@ export function useDrawingGeneration({
+   const drawingActive = panelVisible || (activeTool === 'section' && displayOptions.show3DOverlay);
+   const previousInputs = useRef<unknown[]>([]);
+   const wasActive = useRef(false);
++  // Trassia (Pin 10.x, Tester-Befund NM1): der 2D-Knopf der Schnittleiste loescht
++  // die Zeichnung und oeffnet das Panel. War die Erzeugung schon aktiv (3D-Overlay
++  // des Schnittwerkzeugs), gab es kein `activated` — die Flaeche blieb leer bis
++  // «Regenerate». Das Sichtbarwerden des Panels loest darum selbst aus.
++  const wasPanelVisible = useRef(false);
+   const previousPlane = useRef('');
+   useEffect(() => () => {
+     queue.cancel();
+@@ -1004,8 +1040,11 @@ export function useDrawingGeneration({
      previousInputs.current = [];
    }, [queue]);
    useEffect(() => {
@@ -80,4 +107,28 @@ index e4ca2f1..46d62a0 100644
 +      sectionPlane.custom, chQp.key]);
      const inputs = [geometryResult, geometryResult?.meshes.length, ifcDataStore,
        displayOptions, typeVisibility, combinedHiddenIds, combinedIsolatedIds,
-       computedIsolatedIds, models];
+       computedIsolatedIds, models, drawingRtcContextKey];
+@@ -1013,17 +1052,21 @@ export function useDrawingGeneration({
+     const planeChanged = plane !== previousPlane.current;
+     const activated = drawingActive && !wasActive.current;
+     const deactivated = !drawingActive && wasActive.current;
++    // Nur wenn es nichts zu zeigen gibt und nichts unterwegs ist: ein zweiter
++    // Betrachter einer fertigen Zeichnung braucht keine neue (Upstream-Test).
++    const panelOpened = panelVisible && !wasPanelVisible.current && !drawing && chLaufend.current === 0;
+     previousInputs.current = inputs;
+     previousPlane.current = plane;
+     wasActive.current = drawingActive;
++    wasPanelVisible.current = panelVisible;
+     if (!drawingActive) { if (deactivated) queue.cancel(); return; }
+     if (!geometryResult?.meshes.length) {
+       queue.cancel();
+       if (drawing) { setDrawing(null); setDrawingStatus('idle'); }
+       return;
+     }
+-    if (activated || changed || planeChanged) {
+-      const regenerate = !activated && !changed && planeChanged;
++    if (activated || panelOpened || changed || planeChanged) {
++      const regenerate = !activated && !panelOpened && !changed && planeChanged;
+       void generateDrawing(regenerate).catch(error => {
+         console.error('Automatic drawing request failed:', error);
+         setDrawingError(error instanceof Error ? error.message : 'Generation failed');

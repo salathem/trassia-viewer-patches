@@ -1,18 +1,18 @@
 diff --git a/apps/viewer/vite.config.ts b/apps/viewer/vite.config.ts
-index 5c282a8..e54e158 100644
+index bf7ebae..b2631a9 100644
 --- a/apps/viewer/vite.config.ts
 +++ b/apps/viewer/vite.config.ts
-@@ -16,6 +16,9 @@ import { oauthCallbackRoutes } from './vite-plugins/oauth-callback';
- // Same allowlist the production relay uses, so dev and prod cannot disagree
+@@ -17,6 +17,9 @@ import { oauthCallbackRoutes } from './vite-plugins/oauth-callback';
  // about which Dalux node a request reaches (#2792).
  import { daluxRelayRoute } from './vite-plugins/dalux-relay';
+ import { deploymentAssetsDir } from '../../scripts/lib/deployment-assets-dir.mjs';
 +// Trassia: Knockout (in CesiumJS) greift per eval nach dem globalen Objekt —
 +// unter unserer CSP ein EvalError, der das ganze Cesium-Modul mitnimmt.
 +import { chKnockoutCsp } from './vite-plugins/ch-knockout-csp';
  
  // --- Build-time changelog parser ---
  interface ReleaseHighlight {
-@@ -251,6 +254,11 @@ export default defineConfig({
+@@ -243,6 +246,11 @@ export default defineConfig({
      // relay. Dev runs the SAME handler production does (#2792), rather than a
      // second proxy config that can drift from it.
      daluxRelayRoute(),

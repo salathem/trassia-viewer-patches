@@ -27,12 +27,12 @@ index 64e8128..3846547 100644
        showHiddenLines: displayOptions.showHiddenLines,
        coordinateTransform,
 diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-index 9c21668..697197b 100644
+index 940c2ee..74a5bc3 100644
 --- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
 +++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-@@ -380,6 +380,11 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
- 
-     // Escape: first press clears selection/tool, double-press closes all panels
+@@ -375,6 +375,11 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
+     // Escape: one step per press — leave the tool, else clear the selection; double-press
+     // also closes all panels. Never resets visibility; only A / Home do (#5595).
      if (key === 'escape') {
 +      // Trassia (TODO #40, Tester 03.09.): Escape in einem offenen Menue oder
 +      // Dialog gehoert dem Menue (Radix schliesst es selbst) — sonst schloss
@@ -43,10 +43,10 @@ index 9c21668..697197b 100644
        const now = Date.now();
        const timeSinceLastEscape = now - lastEscapeRef.current;
 diff --git a/apps/viewer/src/main.tsx b/apps/viewer/src/main.tsx
-index 95dd799..c7b7680 100644
+index 75e646e..6dcf38d 100644
 --- a/apps/viewer/src/main.tsx
 +++ b/apps/viewer/src/main.tsx
-@@ -32,6 +32,10 @@ import './index.css';
+@@ -22,5 +22,9 @@ import { mountViewer } from './bootstrap';
  // Spezifitaet gewinnt das spaeter geladene Blatt. Begruendung je Regel steht
  // in der Datei selbst (overlay/apps/viewer/src/ch-dichte.css).
  import './ch-dichte.css';
@@ -54,9 +54,8 @@ index 95dd799..c7b7680 100644
 +// Nebeneffekt-Import, tauscht die Icon-Links von index.html einmal beim Start
 +// (Begruendung in overlay/apps/viewer/src/lib/ch/favicon.ts).
 +import './lib/ch/favicon';
- import 'maplibre-gl/dist/maplibre-gl.css';
- // Wire the placement-edit helpers' parser-backed source reader. Pure
- // side-effect import; keeps `@ifc-lite/parser` out of placement-edit
+ 
+ mountViewer(document.getElementById('root')!);
 diff --git a/packages/drawing-2d/src/dxf/writer.ts b/packages/drawing-2d/src/dxf/writer.ts
 index c01ffd7..8a040ea 100644
 --- a/packages/drawing-2d/src/dxf/writer.ts

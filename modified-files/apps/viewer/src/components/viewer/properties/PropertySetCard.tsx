@@ -18,6 +18,7 @@ import { setDisplayName } from './setDisplayName';
 import { PropertyValueType } from '@ifc-lite/data';
 import type { ProjectUnits } from '@ifc-lite/parser';
 import { resolveMeasureDisplay, formatConverted } from '@/lib/units/display';
+import { useTranslation } from '@/i18n';
 
 export interface PropertySetCardProps {
   pset: PropertySet;
@@ -46,6 +47,7 @@ export interface PropertySetCardProps {
 }
 
 export function PropertySetCard({ pset, modelId, entityId, enableEditing, isTypeProperty, typeEditScope, focusedPropKey, projectUnits, unitDisplayOverrides, chGroupLabel }: PropertySetCardProps) {
+  const { t } = useTranslation();
   // Check if any property in this set is mutated
   const hasMutations = pset.properties.some(p => p.isMutated);
   const isNewPset = pset.isNewPset;
@@ -67,7 +69,7 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
   const borderClass = isNewPset
     ? 'border-2 border-amber-400/50 dark:border-amber-500/30'
     : hasMutations
-    ? 'border-2 border-purple-300/50 dark:border-purple-500/30'
+    ? 'border-2 border-overlay-accent/40'
     : isTypeProperty
     ? 'border-2 border-indigo-200/60 dark:border-indigo-800/40'
     : 'border-2 border-zinc-200 dark:border-zinc-800';
@@ -75,7 +77,7 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
   const bgClass = isNewPset
     ? 'bg-amber-50/30 dark:bg-amber-950/20'
     : hasMutations
-    ? 'bg-purple-50/20 dark:bg-purple-950/10'
+    ? 'bg-overlay-accent/5'
     : isTypeProperty
     ? 'bg-indigo-50/20 dark:bg-indigo-950/10'
     : 'bg-white dark:bg-zinc-950';
@@ -88,15 +90,15 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
             <TooltipTrigger asChild>
               <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
             </TooltipTrigger>
-            <TooltipContent>New property set (not in original model)</TooltipContent>
+            <TooltipContent>{t('properties.propertySetCard.newPsetTooltip')}</TooltipContent>
           </Tooltip>
         )}
         {hasMutations && !isNewPset && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <PenLine className="h-3.5 w-3.5 text-purple-500 shrink-0" />
+              <PenLine className="h-3.5 w-3.5 text-overlay-accent shrink-0" />
             </TooltipTrigger>
-            <TooltipContent>Has modified properties</TooltipContent>
+            <TooltipContent>{t('properties.propertySetCard.hasMutationsTooltip')}</TooltipContent>
           </Tooltip>
         )}
         {isTypeProperty && !isNewPset && !hasMutations && (
@@ -104,10 +106,10 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
             <TooltipTrigger asChild>
               <Building2 className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
             </TooltipTrigger>
-            <TooltipContent>Inherited from type — edits apply to all instances of this type</TooltipContent>
+            <TooltipContent>{t('properties.propertySetCard.inheritedFromTypeTooltip')}</TooltipContent>
           </Tooltip>
         )}
-        <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-0">{setDisplayName(pset.name, 'Property Set')}</span>
+        <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-0">{setDisplayName(pset.name, t('properties.propertySet.unnamed'))}</span>
         {/* Trassia: names WHY this set is at the top of the panel. Data
             provenance is the first question on a converted Swiss model. */}
         {chGroupLabel && (
@@ -141,7 +143,7 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
                   isFocused
                     ? 'bg-amber-100/70 dark:bg-amber-900/40 ring-2 ring-inset ring-amber-400 dark:ring-amber-500 motion-safe:animate-pulse-subtle'
                     : isMutated
-                    ? 'bg-purple-50/50 dark:bg-purple-950/30 hover:bg-purple-100/50 dark:hover:bg-purple-900/30'
+                    ? 'bg-overlay-accent-soft hover:bg-overlay-accent/20'
                     : 'hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50'
                 }`}
               >
@@ -151,28 +153,29 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
                     {isMutated && (
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700">
-                            edited
+                          <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-overlay-accent-soft text-foreground border-overlay-accent/40">
+                            {t('properties.propertySetCard.editedBadge')}
                           </Badge>
                         </TooltipTrigger>
-                        <TooltipContent>This property has been modified</TooltipContent>
+                        <TooltipContent>{t('properties.propertySetCard.propertyModifiedTooltip')}</TooltipContent>
                       </Tooltip>
                     )}
                     {parsed.ifcType ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span className={`font-medium cursor-help break-words ${isMutated ? 'text-purple-600 dark:text-purple-400' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                          <span className={`font-medium cursor-help break-words ${isMutated ? 'text-foreground' : 'text-zinc-500 dark:text-zinc-400'}`}>
                             {prop.name}
                           </span>
                         </TooltipTrigger>
                         <TooltipContent side="top" className="text-[10px]">
-                          {/* bg-primary tooltip: derive from primary-foreground so it
-                              reads on the blue/purple surface and in dark mode (#1218) */}
-                          <span className="text-primary-foreground/80">{parsed.ifcType}</span>
+                          {/* TooltipContent uses the neutral popover surface (#4767);
+                              secondary text uses its semantic muted token instead
+                              of a hardcoded primary-foreground opacity tier. */}
+                          <span className="text-muted-foreground">{parsed.ifcType}</span>
                         </TooltipContent>
                       </Tooltip>
                     ) : (
-                      <span className={`font-medium break-words ${isMutated ? 'text-purple-600 dark:text-purple-400' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                      <span className={`font-medium break-words ${isMutated ? 'text-foreground' : 'text-zinc-500 dark:text-zinc-400'}`}>
                         {prop.name}
                       </span>
                     )}
@@ -189,7 +192,7 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
                       editScope={typeEditScope}
                     />
                   ) : (
-                    <span className={`font-mono select-all break-words ${isMutated ? 'text-purple-900 dark:text-purple-100 font-semibold' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                    <span className={`font-mono select-all break-words ${isMutated ? 'text-foreground font-semibold' : 'text-zinc-900 dark:text-zinc-100'}`}>
                       {disp.converted !== null ? formatConverted(disp.converted) : parsed.displayValue}
                       {unit && parsed.displayValue !== '\u2014' && (
                         <span className="ml-1 text-zinc-400 dark:text-zinc-500">{unit}</span>
