@@ -1,0 +1,15 @@
+diff --git a/apps/viewer/src/components/viewer/ChatPanel.tsx b/apps/viewer/src/components/viewer/ChatPanel.tsx
+index ce6b113..fe4abd9 100644
+--- a/apps/viewer/src/components/viewer/ChatPanel.tsx
++++ b/apps/viewer/src/components/viewer/ChatPanel.tsx
+@@ -312,6 +312,10 @@ export function ChatPanel({ onClose }: ChatPanelProps) {
+ 
+   // Keep usage meter hydrated even before first prompt and refresh periodically.
+   useEffect(() => {
++    // Trassia (TODO 22): ohne eigenen LLM-Proxy gibt es keinen /api/chat — der
++    // Server antwortet dort absichtlich 404, und die Abfrage alle paar Sekunden
++    // fuellte nur die Konsole. Mit Proxy oder im Entwicklungsserver wie Upstream.
++    if (!import.meta.env.VITE_LLM_PROXY_URL && !import.meta.env.DEV) return;
+     let cancelled = false;
+     const refreshUsage = async () => {
+       const snapshot = await fetchUsageSnapshot(PROXY_URL);

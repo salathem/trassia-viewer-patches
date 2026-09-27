@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-index ce405a7..d810ad1 100644
+index ce405a7..8be267b 100644
 --- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
 +++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
 @@ -413,10 +413,19 @@ export function ViewerLayout() {
@@ -34,6 +34,16 @@ index ce405a7..d810ad1 100644
                      {/* data-floating-snap-bounds: edge-docked floating panels
                          (#1201) snap to THIS region, not the whole window, so a
                          dock never hides under the toolbar (its own close control
+@@ -535,7 +545,8 @@ export function ViewerLayout() {
+                 borders, uppercase caption) matching panel headers across the app.
+                 Hidden in the empty state so the "Load IFC" card stays unobstructed. */}
+             {leftPanelCollapsed && rightPanelCollapsed && hasModelsLoaded && (
+-              <div className="absolute top-4 left-4 flex flex-col gap-2.5 z-20">
++              // Trassia: Merkmal fuer die Schnittkarte, die hier ausweicht (NS1).
++              <div className="absolute top-4 left-4 flex flex-col gap-2.5 z-20" data-ch-mobile-knoepfe="">
+                 <button
+                   className="flex flex-col items-center gap-1 group touch-manipulation"
+                   onClick={() => { setRightPanelCollapsed(true); setLeftPanelCollapsed(false); }}
 diff --git a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
 index 45bc3a8..262587d 100644
 --- a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx

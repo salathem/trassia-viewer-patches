@@ -9,12 +9,13 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0076`, numbers no longer in use are listed below)
+- `patches/` — the exact patches (`0001`–`0078`, numbers no longer in use are listed below)
   applied, in numeric order, on top of upstream commit
   `ca6fef8d72176bd83127e20a314e4fad9c0acf59` (tag `@ifc-lite/wasm@10.1.2`)
-- `modified-files/` — the sixty-five modified files in full source form
+- `modified-files/` — the sixty-six modified files in full source form
   (base commit + all patches applied):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
+  - `apps/viewer/src/components/viewer/ChatPanel.tsx`
   - `apps/viewer/src/components/viewer/Drawing2DCanvas.tsx`
   - `apps/viewer/src/components/viewer/EnvironmentPanel.tsx`
   - `apps/viewer/src/components/viewer/HierarchyPanel.tsx`
@@ -357,6 +358,18 @@ lives in `store/store-sync.ts`).
   aliases. Upstream 10.x aligns federated models only when both declare a known
   vertical CRS; without these names every Swiss model beside the anchor stayed in
   its own local frame. Two assertions added to the existing upstream test.
+
+- `0077` — the chat panel no longer polls `/api/chat?usage=1` when no LLM proxy is
+  configured (`VITE_LLM_PROXY_URL`) outside the dev server; this deployment has no
+  such endpoint and the poll only produced 404 console errors.
+- `0078` — the properties panel's empty state shows a project-set summary when
+  several models are loaded (model count and the sum of the IFC instance counts shown
+  on the model rows), rendered by an overlay component.
+- Also changed on 2026-09-27: `0061` adds a `data-ch-mobile-knoepfe` marker to the
+  phone-layout floating buttons so the section card can move below them; `0065` now
+  queries the terrain height at the model origin from the swisstopo height service
+  (LV95/LV03 in, LN02 out) through an overlay policy instead of the upstream chain
+  (Cesium sampling, then open-meteo).
 
 Separate, newly created files of the Trassia deployment (e.g. Swiss coordinate
 helpers, the drape/kubatur/profile panels, the pop-out frame, the Normalprofil

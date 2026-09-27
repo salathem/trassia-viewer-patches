@@ -148,18 +148,14 @@ export function useCesiumBridge({
       const preferOrthometricTerrain = shouldPreferOrthometricTerrain(projectedCRS);
       let terrainSample = null;
       try {
-        terrainSample = await chQueryTerrainHeight(() => cameraTentative.queryTerrainHeight(Cesium, viewer, {
-          cacheNamespace: [
-            terrainEnabled ? 'terrain' : 'ellipsoid',
-            dataSource,
-            preferOrthometricTerrain ? 'orthometric' : 'visual-surface',
-          ].join(':'),
-          preferOrthometric: preferOrthometricTerrain,
-          cancellation: {
-            isCancelled: () => cancelled || !lifetime.isLive(viewer),
-            onCancel: (stop) => lifetime.onRetire(stop),
-          },
-        }));
+        // Trassia (Marco 2026-09-27, TODO 5/58): Gelaendehoehe vom swisstopo-
+        // Hoehendienst (LN02) am Modellursprung statt der Upstream-Kette.
+        terrainSample = await chQueryTerrainHeight({
+          lat: cameraTentative.modelOrigin.latitude,
+          lon: cameraTentative.modelOrigin.longitude,
+          projectedCRS,
+          isCancelled: () => cancelled || !lifetime.isLive(viewer),
+        });
       }
       catch (err) { console.warn('[CesiumOverlay] terrain query failed:', err); }
       if (cancelled || !lifetime.isLive(viewer)) return;

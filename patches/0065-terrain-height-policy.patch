@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
-index 70c967f..5edb06d 100644
+index 70c967f..2a02a36 100644
 --- a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
 +++ b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
 @@ -19,6 +19,7 @@
@@ -22,24 +22,31 @@ index 70c967f..5edb06d 100644
      if (status !== 'ready' || !mapConversion || !projectedCRS) {
        bridgeRef.current = null;
        cameraBridgeRef.current = null;
-@@ -142,7 +148,7 @@ export function useCesiumBridge({
+@@ -142,17 +148,13 @@ export function useCesiumBridge({
        const preferOrthometricTerrain = shouldPreferOrthometricTerrain(projectedCRS);
        let terrainSample = null;
        try {
 -        terrainSample = await cameraTentative.queryTerrainHeight(Cesium, viewer, {
-+        terrainSample = await chQueryTerrainHeight(() => cameraTentative.queryTerrainHeight(Cesium, viewer, {
-           cacheNamespace: [
-             terrainEnabled ? 'terrain' : 'ellipsoid',
-             dataSource,
-@@ -153,7 +159,7 @@ export function useCesiumBridge({
-             isCancelled: () => cancelled || !lifetime.isLive(viewer),
-             onCancel: (stop) => lifetime.onRetire(stop),
-           },
--        });
-+        }));
+-          cacheNamespace: [
+-            terrainEnabled ? 'terrain' : 'ellipsoid',
+-            dataSource,
+-            preferOrthometricTerrain ? 'orthometric' : 'visual-surface',
+-          ].join(':'),
+-          preferOrthometric: preferOrthometricTerrain,
+-          cancellation: {
+-            isCancelled: () => cancelled || !lifetime.isLive(viewer),
+-            onCancel: (stop) => lifetime.onRetire(stop),
+-          },
++        // Trassia (Marco 2026-09-27, TODO 5/58): Gelaendehoehe vom swisstopo-
++        // Hoehendienst (LN02) am Modellursprung statt der Upstream-Kette.
++        terrainSample = await chQueryTerrainHeight({
++          lat: cameraTentative.modelOrigin.latitude,
++          lon: cameraTentative.modelOrigin.longitude,
++          projectedCRS,
++          isCancelled: () => cancelled || !lifetime.isLive(viewer),
+         });
        }
        catch (err) { console.warn('[CesiumOverlay] terrain query failed:', err); }
-       if (cancelled || !lifetime.isLive(viewer)) return;
 diff --git a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx b/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx
 index a26c84b..d33d82e 100644
 --- a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx

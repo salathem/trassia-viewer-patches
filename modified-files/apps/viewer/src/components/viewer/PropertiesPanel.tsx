@@ -30,6 +30,8 @@ import { withInheritedTypeQuantities } from '@/lib/zones/inherited-quantities';
 import { CoordRow } from './properties/CoordinateDisplay';
 // Trassia overlay — projected coordinates with their actual reference frame.
 import { ChWorldSummary, ChWorldRows } from './properties/ChWorldPosition';
+// Trassia overlay — Mappen-Uebersicht im leeren Zustand (TODO 29).
+import { ChMappenUebersicht } from './ChMappenUebersicht';
 import { renderToWorldViewer } from './tools/measure-modes/coordinates';
 import { viewerToIfcAxes } from '@/lib/geo/coordinate-frame';
 import { getEffectiveGeoreference } from '@/lib/geo/effective-georef';
@@ -1284,6 +1286,8 @@ export function PropertiesPanel() {
           <p className="text-xs font-mono text-zinc-500 dark:text-zinc-400 max-w-[150px]">
             {models.size > 1 ? t('properties.panel.emptyHintMultiModel') : t('properties.panel.emptyHintSingleModel')}
           </p>
+          {/* Trassia (TODO 29): Mappen-Uebersicht statt nur «No Selection». */}
+          <ChMappenUebersicht />
         </div>
       </div>
     );

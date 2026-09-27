@@ -545,7 +545,8 @@ export function ViewerLayout() {
                 borders, uppercase caption) matching panel headers across the app.
                 Hidden in the empty state so the "Load IFC" card stays unobstructed. */}
             {leftPanelCollapsed && rightPanelCollapsed && hasModelsLoaded && (
-              <div className="absolute top-4 left-4 flex flex-col gap-2.5 z-20">
+              // Trassia: Merkmal fuer die Schnittkarte, die hier ausweicht (NS1).
+              <div className="absolute top-4 left-4 flex flex-col gap-2.5 z-20" data-ch-mobile-knoepfe="">
                 <button
                   className="flex flex-col items-center gap-1 group touch-manipulation"
                   onClick={() => { setRightPanelCollapsed(true); setLeftPanelCollapsed(false); }}
