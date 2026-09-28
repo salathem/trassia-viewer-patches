@@ -97,9 +97,14 @@ export function ModelHeaderRow({
         )}
 
         <FileBox className="h-3.5 w-3.5 text-primary shrink-0" />
-        <span className="flex-1 min-w-0 text-sm truncate ml-1.5 text-zinc-900 dark:text-zinc-100">
-          {node.name}
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span tabIndex={0} className="flex-1 min-w-0 text-sm truncate ml-1.5 text-zinc-900 dark:text-zinc-100">
+              {node.name}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs break-all">{node.name}</TooltipContent>
+        </Tooltip>
 
         {node.elementCount !== undefined && (
           // Trassia (U3-klein, TODO #29): klein und grau; die Zahl der Modellzeile

@@ -9,7 +9,7 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0078`, numbers no longer in use are listed below)
+- `patches/` — the exact patches (`0001`–`0079`, numbers no longer in use are listed below)
   applied, in numeric order, on top of upstream commit
   `ca6fef8d72176bd83127e20a314e4fad9c0acf59` (tag `@ifc-lite/wasm@10.1.2`)
 - `modified-files/` — the sixty-six modified files in full source form
