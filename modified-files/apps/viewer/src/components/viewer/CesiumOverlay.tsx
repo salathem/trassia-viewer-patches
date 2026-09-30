@@ -19,7 +19,7 @@
  *   - The Cesium viewer itself is NOT recreated — only the bridge is updated
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import { useViewerStore } from '@/store';
 import { useTranslation } from '@/i18n';
@@ -45,6 +45,7 @@ import { useChCesiumTiles } from './cesium/useChCesiumTiles';
 import { useChSwisstopoUmgebung } from './cesium/useChSwisstopoUmgebung';
 // Trassia overlay (Paket V-WFS) — amtliche WFS-Ebenen als geklemmte Overlays.
 import { useChWfsLayers } from './cesium/useChWfsLayers';
+import { useChDxfWorldScene } from './cesium/useChDxfWorld';
 // Trassia (V-WELT-FIX): warum die vier Basiskarten dieses Panels stillgelegt
 // sind und was an ihre Stelle getreten ist.
 import { CH_BASISKARTEN_VERFUEGBAR } from '@/lib/ch/kontext/basiskarten';
@@ -499,6 +500,12 @@ export function CesiumOverlay({
   // Zuletzt: sie werden auf das Terrain geklemmt, das der Haken darueber
   // setzt.
   useChWfsLayers({ status, viewerRef });
+
+  // Trassia: local DXF world sources share this IFC scene and camera frame.
+  const dxfGeoreference = useMemo(() => mapConversion && projectedCRS
+    ? { mapConversion, projectedCRS, coordinateInfo, lengthUnitScale }
+    : undefined, [mapConversion, projectedCRS, coordinateInfo, lengthUnitScale]);
+  useChDxfWorldScene({ status, viewerRef, georeference: dxfGeoreference, bridgeRef });
 
   if (!cesiumEnabled || !mapConversion || !projectedCRS) {
     return null;

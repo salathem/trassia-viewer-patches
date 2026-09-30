@@ -35,6 +35,8 @@ import { CesiumOverlay } from './CesiumOverlay';
 import { CesiumPlacementGizmo } from './placement/CesiumPlacementGizmo';
 // Trassia overlay (Paket UX-KOPF): eigenes Panel fuer die Schweizer Umgebung.
 import { ChUmgebungPanel } from './ChUmgebungPanel';
+import { ChDxfWorldPanel } from './ChDxfWorldPanel';
+import { ChDxfWorldStandalone } from './ChDxfWorldStandalone';
 import { useSolarEnvironment } from '@/hooks/useSolarEnvironment';
 import { useSolarSweep } from '@/hooks/useSolarSweep';
 import { getViewerStoreApi, useViewerStore } from '@/store';
@@ -1089,6 +1091,8 @@ export function ViewportContainer() {
 
           </div>
         </div>
+        <ChDxfWorldStandalone />
+        <ChDxfWorldPanel />
         <Toaster variant="absolute" />
       </div>
     );
@@ -1135,6 +1139,8 @@ export function ViewportContainer() {
           Terrain + amtliche WFS-Ebenen) — eigenes kleines Panel, gleicher
           Ankerbereich; geoeffnet ueber den Umgebungs-Knopf im View-Tab. */}
       <ChUmgebungPanel />
+      {!georef && <ChDxfWorldStandalone />}
+      <ChDxfWorldPanel hasUnreferencedModel={!georef && models.size > 0} />
       {cesiumEnabled && georef?.mapConversion && georef.baseMapConversion && (
         <CesiumPlacementGizmo
           modelId={georef.sourceModelId}
