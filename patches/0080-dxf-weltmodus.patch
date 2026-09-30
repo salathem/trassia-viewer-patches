@@ -1,0 +1,94 @@
+--- a/apps/viewer/src/components/viewer/CesiumOverlay.tsx
++++ b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
+@@ -19,7 +19,7 @@
+  *   - The Cesium viewer itself is NOT recreated — only the bridge is updated
+  */
+ 
+-import { useEffect, useRef, useState } from 'react';
++import { useEffect, useMemo, useRef, useState } from 'react';
+ import { AlertCircle, AlertTriangle, Loader2 } from 'lucide-react';
+ import { useViewerStore } from '@/store';
+ import { useTranslation } from '@/i18n';
+@@ -45,6 +45,7 @@
+ import { useChSwisstopoUmgebung } from './cesium/useChSwisstopoUmgebung';
+ // Trassia overlay (Paket V-WFS) — amtliche WFS-Ebenen als geklemmte Overlays.
+ import { useChWfsLayers } from './cesium/useChWfsLayers';
++import { useChDxfWorldScene } from './cesium/useChDxfWorld';
+ // Trassia (V-WELT-FIX): warum die vier Basiskarten dieses Panels stillgelegt
+ // sind und was an ihre Stelle getreten ist.
+ import { CH_BASISKARTEN_VERFUEGBAR } from '@/lib/ch/kontext/basiskarten';
+@@ -500,6 +501,12 @@
+   // setzt.
+   useChWfsLayers({ status, viewerRef });
+ 
++  // Trassia: local DXF world sources share this IFC scene and camera frame.
++  const dxfGeoreference = useMemo(() => mapConversion && projectedCRS
++    ? { mapConversion, projectedCRS, coordinateInfo, lengthUnitScale }
++    : undefined, [mapConversion, projectedCRS, coordinateInfo, lengthUnitScale]);
++  useChDxfWorldScene({ status, viewerRef, georeference: dxfGeoreference, bridgeRef });
++
+   if (!cesiumEnabled || !mapConversion || !projectedCRS) {
+     return null;
+   }
+--- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
++++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
+@@ -35,6 +35,8 @@
+ import { CesiumPlacementGizmo } from './placement/CesiumPlacementGizmo';
+ // Trassia overlay (Paket UX-KOPF): eigenes Panel fuer die Schweizer Umgebung.
+ import { ChUmgebungPanel } from './ChUmgebungPanel';
++import { ChDxfWorldPanel } from './ChDxfWorldPanel';
++import { ChDxfWorldStandalone } from './ChDxfWorldStandalone';
+ import { useSolarEnvironment } from '@/hooks/useSolarEnvironment';
+ import { useSolarSweep } from '@/hooks/useSolarSweep';
+ import { getViewerStoreApi, useViewerStore } from '@/store';
+@@ -1089,6 +1091,8 @@
+ 
+           </div>
+         </div>
++        <ChDxfWorldStandalone />
++        <ChDxfWorldPanel />
+         <Toaster variant="absolute" />
+       </div>
+     );
+@@ -1135,6 +1139,8 @@
+           Terrain + amtliche WFS-Ebenen) — eigenes kleines Panel, gleicher
+           Ankerbereich; geoeffnet ueber den Umgebungs-Knopf im View-Tab. */}
+       <ChUmgebungPanel />
++      {!georef && <ChDxfWorldStandalone />}
++      <ChDxfWorldPanel hasUnreferencedModel={!georef && models.size > 0} />
+       {cesiumEnabled && georef?.mapConversion && georef.baseMapConversion && (
+         <CesiumPlacementGizmo
+           modelId={georef.sourceModelId}
+--- a/apps/viewer/src/hooks/ingest/dxfIngest.ts
++++ b/apps/viewer/src/hooks/ingest/dxfIngest.ts
+@@ -47,6 +47,7 @@
+  */
+ 
+ import { importDxf } from '@ifc-lite/drawing-2d';
++import { chDxfWorldQueue } from '@/lib/ch/dxf-world/store';
+ import { useViewerStore } from '@/store';
+ import { toast } from '@/components/ui/toast';
+ import { resolveDxfExportGeoreference } from '@/hooks/dxfExportGeoref';
+@@ -67,6 +68,12 @@
+ 
+ /** Parse one DXF file and register it as a reference underlay. */
+ export async function ingestDxfFile(file: File): Promise<void> {
++  // World imports require explicit CRS/units/heights before parsing. The
++  // local world panel owns that confirmation; 2D ingest stays unchanged.
++  if (useViewerStore.getState().cesiumEnabled) {
++    chDxfWorldQueue(file);
++    return;
++  }
+   let text: string;
+   try {
+     text = await file.text();
+--- a/packages/drawing-2d/src/index.ts
++++ b/packages/drawing-2d/src/index.ts
+@@ -480,6 +480,7 @@
+ export {
+   importDxf,
+   parseDxf,
++  readDxfPairs,
+   convertDxfToUnderlay,
+   applyDxfPlacement,
+   aciToCss,

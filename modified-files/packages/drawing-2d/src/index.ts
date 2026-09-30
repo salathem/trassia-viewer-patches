@@ -480,6 +480,7 @@ export type {
 export {
   importDxf,
   parseDxf,
+  readDxfPairs,
   convertDxfToUnderlay,
   applyDxfPlacement,
   aciToCss,
