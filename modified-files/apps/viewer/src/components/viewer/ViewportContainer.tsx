@@ -28,6 +28,7 @@ import { ZoneOverlay, ZoneAssignmentSyncMount } from './tools/ZoneOverlay';
 import { AnnotationLayer } from './annotations/AnnotationLayer';
 import { CollabPresenceLayer } from './CollabPresenceLayer';
 import { BasepointOverlay } from './BasepointOverlay';
+import { ChLaengsschnittNavigationMarker } from './ChLaengsschnittNavigationMarker';
 import { SceneOverlayRoot } from '@/components/viewport-ui/scene';
 import { DrawingRuntimeHost } from './drawing/DrawingRuntimeHost';
 import { BCFOverlay } from './bcf/BCFOverlay';
@@ -1172,6 +1173,7 @@ export function ViewportContainer() {
         <CollabPresenceLayer />
         {bcfOverlayVisible && <BCFOverlay />}
         <BasepointOverlay />
+        <ChLaengsschnittNavigationMarker />
         <ZoneOverlay />
         <ToolOverlays />
       </SceneOverlayRoot>

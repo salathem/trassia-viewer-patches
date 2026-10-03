@@ -1,0 +1,58 @@
+--- a/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx
++++ b/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx
+@@ -19,6 +19,7 @@
+ import { RIBBON_EXPORT_ICONS } from './ribbon-export-icons';
+ // Trassia overlay (not upstream) — Paket U2. Siehe lib/ch/modus.ts.
+ import { chVollmodus } from '@/lib/ch/modus';
++import { ChDxfWorldMenuButton } from '../../ChDxfWorldMenuButton';
+ import {
+   RibbonGroup,
+   RibbonGroupDivider,
+@@ -88,6 +89,9 @@
+             onClick={() => { void handleRefresh(); }}
+           />
+         </RibbonSmallStack>
++        <RibbonSmallStack>
++          <ChDxfWorldMenuButton />
++        </RibbonSmallStack>
+       </RibbonGroup>
+ 
+       <RibbonGroupDivider />
+--- a/apps/viewer/src/components/viewer/MainToolbar.tsx
++++ b/apps/viewer/src/components/viewer/MainToolbar.tsx
+@@ -2,6 +2,7 @@
+  * License, v. 2.0. If a copy of the MPL was not distributed with this
+  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ import { hasWorkspaceHistory, replayWorkspaceHistory } from '@/lib/model-placement/history';
++import { ChDxfWorldMenuButton } from './ChDxfWorldMenuButton';
+ 
+ import { AuthorPanelMenuItems } from './toolbar/AuthorPanelMenuItems.js';
+ import { BottomPanelMenuItems } from './toolbar/BottomPanelMenuItems.js';
+@@ -437,6 +438,8 @@
+         </Tooltip>
+       )}
+ 
++      <ChDxfWorldMenuButton compact />
++
+       <DropdownMenu>
+         <DropdownMenuTrigger asChild>
+           {/* Gate on any loaded model, not the legacy single-model geometryResult:
+--- a/apps/viewer/src/components/viewer/MobileToolbar.tsx
++++ b/apps/viewer/src/components/viewer/MobileToolbar.tsx
+@@ -8,6 +8,7 @@
+  * and secondary actions in an overflow menu.
+  */
+ 
++import { ChDxfWorldMenuButton } from './ChDxfWorldMenuButton';
+ import React, { useRef, useCallback } from 'react';
+ import {
+   FolderOpen,
+@@ -213,6 +214,8 @@
+         </Button>
+       )}
+ 
++      <ChDxfWorldMenuButton compact />
++
+       {/* Divider */}
+       <div className="w-px h-5 bg-border mx-0.5 flex-shrink-0" />
+ 

@@ -9,10 +9,10 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0080`, numbers no longer in use are listed below)
+- `patches/` — the exact patches (`0001`–`0082`, numbers no longer in use are listed below)
   applied, in numeric order, on top of upstream commit
   `ca6fef8d72176bd83127e20a314e4fad9c0acf59` (tag `@ifc-lite/wasm@10.1.2`)
-- `modified-files/` — the 67 modified files in full source form
+- `modified-files/` — the 69 modified files in full source form
   (base commit + all patches applied):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/ChatPanel.tsx`
@@ -20,6 +20,8 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/EnvironmentPanel.tsx`
   - `apps/viewer/src/components/viewer/HierarchyPanel.tsx`
   - `apps/viewer/src/components/viewer/LensPanel.tsx`
+  - `apps/viewer/src/components/viewer/MainToolbar.tsx`
+  - `apps/viewer/src/components/viewer/MobileToolbar.tsx`
   - `apps/viewer/src/components/viewer/PropertiesPanel.tsx`
   - `apps/viewer/src/components/viewer/StatusBar.tsx`
   - `apps/viewer/src/components/viewer/ViewerLayout.tsx`
