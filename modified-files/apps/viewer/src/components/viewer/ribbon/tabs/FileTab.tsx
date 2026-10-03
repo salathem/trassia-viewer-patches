@@ -19,6 +19,7 @@ import { RibbonExportGroup } from './RibbonExportGroup';
 import { RIBBON_EXPORT_ICONS } from './ribbon-export-icons';
 // Trassia overlay (not upstream) — Paket U2. Siehe lib/ch/modus.ts.
 import { chVollmodus } from '@/lib/ch/modus';
+import { ChDxfWorldMenuButton } from '../../ChDxfWorldMenuButton';
 import {
   RibbonGroup,
   RibbonGroupDivider,
@@ -85,6 +86,9 @@ export function FileTab({ fileCommands }: { fileCommands: FileCommands }) {
             disabled={loading || !canRefresh}
             onClick={() => { void handleRefresh(); }}
           />
+        </RibbonSmallStack>
+        <RibbonSmallStack>
+          <ChDxfWorldMenuButton />
         </RibbonSmallStack>
       </RibbonGroup>
 

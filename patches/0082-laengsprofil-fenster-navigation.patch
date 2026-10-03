@@ -1,0 +1,12 @@
+diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
+--- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
++++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
+@@ -30,2 +30,3 @@
+ import { BasepointOverlay } from './BasepointOverlay';
++import { ChLaengsschnittNavigationMarker } from './ChLaengsschnittNavigationMarker';
+ import { SceneOverlayRoot } from '@/components/viewport-ui/scene';
+@@ -1168,3 +1169,4 @@
+         <BasepointOverlay />
++        <ChLaengsschnittNavigationMarker />
+         <ZoneOverlay />
+         <ToolOverlays />
