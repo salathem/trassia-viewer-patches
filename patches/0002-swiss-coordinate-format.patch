@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx b/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx
-index f326ad2..11daac5 100644
+index cc683d2e20c5aade6e2f51d5bc6186ee92253a20..c69a841de97335754e531a9f158e54dc72b41de2 100644
 --- a/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx
 +++ b/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx
 @@ -24,6 +24,8 @@ import { useTranslation } from '@/i18n/useTranslation';

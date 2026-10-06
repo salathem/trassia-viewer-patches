@@ -1,45 +1,39 @@
 diff --git a/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx b/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
-index 84a4442..4551eb1 100644
+index 68dad6dfe65196a7d66d03a1e2e01121adf56e2b..4a50ffccdb818c931d7f3e4a01920089b6adc309 100644
 --- a/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
 +++ b/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
-@@ -40,6 +40,9 @@ import { AnalyzeTab } from './tabs/AnalyzeTab';
+@@ -37,6 +37,7 @@ import { AnalyzeTab } from './tabs/AnalyzeTab';
  import { AuthorTab } from './tabs/AuthorTab';
  import { RibbonSwitchNotice } from './RibbonSwitchNotice';
  import { useRibbonContextualTab } from './useRibbonContextualTab';
-+// Trassia overlay (not upstream) — Paket U2: vier Reiter im Trassia-Modus, kein
-+// Umstellungs-Banner; Vollmodus (?voll=1) zeigt alles. Siehe lib/ch/modus.ts.
 +import { chRibbonZeigt, chVollmodus } from '@/lib/ch/modus';
+ import { emitOpenCommandPalette } from '@/lib/tours/events';
  
  const RIBBON_TABS: { id: RibbonTabId; labelKey: TranslationKey }[] = [
-   { id: 'file', labelKey: 'ribbon.tab.file' },
-@@ -92,7 +95,7 @@ export function RibbonToolbar({ onShowShortcuts }: RibbonToolbarProps = {} as Ri
-           className="flex h-full items-end gap-0.5"
+@@ -91,7 +92,7 @@ export function RibbonToolbar({ onShowShortcuts }: RibbonToolbarProps = {} as Ri
+           className="flex h-full items-end justify-start gap-0.5 rounded-none bg-transparent p-0"
            {...tourAnchor(TOUR_ANCHORS.ribbonTabs)}
          >
 -          {RIBBON_TABS.map((tab) => {
 +          {RIBBON_TABS.filter((tab) => chRibbonZeigt(tab.id)).map((tab) => {
              const isActive = tab.id === activeTab;
              return (
-               <button
-@@ -237,8 +240,10 @@ export function RibbonToolbar({ onShowShortcuts }: RibbonToolbarProps = {} as Ri
-       )}
+               <TabsTrigger
+@@ -238,7 +239,7 @@ export function RibbonToolbar({ onShowShortcuts }: RibbonToolbarProps = {} as Ri
  
        {/* One-time "the toolbar changed" line, with the way back. Sits under
--          the band so it never displaces a command the user is reaching for. */}
+           the band so it never displaces a command the user is reaching for. */}
 -      <RibbonSwitchNotice />
-+          the band so it never displaces a command the user is reaching for.
-+          Trassia (U2): nur im Vollmodus — ein Kunde hat nie eine andere Leiste
-+          gekannt, fuer ihn ist die Zeile Werbung fuer ein fremdes Produkt. */}
 +      {chVollmodus() && <RibbonSwitchNotice />}
-     </div>
+     </Tabs>
    );
  }
 diff --git a/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx b/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx
-index 8b58c90..8c89b2d 100644
+index 6827e97b690e754a47f8a03b248eee6fa6456dd0..684665adac71b28641dec85d215ddc75aac24c14 100644
 --- a/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx
 +++ b/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx
-@@ -17,6 +17,8 @@ import type { FileCommands } from '../../toolbar/useFileCommands';
- import { useWorkspacePanelControls } from '../../toolbar/useWorkspacePanelControls';
+@@ -18,6 +18,8 @@ import { useWorkspacePanelControls } from '../../toolbar/useWorkspacePanelContro
+ import { surfaceCommand } from '../../surface-commands';
  import { RibbonExportGroup } from './RibbonExportGroup';
  import { RIBBON_EXPORT_ICONS } from './ribbon-export-icons';
 +// Trassia overlay (not upstream) — Paket U2. Siehe lib/ch/modus.ts.
@@ -47,29 +41,27 @@ index 8b58c90..8c89b2d 100644
  import {
    RibbonGroup,
    RibbonGroupDivider,
-@@ -57,6 +59,9 @@ export function FileTab({ fileCommands }: { fileCommands: FileCommands }) {
+@@ -63,6 +65,7 @@ export function FileTab({ fileCommands }: { fileCommands: FileCommands }) {
            className={loading ? '[&_svg]:animate-spin' : undefined}
-           onClick={() => { void handleOpenClick(); }}
+           commandContext={{ openFiles: () => { void handleOpenClick(); } }}
          />
-+        {/* Trassia (U2): Cloud-Anbindungen nur im Vollmodus — die Leiste
-+            bietet das Panel im Trassia-Modus nicht an. */}
 +        {chVollmodus() && (
-         <RibbonLargeButton
+         <RibbonCommandLargeButton
+           commandId="panel:sources"
            icon={CloudSources}
-           label={t('ribbon.file.cloudSources')}
-@@ -64,6 +69,7 @@ export function FileTab({ fileCommands }: { fileCommands: FileCommands }) {
+@@ -70,6 +73,7 @@ export function FileTab({ fileCommands }: { fileCommands: FileCommands }) {
            active={activeWorkspacePanels.has('sources')}
-           onClick={() => handleToggleRightPanel('sources')}
+           commandContext={{ activateRightPanel: () => handleToggleRightPanel('sources') }}
          />
 +        )}
          <RibbonSmallStack>
-           <RibbonSmallButton
-             icon={AddFile}
+           <RibbonCommandSmallButton
+             commandId="file:add-model"
 diff --git a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
-index f29d0ed..b66d5ce 100644
+index 61db4988f60665c41d8ebd96e914222fe7ba841b..0597d126b43daa2fb21d061f37676bc2438ac043 100644
 --- a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
-@@ -43,6 +43,9 @@ import { isCollabEnabled } from '@/lib/collab/config';
+@@ -43,6 +43,9 @@ import { useRailPanelIds } from '@/hooks/useRailPanelIds';
  import { pendingCompositionMutations } from '@/lib/layers/pending';
  import { activityAnchor, tourAnchor } from '@/lib/tours/anchors';
  import { CustomizeSidebar } from './CustomizeSidebar';
@@ -79,15 +71,12 @@ index f29d0ed..b66d5ce 100644
  
  /** Alt+N shortcut KEY per panel, by registry index (frozen since #1200): 1-9,
   *  then 0. Only the first ten registry entries get a shortcut; later
-@@ -91,7 +94,10 @@ export function ActivityBar() {
-     (id) =>
-       (!hidden.has(id) || id === 'properties') &&
-       (id !== 'collab' || isCollabEnabled()) &&
--      (id !== 'pointclouds' || pointCloudAssetCount > 0),
-+      (id !== 'pointclouds' || pointCloudAssetCount > 0) &&
-+      // Trassia (Paket U2): die Kundenleiste. Nichts wird entfernt — Alt+N und
-+      // der Anpassen-Dialog erreichen die uebrigen Panels weiterhin.
-+      chLeisteZeigt(id),
-   );
+@@ -79,7 +82,7 @@ export function ActivityBar() {
+   const [overId, setOverId] = useState<WorkspacePanelId | null>(null);
+ 
+   // One rail list for the activity bar and the mobile Panels sheet (#5853).
+-  const visibleIds = useRailPanelIds();
++  const visibleIds = useRailPanelIds().filter(chLeisteZeigt);
  
    const onIconClick = (id: WorkspacePanelId) => {
+     const region = getPanelDef(id)?.region;

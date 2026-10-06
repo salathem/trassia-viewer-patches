@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/properties/modelMetadataStats.test.tsx b/apps/viewer/src/components/viewer/properties/modelMetadataStats.test.tsx
-index 2b9b8c4..02c66d9 100644
+index 2b9b8c44da73924035db51c4076a29a5c5776166..02c66d9233b5845bb4f430cca0a40b54cd9170e3 100644
 --- a/apps/viewer/src/components/viewer/properties/modelMetadataStats.test.tsx
 +++ b/apps/viewer/src/components/viewer/properties/modelMetadataStats.test.tsx
 @@ -183,7 +183,7 @@ END-ISO-10303-21;`;
@@ -84,26 +84,23 @@ index 2b9b8c4..02c66d9 100644
    });
  
    it('opens preserved-only LandXML surface records, even when they have no overlay or mesh (#5042)', () => {
-diff --git a/apps/viewer/src/hooks/keyboard-shortcuts-list.ts b/apps/viewer/src/hooks/keyboard-shortcuts-list.ts
-index 3c27d71..c57e600 100644
---- a/apps/viewer/src/hooks/keyboard-shortcuts-list.ts
-+++ b/apps/viewer/src/hooks/keyboard-shortcuts-list.ts
-@@ -38,7 +38,9 @@ export const KEYBOARD_SHORTCUTS = [
-   { key: '−', description: 'Remove current context from basket', category: 'Visibility' },
-   { key: 'D', description: 'Toggle basket presentation dock', category: 'Visibility' },
-   { key: 'B', description: 'Save basket as presentation view', category: 'Visibility' },
--  { key: 'Del / Space', description: 'Hide selection', category: 'Visibility' },
-+  { key: 'Del', description: 'Hide selection', category: 'Visibility' },
-+  // Trassia (U3-klein): die Leertaste schaltet um, je Zeile nach eigenem Zustand.
-+  { key: 'Space', description: 'Toggle visibility of the selected tree rows (Ctrl-click rows of any level to select them) or of the selected elements — each by its own state; a partly visible group hides, a second press brings it back', category: 'Visibility' },
-   { key: 'A', description: 'Show all (clear filters and basket)', category: 'Visibility' },
-   { key: 'H', description: 'Home (isometric + reset visibility)', category: 'Camera' },
-   { key: 'Z', description: 'Fit all (zoom extents)', category: 'Camera' },
+diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
+index a950ab9c8f05bd5b6ab699cffc2dc31edd7c596b..3293a27a3a31600dfaa9afbeb22066e4c04b1288 100644
+--- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
++++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
+@@ -152,6 +152,7 @@ const RUNNERS: readonly [KeyCommandId, CommandRun][] = [
+     void executeBasketSaveView().catch((error: unknown) => console.error('[keyboard] Could not save basket view:', error));
+   }],
+   ['visibility.hideSelection', hideSelected],
++  ['visibility.toggleSelection', hideSelected],
+   ['visibility.showAll', (event) => {
+     if (walkOwns(event)) return false;
+     showAllFromStore('a');
 diff --git a/apps/viewer/src/i18n/catalogues/properties.en.ts b/apps/viewer/src/i18n/catalogues/properties.en.ts
-index 9e9c990..1adf751 100644
+index df50540923b65e15b9b0847a4e224643696d5570..877b1a51bf391ce96ae63bf8b427d6e47a7d16f6 100644
 --- a/apps/viewer/src/i18n/catalogues/properties.en.ts
 +++ b/apps/viewer/src/i18n/catalogues/properties.en.ts
-@@ -246,7 +246,10 @@ export const propertiesEn = {
+@@ -237,7 +237,10 @@ export const propertiesEn = {
    'properties.modelMetadata.totalEntities': 'Total Entities',
    'properties.modelMetadata.notAvailable': 'N/A',
    'properties.modelMetadata.buildingStoreys': 'Building Storeys',
@@ -115,3 +112,42 @@ index 9e9c990..1adf751 100644
    'properties.modelMetadata.maxExpressId': 'Max Express ID',
    'properties.modelMetadata.classificationSystemsHeading': 'Classification Systems',
    'properties.modelMetadata.classificationUnresolved': 'Classification systems present, but unavailable on this data source',
+diff --git a/apps/viewer/src/i18n/en.ts b/apps/viewer/src/i18n/en.ts
+index 8eab734749321768cdceb3607a85c9fe2014440c..a6edda9387e63f24cacf932a4023da92df64860a 100644
+--- a/apps/viewer/src/i18n/en.ts
++++ b/apps/viewer/src/i18n/en.ts
+@@ -110,6 +110,7 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
+ 
+ /** English is assembled from feature catalogues so no locale becomes a monolith. */
+ export const en = {
++  'trassia.visibility.toggleSelection': 'Toggle visibility of selected tree rows (Ctrl-click rows at any level) or selected elements by their own state; partly visible groups hide, a second press brings them back',
+   'trassia.panel.entwurf': 'Alignment design (spike)',
+   'trassia.panel.laengsschnitt': 'Längsprofil',
+   'trassia.panel.kubatur': 'Auftrag / Abtrag (Kubatur)',
+diff --git a/apps/viewer/src/lib/commands/keyboard-commands.test.ts b/apps/viewer/src/lib/commands/keyboard-commands.test.ts
+index 617eb7949198dd58143ff555977ee2301b0c7f52..61ed197ed24712f8d5488b1b0336100dcc17c322 100644
+--- a/apps/viewer/src/lib/commands/keyboard-commands.test.ts
++++ b/apps/viewer/src/lib/commands/keyboard-commands.test.ts
+@@ -115,7 +115,7 @@ describe('platform key glyphs (#5836)', () => {
+ 
+   it('lists every chord of a multi-key command', () => {
+     assert.equal(shortcutLabel('basket.add', false), '=, +');
+-    assert.equal(shortcutLabel('visibility.hideSelection', false), 'Del, Backspace, Space');
++    assert.equal(shortcutLabel('visibility.hideSelection', false), 'Del, Backspace');
+     assert.equal(shortcutLabel('ui.closeAllPanels', false), 'Esc Esc');
+     assert.equal(formatChord({ key: 'n', shift: true }, false), 'Shift+N');
+   });
+diff --git a/apps/viewer/src/lib/commands/keyboard-commands.ts b/apps/viewer/src/lib/commands/keyboard-commands.ts
+index 6ea7531e56ba92414f67d4e0610ec8655900247f..efdaed95a9b20796e1c3c3b924ec89dff6f065ef 100644
+--- a/apps/viewer/src/lib/commands/keyboard-commands.ts
++++ b/apps/viewer/src/lib/commands/keyboard-commands.ts
+@@ -159,7 +159,8 @@ export const KEY_COMMANDS = [
+   { id: 'selection.escape', labelKey: 'commands.selection.escape', category: 'selection', when: 'global', keys: [k('escape')] },
+ 
+   // ── Visibility ────────────────────────────────────────────────────────
+-  { id: 'visibility.hideSelection', labelKey: 'commands.visibility.hideSelection', category: 'visibility', when: 'global', keys: [k('delete'), k('backspace'), k(' ')] },
++  { id: 'visibility.hideSelection', labelKey: 'commands.visibility.hideSelection', category: 'visibility', when: 'global', keys: [k('delete'), k('backspace')] },
++  { id: 'visibility.toggleSelection', labelKey: 'trassia.visibility.toggleSelection', category: 'visibility', when: 'global', keys: [k(' ')] },
+   { id: 'visibility.showAll', labelKey: ACTION_NAME_KEYS.showAll, category: 'visibility', when: 'global', keys: [k('a')] },
+   { id: 'basket.isolate', labelKey: 'commands.basket.isolate', category: 'visibility', when: 'global', keys: [k('i')] },
+   { id: 'basket.add', labelKey: 'commands.basket.add', category: 'visibility', when: 'global', keys: [k('='), k('+')] },

@@ -7,8 +7,8 @@
  *
  * A registry-driven vertical icon rail on the viewport's right edge — the
  * evolution of the #1200 panel switcher. Icons follow the user's custom order
- * (`sidebarOrder`) and visible set (`sidebarHiddenIds`), cluster into groups
- * with dividers, highlight the active docked panel, and flag floating / popped
+ * (`sidebarOrder`) and visible set (`sidebarHiddenIds`), show task-group labels,
+ * highlight the active docked panel, and flag floating / popped
  * panels with a dot. The footer toggles customize mode, collapse, and a
  * layout menu. In customize mode every icon becomes drag-reorderable and
  * gains an eye toggle inline.
@@ -38,8 +38,8 @@ import { useViewerStore } from '@/store';
 import { resetLayout } from '@/store/layoutReset';
 import { useTranslation } from '@/i18n';
 import { usePanelControls } from '@/hooks/usePanelControls';
-import { WORKSPACE_PANELS, getPanelDef, type WorkspacePanelId } from '@/lib/panels/registry';
-import { isCollabEnabled } from '@/lib/collab/config';
+import { WORKSPACE_PANELS, getPanelDef, panelGroupDefinition, type PanelGroup, type WorkspacePanelId } from '@/lib/panels/registry';
+import { useRailPanelIds } from '@/hooks/useRailPanelIds';
 import { pendingCompositionMutations } from '@/lib/layers/pending';
 import { activityAnchor, tourAnchor } from '@/lib/tours/anchors';
 import { CustomizeSidebar } from './CustomizeSidebar';
@@ -73,29 +73,16 @@ export function ActivityBar() {
   // the count where the user already looks, like the Room peers badge.
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const hasStack = useViewerStore((s) => s.layerStack.length > 0);
-  // Point Clouds rail icon (#5507): only shown while at least one point
-  // cloud asset is loaded — same gating shape as `isCollabEnabled()` below,
-  // just driven by scene state instead of a feature flag.
-  const pointCloudAssetCount = useViewerStore((s) => s.pointCloudAssetCount);
   const pendingLayerEdits = useMemo(() => {
     void mutationVersion;
     return hasStack ? pendingCompositionMutations().length : 0;
   }, [mutationVersion, hasStack]);
 
-  const hidden = new Set(hiddenIds);
   const [dragId, setDragId] = useState<WorkspacePanelId | null>(null);
   const [overId, setOverId] = useState<WorkspacePanelId | null>(null);
 
-  // Hidden panels are removed from the rail in every mode (#1263), including
-  // customize. Restoring a hidden panel happens in the Customize popover's
-  // dedicated Hidden section, not by an inline greyed icon here. The collab
-  // Room panel only surfaces while the collab feature flag is on.
-  const visibleIds = order.filter(
-    (id) =>
-      (!hidden.has(id) || id === 'properties') &&
-      (id !== 'collab' || isCollabEnabled()) &&
-      (id !== 'pointclouds' || pointCloudAssetCount > 0),
-  );
+  // One rail list for the activity bar and the mobile Panels sheet (#5853).
+  const visibleIds = useRailPanelIds();
 
   const onIconClick = (id: WorkspacePanelId) => {
     const region = getPanelDef(id)?.region;
@@ -120,15 +107,16 @@ export function ActivityBar() {
     toggle(id);
   };
 
-  let prevGroup: string | null = null;
+  let prevGroup: PanelGroup | null = null;
 
   return (
-    <div data-activity-bar className="relative flex flex-col items-center w-12 shrink-0 h-full border-l border-border bg-background">
+    <div data-activity-bar className="relative flex flex-col items-center w-16 shrink-0 h-full border-l border-border bg-background">
       {/* Panels */}
       <div className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden py-1.5 flex flex-col items-center gap-0.5">
         {visibleIds.map((id) => {
           const def = getPanelDef(id);
           if (!def) return null;
+          const title = t(def.titleKey);
           const Icon = def.Icon;
           const loc = panelLocation(id);
           // Trassia (Paket SEITENLEISTE): blau nur, wenn das Panel auch zu sehen
@@ -138,7 +126,7 @@ export function ActivityBar() {
           // einem leeren Bereich. Links-/Bodenpanels haben eigene Slots.
           const active = loc === 'docked' && (def.region !== 'side' || mode === 'expanded');
           const open = isOpen(id);
-          const showDivider = prevGroup !== null && def.group !== prevGroup;
+          const showGroupLabel = def.group !== prevGroup;
           prevGroup = def.group;
 
           // Accessible name: the Radix tooltip is NOT the button's name, and
@@ -146,16 +134,24 @@ export function ActivityBar() {
           // explicitly. In customize mode the action is "hide" (only shown
           // panels render here now, #1263).
           const ariaLabel = customizing
-            ? t('shellChrome.activityBar.iconAriaLabelHide', { title: def.title })
+            ? t('shellChrome.activityBar.iconAriaLabelHide', { title })
             : loc === 'floating'
-              ? t('shellChrome.activityBar.iconAriaLabelFloating', { title: def.title })
+              ? t('shellChrome.activityBar.iconAriaLabelFloating', { title })
               : loc === 'popped'
-                ? t('shellChrome.activityBar.iconAriaLabelPopped', { title: def.title })
-                : def.title;
+                ? t('shellChrome.activityBar.iconAriaLabelPopped', { title })
+                : title;
 
           return (
             <div key={id} className="contents">
-              {showDivider && <div className="my-1 h-px w-6 bg-border/70" aria-hidden />}
+              {showGroupLabel && (
+                <h3
+                  data-panel-group={def.group}
+                  title={t(panelGroupDefinition(def.group).descriptionKey)}
+                  className="w-full border-t border-border/70 px-0.5 pt-1.5 pb-0.5 text-center text-2xs font-medium leading-tight text-muted-foreground"
+                >
+                  {t(panelGroupDefinition(def.group).labelKey)}
+                </h3>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -170,7 +166,8 @@ export function ActivityBar() {
                       setOverId(null);
                     }}
                     onDragOver={(e) => {
-                      if (!customizing) return;
+                      // Only an icon reorder claims the drag; a file is the window's (#5845).
+                      if (!customizing || !dragId) return;
                       e.preventDefault();
                       if (overId !== id) setOverId(id);
                     }}
@@ -181,7 +178,13 @@ export function ActivityBar() {
                     }}
                     onClick={() => (customizing ? setPanelShownInSidebar(id, false) : onIconClick(id))}
                     className={cn(
-                      'relative h-9 w-9 inline-flex items-center justify-center rounded-md transition-colors',
+                      // `shrink-0`: this sits in a `flex flex-col` rail with more
+                      // icons than fit some viewports (`overflow-y-auto` on the
+                      // rail). Without it the default flex-shrink squeezed every
+                      // icon's height well under its own `h-9`, down to ~16px in
+                      // a full rail (#5826) — flexbox shrinks fixed-size items to
+                      // fit the cross axis before overflow ever gets a say.
+                      'relative h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-md transition-colors',
                       active
                         ? 'bg-primary/15 text-primary'
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -198,7 +201,7 @@ export function ActivityBar() {
                     {/* Unpublished-edits badge on the Layers icon. */}
                     {!customizing && id === 'layers' && pendingLayerEdits > 0 && (
                       <span
-                        className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-medium text-white ring-1 ring-background"
+                        className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-500 px-1 text-2xs font-medium text-white ring-1 ring-background"
                         aria-hidden
                       >
                         {pendingLayerEdits > 99 ? '99+' : pendingLayerEdits}
@@ -217,7 +220,7 @@ export function ActivityBar() {
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="left">
-                  {def.title}
+                  {title}
                   <span className="text-muted-foreground">
                     {customizing ? (
                       ` · ${t('shellChrome.activityBar.clickToHideHint')}`

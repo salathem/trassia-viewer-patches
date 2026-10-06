@@ -11,6 +11,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { Drawing2D } from '@ifc-lite/drawing-2d';
 import { axisFlipForSection } from '@/hooks/pdfSectionLayout';
+import { KEYBOARD_PRIORITY, registerKeyboardCommand, registerKeyboardKeyUp } from '@/lib/commands/dispatcher';
+import { useViewerStore } from '@/store';
 
 // ─── Public interfaces ──────────────────────────────────────────────────────
 
@@ -206,6 +208,8 @@ export function useMeasure2D({
 
   // Keyboard handlers for shift key (orthogonal constraint)
   useEffect(() => {
+    // Keep Upstream command dispatch in the main document; child windows own their tool keys.
+    if ((containerRef.current?.ownerDocument.defaultView ?? window) !== window) {
     if (!measure2DMode) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -241,6 +245,32 @@ export function useMeasure2D({
     return () => {
       ziel.removeEventListener('keydown', handleKeyDown);
       ziel.removeEventListener('keyup', handleKeyUp);
+    };
+  
+    }
+
+    if (!measure2DMode) return;
+    const removeOrthogonal = registerKeyboardCommand('drawing2d.orthogonal', () => {
+      if (measure2DStart && measure2DCurrent && !measure2DShiftLocked) {
+        const dx = Math.abs(measure2DCurrent.x - measure2DStart.x);
+        const dy = Math.abs(measure2DCurrent.y - measure2DStart.y);
+        setMeasure2DShiftLocked(true, dx > dy ? 'x' : 'y');
+      }
+      return false; // Both 2D tools observe Shift without consuming it.
+    }, { ignoreModifiers: true, allowInTextEntry: true });
+    const removeCancel = registerKeyboardCommand('drawing2d.cancel', () => {
+      cancelMeasure2D();
+      // Measurement and markup share Escape. Clear the active markup tool here
+      // so cancellation is independent of hook registration order.
+      if (useViewerStore.getState().annotation2DActiveTool === 'measure') {
+        useViewerStore.getState().setAnnotation2DActiveTool('none');
+      }
+    }, { allowInTextEntry: true, ignoreModifiers: true, priority: KEYBOARD_PRIORITY.drawingMeasure });
+    const removeKeyUp = registerKeyboardKeyUp((event) => {
+      if (event.key === 'Shift') setMeasure2DShiftLocked(false);
+    });
+    return () => {
+      removeOrthogonal(); removeCancel(); removeKeyUp();
     };
   }, [measure2DMode, measure2DStart, measure2DCurrent, measure2DShiftLocked, setMeasure2DShiftLocked, cancelMeasure2D, containerRef]);
 

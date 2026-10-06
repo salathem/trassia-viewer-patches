@@ -1,3 +1,5 @@
+diff --git a/apps/viewer/src/components/viewer/CesiumOverlay.tsx b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
+index 6e721cd6265333e9dca3d6d3bac5ce4c187c7856..71f05142f1c9357f0fecbdb1fdc23d47f498f36d 100644
 --- a/apps/viewer/src/components/viewer/CesiumOverlay.tsx
 +++ b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
 @@ -19,7 +19,7 @@
@@ -6,10 +8,10 @@
  
 -import { useEffect, useRef, useState } from 'react';
 +import { useEffect, useMemo, useRef, useState } from 'react';
- import { AlertCircle, AlertTriangle, Loader2 } from 'lucide-react';
+ import { AlertCircle, AlertTriangle } from 'lucide-react';
+ import { Spinner } from '@/components/ui/spinner';
  import { useViewerStore } from '@/store';
- import { useTranslation } from '@/i18n';
-@@ -45,6 +45,7 @@
+@@ -46,6 +46,7 @@ import { useChCesiumTiles } from './cesium/useChCesiumTiles';
  import { useChSwisstopoUmgebung } from './cesium/useChSwisstopoUmgebung';
  // Trassia overlay (Paket V-WFS) — amtliche WFS-Ebenen als geklemmte Overlays.
  import { useChWfsLayers } from './cesium/useChWfsLayers';
@@ -17,7 +19,7 @@
  // Trassia (V-WELT-FIX): warum die vier Basiskarten dieses Panels stillgelegt
  // sind und was an ihre Stelle getreten ist.
  import { CH_BASISKARTEN_VERFUEGBAR } from '@/lib/ch/kontext/basiskarten';
-@@ -500,6 +501,12 @@
+@@ -501,6 +502,12 @@ export function CesiumOverlay({
    // setzt.
    useChWfsLayers({ status, viewerRef });
  
@@ -30,9 +32,11 @@
    if (!cesiumEnabled || !mapConversion || !projectedCRS) {
      return null;
    }
+diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
+index 32f738642c102c4b81bcd1a36014e705f44e3fca..06e5dbfb547e5fb9dc44cbde7796db2cf8807be1 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -35,6 +35,8 @@
+@@ -35,6 +35,8 @@ import { CesiumOverlay } from './CesiumOverlay';
  import { CesiumPlacementGizmo } from './placement/CesiumPlacementGizmo';
  // Trassia overlay (Paket UX-KOPF): eigenes Panel fuer die Schweizer Umgebung.
  import { ChUmgebungPanel } from './ChUmgebungPanel';
@@ -41,7 +45,7 @@
  import { useSolarEnvironment } from '@/hooks/useSolarEnvironment';
  import { useSolarSweep } from '@/hooks/useSolarSweep';
  import { getViewerStoreApi, useViewerStore } from '@/store';
-@@ -1089,6 +1091,8 @@
+@@ -945,6 +947,8 @@ export function ViewportContainer() {
  
            </div>
          </div>
@@ -50,31 +54,31 @@
          <Toaster variant="absolute" />
        </div>
      );
-@@ -1135,6 +1139,8 @@
-           Terrain + amtliche WFS-Ebenen) — eigenes kleines Panel, gleicher
-           Ankerbereich; geoeffnet ueber den Umgebungs-Knopf im View-Tab. */}
+@@ -985,6 +989,8 @@ export function ViewportContainer() {
+         />
+       )}
        <ChUmgebungPanel />
 +      {!georef && <ChDxfWorldStandalone />}
 +      <ChDxfWorldPanel hasUnreferencedModel={!georef && models.size > 0} />
-       {cesiumEnabled && georef?.mapConversion && georef.baseMapConversion && (
+       {georef?.mapConversion && georef.baseMapConversion && (
          <CesiumPlacementGizmo
            modelId={georef.sourceModelId}
+diff --git a/apps/viewer/src/hooks/ingest/dxfIngest.ts b/apps/viewer/src/hooks/ingest/dxfIngest.ts
+index 3e81f49cf6802411ebd26ccb76ba1e1d04dcb723..88de118dc3a91c77e42b888d10eed12a39fb56c1 100644
 --- a/apps/viewer/src/hooks/ingest/dxfIngest.ts
 +++ b/apps/viewer/src/hooks/ingest/dxfIngest.ts
 @@ -47,6 +47,7 @@
   */
  
- import { importDxf } from '@ifc-lite/drawing-2d';
+ import { importDxf, parseDxf, convertDxfToUnderlay } from '@ifc-lite/drawing-2d';
 +import { chDxfWorldQueue } from '@/lib/ch/dxf-world/store';
  import { useViewerStore } from '@/store';
  import { toast } from '@/components/ui/toast';
- import { resolveDxfExportGeoreference } from '@/hooks/dxfExportGeoref';
-@@ -67,6 +68,12 @@
- 
+ import { resolve } from '@/i18n/registry';
+@@ -73,6 +74,10 @@ export function splitDxfFiles(files: File[]): { dxfFiles: File[]; modelFiles: Fi
  /** Parse one DXF file and register it as a reference underlay. */
- export async function ingestDxfFile(file: File): Promise<void> {
-+  // World imports require explicit CRS/units/heights before parsing. The
-+  // local world panel owns that confirmation; 2D ingest stays unchanged.
+ export async function ingestDxfFile(file: File, options: DxfIngestOptions = {}): Promise<void> {
+   const capturedOptions = structuredClone(options);
 +  if (useViewerStore.getState().cesiumEnabled) {
 +    chDxfWorldQueue(file);
 +    return;
@@ -82,9 +86,11 @@
    let text: string;
    try {
      text = await file.text();
+diff --git a/packages/drawing-2d/src/index.ts b/packages/drawing-2d/src/index.ts
+index 83bb19c933185909e5e9f6f10c9c8785ef0bc6f7..9a37c5ce0c85ff3c8a58554330b9fa4906e7436f 100644
 --- a/packages/drawing-2d/src/index.ts
 +++ b/packages/drawing-2d/src/index.ts
-@@ -480,6 +480,7 @@
+@@ -480,6 +480,7 @@ export type {
  export {
    importDxf,
    parseDxf,

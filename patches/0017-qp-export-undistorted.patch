@@ -1,17 +1,17 @@
 diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
-index bebc98a..64e8128 100644
+index 347d06ad5cf2f6a60cb3177b680328447b8ae4bf..345a522d001316324fc22cdc16e1cb42ba0b4c4e 100644
 --- a/apps/viewer/src/hooks/useDrawingExport.ts
 +++ b/apps/viewer/src/hooks/useDrawingExport.ts
-@@ -9,6 +9,8 @@ import { downloadFile, sanitizeFilename } from '@/lib/export/download';
+@@ -11,6 +11,8 @@ import { downloadFile, sanitizeFilename } from '@/lib/export/download';
  // Trassia overlay (not upstream) — the station cut publishes what it is
  // called; see overlay/apps/viewer/src/lib/ch/section-export-name.ts.
  import { chSectionExportStem } from '@/lib/ch/section-export-name';
 +// Trassia overlay (not upstream) — see overlay/apps/viewer/src/lib/ch/qp-corridor.ts
 +import { chQpUndistorted } from '@/lib/ch/qp-corridor';
  import { toast } from '@/components/ui/toast';
+ import { useTranslation } from '@/i18n';
  import { pdfLineStyleFor } from '@/lib/export/pdf-line-style';
- import {
-@@ -341,7 +343,7 @@ interface UseDrawingExportResult {
+@@ -270,7 +272,7 @@ interface UseDrawingExportResult {
  }
  
  function useDrawingExport({
@@ -20,10 +20,10 @@ index bebc98a..64e8128 100644
    displayOptions,
    sectionPlane,
    activePresetId,
-@@ -361,6 +363,14 @@ function useDrawingExport({
-   isPinned = false,
+@@ -291,6 +293,14 @@ function useDrawingExport({
    cachedSheetTransformRef,
  }: UseDrawingExportParams): UseDrawingExportResult {
+   const { t } = useTranslation();
 +  // Trassia (Paket V-QP): JEDER Export — SVG, PDF, DXF — nimmt die unverzerrte
 +  // Zeichnung. Die Hoehenueberhoehung des Querprofil-Panels ist eine Lesehilfe
 +  // am Bildschirm; ein 2x gestrecktes DXF waere ein Plan, der aussieht wie ein

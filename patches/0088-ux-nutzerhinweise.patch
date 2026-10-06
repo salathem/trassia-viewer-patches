@@ -1,34 +1,70 @@
-diff --git a/apps/viewer/src/i18n/catalogues/shell-chrome.en.ts b/apps/viewer/src/i18n/catalogues/shell-chrome.en.ts
---- a/apps/viewer/src/i18n/catalogues/shell-chrome.en.ts
-+++ b/apps/viewer/src/i18n/catalogues/shell-chrome.en.ts
-@@ -102,7 +102,7 @@
-   // StatusBar.tsx
-   'shellChrome.statusBar.loadingFallback': 'Loading...',
-   'shellChrome.statusBar.ready': 'Ready',
--  'shellChrome.statusBar.cancelStreamTitle': 'Cancel the active point cloud stream',
-+  'shellChrome.statusBar.cancelStreamTitle': 'Cancel the active loading process',
-   'shellChrome.statusBar.cancelButton': 'Cancel',
-   'shellChrome.statusBar.elementsCount': { one: 'element', other: 'elements' },
-   'shellChrome.statusBar.trisCount': { one: 'tri', other: 'tris' },
+diff --git a/apps/viewer/src/hooks/usePrivacyDisclosure.test.tsx b/apps/viewer/src/hooks/usePrivacyDisclosure.test.tsx
+index 99e26b98e79f153132e03634a76c23accf997e1c..d5f1cd8a94e61b8af650aabc31b854e20bef22a9 100644
+--- a/apps/viewer/src/hooks/usePrivacyDisclosure.test.tsx
++++ b/apps/viewer/src/hooks/usePrivacyDisclosure.test.tsx
+@@ -15,6 +15,7 @@ import { SettingsDialogHost } from '@/components/viewer/settings/SettingsDialog.
+ import { registerLocale, setLocale } from '@/i18n';
+ import { advance, cleanup, click, render } from '@/test/render.js';
+ import { latestToast } from '@/test/toasts.js';
++import { resetChModusForTest } from '@/lib/ch/modus';
+ import { usePrivacyDisclosure } from './usePrivacyDisclosure.js';
+ 
+ function Disclosure() {
+@@ -28,7 +29,9 @@ afterEach(() => {
+   localStorage.removeItem('ifclite.extensions.privacy-disclosure.v2');
+ });
+ 
+-it('translates the analytics disclosure and opens Settings → Privacy (#5866)', async () => {
++for (const full of [false, true]) it(`analytics disclosure opens Settings → Privacy (#5866), full=${full}`, async () => {
++  window.history.replaceState(null, '', full ? '?voll=1' : '/');
++  resetChModusForTest();
+   localStorage.removeItem('ifclite.extensions.privacy-disclosure.v2');
+   registerLocale('privacy-disclosure-test', {
+     'settings.privacy.toastDisclosure': 'TRANSLATED ANALYTICS DISCLOSURE',
+@@ -53,8 +56,8 @@ it('translates the analytics disclosure and opens Settings → Privacy (#5866)',
+   );
+ 
+   await advance(3550);
+-  assert.match(latestToast(), /TRANSLATED ANALYTICS DISCLOSURE/);
+-  const action = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('OPEN TRANSLATED PRIVACY'));
++  assert.match(latestToast(), full ? /TRANSLATED ANALYTICS DISCLOSURE/ : /Aktionsprotokoll.*Einstellungen unter Datenschutz/);
++  const action = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes(full ? 'OPEN TRANSLATED PRIVACY' : 'Datenschutz verwalten'));
+   assert.ok(action, 'the disclosure has a Settings → Privacy action');
+   click(action);
+   assert.ok(document.querySelector('[data-settings-dialog] #settings-analytics-opt-out'));
 diff --git a/apps/viewer/src/hooks/usePrivacyDisclosure.ts b/apps/viewer/src/hooks/usePrivacyDisclosure.ts
+index 5e3fcd356f60cf6ea9be6c5d3744e21c21f16eab..29c97160342ceec5a26f812693d4f6bafc3e029d 100644
 --- a/apps/viewer/src/hooks/usePrivacyDisclosure.ts
 +++ b/apps/viewer/src/hooks/usePrivacyDisclosure.ts
-@@ -18,6 +18,7 @@
+@@ -17,6 +17,7 @@
  import { useEffect } from 'react';
  import { toast } from '@/components/ui/toast';
  import { useOptionalExtensionHost } from '@/sdk/ExtensionHostProvider';
 +import { chTrassiaModus } from '@/lib/ch/modus';
+ import { useTranslation } from '@/i18n';
+ import { openSettings } from '@/lib/settings/open-settings';
  
- const STORAGE_KEY = 'ifclite.extensions.privacy-disclosure.v1';
- 
-@@ -35,7 +36,9 @@
+@@ -35,8 +36,8 @@ export function usePrivacyDisclosure(): void {
+     }
      // Defer slightly so the toast doesn't fight with the splash UI.
      const handle = window.setTimeout(() => {
-       toast.info(
--        'IFClite keeps a local, content-free action log to suggest one-click tools. Manage or delete it in Extensions → Privacy.',
-+        chTrassiaModus()
-+          ? 'Ein lokales, inhaltsfreies Aktionsprotokoll schlägt Ein-Klick-Werkzeuge vor. Verwalten oder löschen unter Extensions → Privacy.'
-+          : 'IFClite keeps a local, content-free action log to suggest one-click tools. Manage or delete it in Extensions → Privacy.',
-       );
+-      toast.info(t('settings.privacy.toastDisclosure'), {
+-        label: t('settings.privacy.toastAction'),
++      toast.info(chTrassiaModus() ? 'Ein lokales, inhaltsfreies Aktionsprotokoll schlägt Ein-Klick-Werkzeuge vor. Verwalten oder löschen in den Einstellungen unter Datenschutz.' : t('settings.privacy.toastDisclosure'), {
++        label: chTrassiaModus() ? 'Datenschutz verwalten' : t('settings.privacy.toastAction'),
+         onClick: () => openSettings('privacy'),
+       });
        try {
-         window.localStorage.setItem(STORAGE_KEY, new Date().toISOString());
+diff --git a/apps/viewer/src/i18n/catalogues/shell-chrome.en.ts b/apps/viewer/src/i18n/catalogues/shell-chrome.en.ts
+index 145ad7268b9b1994cb8b96bb30ad5303a1fc4ea9..f605649a4f8a1114182459898a974c2a7b8aa1e7 100644
+--- a/apps/viewer/src/i18n/catalogues/shell-chrome.en.ts
++++ b/apps/viewer/src/i18n/catalogues/shell-chrome.en.ts
+@@ -123,7 +123,7 @@ export const shellChromeEn = {
+   'shellChrome.statusBar.modelWorkspaceStorey': 'Model · {storey}',
+   'shellChrome.statusBar.enterModelWorkspace': 'Enter the Model workspace',
+   'shellChrome.statusBar.leaveModelWorkspace': 'Leave the Model workspace',
+-  'shellChrome.statusBar.cancelStreamTitle': 'Cancel the model or point cloud that is loading',
++  'shellChrome.statusBar.cancelStreamTitle': 'Cancel the active loading process',
+   'shellChrome.statusBar.cancelButton': 'Cancel',
+   'shellChrome.statusBar.elementsCount': { one: 'element', other: 'elements' },
+   'shellChrome.statusBar.trisCount': { one: 'tri', other: 'tris' },

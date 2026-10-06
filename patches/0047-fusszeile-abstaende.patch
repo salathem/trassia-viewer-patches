@@ -1,10 +1,10 @@
 diff --git a/apps/viewer/src/components/viewer/StatusBar.tsx b/apps/viewer/src/components/viewer/StatusBar.tsx
-index c08b2d1..25d0978 100644
+index a37fe98a5a71432696c47910b18ae0294aac7436..3097fdf5d186fcd40ab483a1c2dd61e738c38fa8 100644
 --- a/apps/viewer/src/components/viewer/StatusBar.tsx
 +++ b/apps/viewer/src/components/viewer/StatusBar.tsx
-@@ -259,8 +259,11 @@ export function StatusBar() {
+@@ -229,8 +229,11 @@ export function StatusBar() {
      return selectedRefs.size > 0 ? count : totalObjects;
-   }, [selectedStoreys, activeStorey, selectedEntities, countedModels, models, physicalIdsByModel, totalObjects]);
+   }, [selectedStoreys, activeStorey, selectedEntities, countedModels, models, mutationViews, mutationVersion, physicalIdsByModel, totalObjects]);
  
 +  // Trassia (UX-KOPF-Nachschliff, Marco 2026-09-02): gap-3 auf dem Root,
 +  // damit Statistik- und Perf-Block denselben Abstand tragen wie die
@@ -13,25 +13,24 @@ index c08b2d1..25d0978 100644
 -    <div className="h-7 px-3 border-t bg-muted/30 flex items-center justify-between text-xs text-muted-foreground">
 +    <div className="h-7 px-3 border-t bg-muted/30 flex items-center justify-between gap-3 text-xs text-muted-foreground">
        {/* Left: Status */}
-       {/* Trassia (UX-KOPF, Tester-Auflage M-2): min-w-0 + flex-1 links und
-           shrink-0 auf den festen Bloecken, damit das Projektsegment schrumpft
-@@ -324,7 +327,8 @@ export function StatusBar() {
+       <div className="flex min-w-0 flex-1 items-center gap-3">
+         {/* A load error shows once, in the viewport's load-error card
+@@ -290,7 +293,9 @@ export function StatusBar() {
        </div>
  
        {/* Center: Model Stats */}
 -      <div className="flex shrink-0 items-center gap-4">
 +      {/* Trassia: gap-4 -> gap-3, ein Abstand fuer die ganze Zeile. */}
 +      <div className="flex shrink-0 items-center gap-3">
++        <Separator orientation="vertical" className="h-3.5" />
          <div className="flex items-center gap-1.5">
            <Boxes className="h-3.5 w-3.5" />
            <span>
-@@ -348,6 +352,9 @@ export function StatusBar() {
+@@ -312,6 +317,7 @@ export function StatusBar() {
  
        {/* Right: Performance */}
        <div className="flex shrink-0 items-center gap-3">
-+        {/* Trassia: derselbe senkrechte Trenner wie zwischen FPS, WebGPU
-+            und Default — sonst stossen «tris» und «FPS» ohne Strich aneinander. */}
 +        <Separator orientation="vertical" className="h-3.5" />
-         <span className={fps < 30 ? 'text-destructive' : fps < 50 ? 'text-yellow-500' : ''}>
-           {fps} {t('shellChrome.statusBar.fpsUnit')}
-         </span>
+         {showPerformanceStats && (
+           <>
+             <FpsMemoryStats />

@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/hooks/useDrawingGeneration.ts b/apps/viewer/src/hooks/useDrawingGeneration.ts
-index 90f0343..06f5a0d 100644
+index ca9900a309ce4599410dcc1eea9300cb10279c0c..314ddbcbca12892607399be660c586973ff50388 100644
 --- a/apps/viewer/src/hooks/useDrawingGeneration.ts
 +++ b/apps/viewer/src/hooks/useDrawingGeneration.ts
 @@ -39,6 +39,11 @@ import * as IfcWasm from '@ifc-lite/wasm';

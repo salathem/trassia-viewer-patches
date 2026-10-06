@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/CesiumOverlay.tsx b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-index 4214934..c8aa252 100644
+index 3f7c5090a2e3e0d53b909f0e9fbac02b7aa07356..5022b6a6e17b9a6ad6770f5bf3586472e0dedbdf 100644
 --- a/apps/viewer/src/components/viewer/CesiumOverlay.tsx
 +++ b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-@@ -40,6 +40,11 @@ import { CesiumViewerLifetime } from './cesium/cesium-viewer-lifetime';
+@@ -41,6 +41,11 @@ import { CesiumViewerLifetime } from './cesium/cesium-viewer-lifetime';
  // ZUSAETZLICHE Primitive in derselben Szene. Warum nicht als weiterer Fall in
  // addDataSourceLayer(): siehe cesium/useChCesiumTiles.ts.
  import { useChCesiumTiles } from './cesium/useChCesiumTiles';
@@ -14,7 +14,7 @@ index 4214934..c8aa252 100644
  
  export interface CesiumOverlayProps {
    mapConversion?: MapConversion;
-@@ -458,6 +463,17 @@ export function CesiumOverlay({
+@@ -459,6 +464,17 @@ export function CesiumOverlay({
    // zerstoert. Der Haken rechnet damit.
    useChCesiumTiles({ status, viewerRef });
  

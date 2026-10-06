@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx b/apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx
-index 41bc1ed..fdaae82 100644
+index a6f89aa27a03399435dcb4c36445e90a019cbf43..708b778aae4481e33903fc3a49fff10d75cf11db 100644
 --- a/apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx
 +++ b/apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx
-@@ -97,9 +97,14 @@ export function ModelHeaderRow({
+@@ -110,9 +110,14 @@ export function ModelHeaderRow({
          )}
  
          <FileBox className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -19,4 +19,4 @@ index 41bc1ed..fdaae82 100644
 +        </Tooltip>
  
          {node.elementCount !== undefined && (
-           // Trassia (U3-klein, TODO #29): klein und grau; die Zahl der Modellzeile
+           <span className="ch-zeilenzahl text-2xs tabular-nums text-zinc-400 dark:text-zinc-500 px-1 shrink-0">

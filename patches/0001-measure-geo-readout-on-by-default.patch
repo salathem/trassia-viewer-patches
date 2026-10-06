@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/store/slices/measurementSlice.ts b/apps/viewer/src/store/slices/measurementSlice.ts
-index 0cfeee1..f72f535 100644
+index 1a3628b7eb64fbab87c338f8dfd42f376df51d97..9e4f863c17cdc28c843e7e953b06e2acc3a4fff0 100644
 --- a/apps/viewer/src/store/slices/measurementSlice.ts
 +++ b/apps/viewer/src/store/slices/measurementSlice.ts
-@@ -300,7 +300,13 @@ export const createMeasurementSlice: StateCreator<MeasurementSlice, [], [], Meas
+@@ -304,7 +304,13 @@ export const createMeasurementSlice: StateCreator<MeasurementSlice, [], [], Meas
    activeMeasurement: null,
    snapTarget: null,
    snapEnabled: true,

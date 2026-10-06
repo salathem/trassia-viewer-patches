@@ -1,6 +1,37 @@
+diff --git a/apps/viewer/src/hooks/useDrawingExport.pdfVectorPaths.test.tsx b/apps/viewer/src/hooks/useDrawingExport.pdfVectorPaths.test.tsx
+index 2d30dd81d4247c1919df24e2dc1a359e26712df6..dc88e0621171c13820b8353c672f6763c28e0916 100644
+--- a/apps/viewer/src/hooks/useDrawingExport.pdfVectorPaths.test.tsx
++++ b/apps/viewer/src/hooks/useDrawingExport.pdfVectorPaths.test.tsx
+@@ -43,6 +43,7 @@
+ import '@/test/setup-dom.js';
+ import { describe, it } from 'node:test';
+ import assert from 'node:assert/strict';
++import { inflateSync } from 'node:zlib';
+ import { act } from 'react';
+ import { createRoot, type Root } from 'react-dom/client';
+ import {
+@@ -250,7 +251,15 @@ async function exportPdf(sheetEnabled: boolean): Promise<string> {
+     const bytes = new Uint8Array(await (blob as unknown as Blob).arrayBuffer());
+     let text = '';
+     for (let i = 0; i < bytes.length; i++) text += String.fromCharCode(bytes[i]);
+-    return text;
++    // Trassia0092 compresses vector operators losslessly too. Inspect their
++    // decoded stream rather than treating absence in compressed bytes as raster.
++    let decoded = text;
++    for (const match of text.matchAll(/(<<[\s\S]*?>>)\s*stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
++      if (/\/Filter\s*\/FlateDecode/.test(match[1])) {
++        decoded += '\n' + inflateSync(Buffer.from(match[2], 'latin1')).toString('latin1');
++      }
++    }
++    return decoded;
+   } finally {
+     URL.createObjectURL = originalCreate;
+     restoreRaster();
+diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
+index 8f01cf8c86029306dd39353eb4f6e4fd3a035004..9aeea3f179a47ea2ec672848459563e32c2ec3af 100644
 --- a/apps/viewer/src/hooks/useDrawingExport.ts
 +++ b/apps/viewer/src/hooks/useDrawingExport.ts
-@@ -1156,6 +1156,7 @@
+@@ -1085,6 +1085,7 @@ function useDrawingExport({
            const { jsPDF } = await import('jspdf');
            const { dataUrl, fit } = await rasterizeSvgToPngDataUrl(svg, widthMm, heightMm);
            const doc = new jsPDF({
@@ -8,7 +39,7 @@
              unit: 'mm',
              format: [widthMm, heightMm],
              orientation: widthMm >= heightMm ? 'landscape' : 'portrait',
-@@ -1244,6 +1245,7 @@
+@@ -1179,6 +1180,7 @@ function useDrawingExport({
            return { x: p.x + offsetX, y: p.y + offsetY };
          };
          const doc = new jsPDF({

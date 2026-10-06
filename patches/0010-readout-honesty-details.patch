@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/tools/formatDistance.ts b/apps/viewer/src/components/viewer/tools/formatDistance.ts
-index de980c5..db76395 100644
+index de980c586b8889a29a97a549cd8d1959b8b7bb72..db76395e632c41bb932fec1b94b088b6896cd6ee 100644
 --- a/apps/viewer/src/components/viewer/tools/formatDistance.ts
 +++ b/apps/viewer/src/components/viewer/tools/formatDistance.ts
 @@ -15,6 +15,12 @@ const EMPTY_UNITS = ProjectUnits.empty();
@@ -16,7 +16,7 @@ index de980c5..db76395 100644
      return `${(meters * 1000).toFixed(1)} mm`;
    } else if (meters < 1) {
 diff --git a/apps/viewer/src/components/viewer/tools/measure-modes/components.test.ts b/apps/viewer/src/components/viewer/tools/measure-modes/components.test.ts
-index 71f4525..424c032 100644
+index 71f4525ee35e40e1ff2efa5c267086ca4ee06d81..424c0326b2d82322ad0aa6fa8ce0a36c7b3708a5 100644
 --- a/apps/viewer/src/components/viewer/tools/measure-modes/components.test.ts
 +++ b/apps/viewer/src/components/viewer/tools/measure-modes/components.test.ts
 @@ -72,7 +72,11 @@ describe('formatSignedDistance', () => {

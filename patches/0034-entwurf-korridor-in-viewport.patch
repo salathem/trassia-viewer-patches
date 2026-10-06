@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/Viewport.tsx b/apps/viewer/src/components/viewer/Viewport.tsx
-index f4af857..4f5be90 100644
+index 7864e237aadc1fb1852c0cd3e5ed4a87d35c1311..2b3f1f1f8c8667c0451775a014a3b84b19040703 100644
 --- a/apps/viewer/src/components/viewer/Viewport.tsx
 +++ b/apps/viewer/src/components/viewer/Viewport.tsx
-@@ -71,6 +71,11 @@ import { selectLandXmlViewportPick } from './landXmlViewportSelection.js';
+@@ -76,6 +76,11 @@ import { selectPickedGlobalId, toggleGlobalIdInSelection } from './viewport-sele
  import { uploadDxfLines3DGuarded } from './dxf-lines-3d-upload.js';
  // Trassia overlay (not upstream) — Paket V-DRAPE, siehe hooks/useChDrapeLines.ts.
  import { chDrapeMergeLines, useChDrapeLines } from '@/hooks/useChDrapeLines';
@@ -12,9 +12,9 @@ index f4af857..4f5be90 100644
 +// er tut nichts.
 +import { useChEntwurfKorridor } from '@/hooks/useChEntwurfKorridor';
  import { subscribeViewportHealth } from './device-loss-report.js';
- import { runGpuUpload } from './gpu-upload-guard.js';
+ import { useAuthoringOverlay } from './useAuthoringOverlay.js';
  import { anchorWorldLineVertices, rendererLineVertexData } from '@/lib/renderer/line-overlay-rte';
-@@ -1488,9 +1493,19 @@ export function Viewport({
+@@ -1337,9 +1342,19 @@ export function Viewport({
    // Renderdurchlauf eine neue Identitaet und der Effekt unten wuerde bei jedem
    // Durchlauf neu auf die GPU schreiben.
    const chDrape = useChDrapeLines();

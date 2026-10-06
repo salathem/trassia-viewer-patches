@@ -2,11 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { useCallback, useEffect } from 'react';
 import { registerChSeriesExport, chSvgIncludeAnnotationBounds, chSvgPaperSize, chPdfAnnotationPaper } from '@/lib/ch/qp-serie-export';
 import { useChQpHeightAnnotations } from '@/hooks/useChQpHeightAnnotations';
+import { useCallback, useEffect } from 'react';
+import { buildDxfUnderlaySvg, drawDxfUnderlaysPdf, mappedDxfUnderlayOptions } from '@/lib/export/drawing-vector-underlays';
+import { drawingReferenceSvg, snapshotDrawingReferences, rasterizeReferenceLayer } from '@/lib/export/drawing-raster-references';
 import type React from 'react';
-import { posthog } from '@/lib/analytics';
+import { posthog, trackExportCompleted } from '@/lib/analytics';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download';
 // Trassia overlay (not upstream) — the station cut publishes what it is
 // called; see overlay/apps/viewer/src/lib/ch/section-export-name.ts.
@@ -14,6 +16,7 @@ import { chSectionExportStem } from '@/lib/ch/section-export-name';
 // Trassia overlay (not upstream) — see overlay/apps/viewer/src/lib/ch/qp-corridor.ts
 import { chQpUndistorted } from '@/lib/ch/qp-corridor';
 import { toast } from '@/components/ui/toast';
+import { useTranslation } from '@/i18n';
 import { pdfLineStyleFor } from '@/lib/export/pdf-line-style';
 import {
   encodeDxfCp1252,
@@ -50,83 +53,9 @@ import { computeSvgExportViewport, svgExportMmToWorld } from '@/hooks/svgExportV
 import { makePropertiesGetter } from '@/hooks/drawingElementProperties';
 import { titleBlockWithEffectiveScale } from '@/hooks/titleBlockScaleField';
 
-/** Map a DXF vertical justification onto an SVG dominant-baseline. */
-function dxfValignToBaseline(valign: 'baseline' | 'bottom' | 'middle' | 'top'): string {
-  switch (valign) {
-    case 'bottom': return 'text-after-edge';
-    case 'middle': return 'central';
-    case 'top': return 'text-before-edge';
-    default: return 'alphabetic';
-  }
-}
-
-/**
- * Render DXF reference underlays as an SVG group (issue #1782). Geometry
- * arrives pre-mapped to drawing space (render-frame shift, flipped-section
- * mirror, and user placement applied by useDxfUnderlaysForDrawing — plan
- * sections only); `mapPoint` converts a drawing-space point into the
- * export's coordinate system (identity for the direct export, paper mm for
- * the sheet export). `strokeWidthForMm` and `fontScale` are in export units.
- */
-function buildDxfUnderlaySvg(
-  underlays: readonly DxfUnderlayRenderData[],
-  mapPoint: (x: number, y: number) => { x: number; y: number },
-  strokeWidthForMm: (mm: number) => number,
-  fontScale: number,
-  escapeXml: (s: string) => string,
-): string {
-  const visibleUnderlays = underlays.filter((u) => u.opacity > 0);
-  if (visibleUnderlays.length === 0) return '';
-
-  let svg = '  <g id="dxf-underlays">\n';
-  for (const data of visibleUnderlays) {
-    svg += `    <g data-dxf-underlay="${escapeXml(data.id)}" opacity="${data.opacity.toFixed(2)}">\n`;
-
-    for (const fill of data.fills) {
-      let d = '';
-      for (const ring of fill.loops) {
-        if (ring.length < 3) continue;
-        const first = mapPoint(ring[0].x, ring[0].y);
-        d += `${d ? ' ' : ''}M ${first.x.toFixed(4)} ${first.y.toFixed(4)}`;
-        for (let i = 1; i < ring.length; i++) {
-          const p = mapPoint(ring[i].x, ring[i].y);
-          d += ` L ${p.x.toFixed(4)} ${p.y.toFixed(4)}`;
-        }
-        d += ' Z';
-      }
-      if (!d) continue;
-      svg += `      <path d="${d}" fill="${fill.color}" fill-opacity="${fill.pattern ? 0.25 : 1}" fill-rule="evenodd" stroke="none"/>\n`;
-    }
-
-    for (const line of data.lines) {
-      if (line.points.length < 2) continue;
-      const pts = line.points.map((p) => mapPoint(p.x, p.y));
-      const pointsAttr = pts.map((p) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`).join(' ');
-      const tag = line.closed ? 'polygon' : 'polyline';
-      const strokeWidth = strokeWidthForMm(line.widthMm ?? 0.18);
-      const dash = line.dashed ? ` stroke-dasharray="${(strokeWidth * 6).toFixed(4)} ${(strokeWidth * 4).toFixed(4)}"` : '';
-      svg += `      <${tag} points="${pointsAttr}" fill="none" stroke="${line.color}" stroke-width="${strokeWidth.toFixed(4)}" stroke-linecap="round"${dash}/>\n`;
-    }
-
-    for (const text of data.texts) {
-      const anchor = mapPoint(text.x, text.y);
-      const tip = mapPoint(text.x + text.dirX, text.y + text.dirY);
-      const angle = (Math.atan2(tip.y - anchor.y, tip.x - anchor.x) * 180) / Math.PI;
-      const fontSize = text.height * fontScale;
-      if (fontSize <= 0) continue;
-      const anchorAttr = text.align === 'center' ? 'middle' : text.align === 'right' ? 'end' : 'start';
-      // Multiline MTEXT stacks with tspans, matching the canvas layout.
-      const content = text.text
-        .split('\n')
-        .map((line, i) => `<tspan x="${anchor.x.toFixed(4)}" dy="${i === 0 ? 0 : (fontSize * 1.3).toFixed(4)}">${escapeXml(line)}</tspan>`)
-        .join('');
-      svg += `      <text x="${anchor.x.toFixed(4)}" y="${anchor.y.toFixed(4)}" font-family="Arial, sans-serif" font-size="${fontSize.toFixed(4)}" fill="${text.color}" text-anchor="${anchorAttr}" dominant-baseline="${dxfValignToBaseline(text.valign)}" transform="rotate(${angle.toFixed(2)} ${anchor.x.toFixed(4)} ${anchor.y.toFixed(4)})">${content}</text>\n`;
-    }
-
-    svg += '    </g>\n';
-  }
-  svg += '  </g>\n';
-  return svg;
+function tryDrawingSvg(generate: () => string | null): string | null {
+  try { return generate(); }
+  catch (error) { toast.error(error instanceof Error ? error.message : String(error)); return null; }
 }
 
 /**
@@ -367,6 +296,7 @@ function useDrawingExport({
   isPinned = false,
   cachedSheetTransformRef,
 }: UseDrawingExportParams): UseDrawingExportResult {
+  const { t } = useTranslation();
   // Trassia (Paket V-QP): JEDER Export — SVG, PDF, DXF — nimmt die unverzerrte
   // Zeichnung. Die Hoehenueberhoehung des Querprofil-Panels ist eine Lesehilfe
   // am Bildschirm; ein 2x gestrecktes DXF waere ein Plan, der aussieht wie ein
@@ -463,12 +393,12 @@ function useDrawingExport({
   <rect x="${viewBoxMinX.toFixed(4)}" y="${viewBoxMinY.toFixed(4)}" width="${viewWidth.toFixed(4)}" height="${viewHeight.toFixed(4)}" fill="#FFFFFF"/>
 `;
 
-    // 0. DXF REFERENCE UNDERLAYS (issue #1782) - beneath everything. Data
-    // exists only for plan ('down') sections, where the direct export has
-    // no axis flips, so the identity mapping matches the canvas.
+    const mapUnderlay = (x: number, y: number) => ({ x: flipX ? -x : x, y: flipY ? -y : y });
+    svg += drawingReferenceSvg(useViewerStore.getState(), drawing.config.plane, mapUnderlay);
+    // Shared drawing-space geometry; apply the same final axis mapping as IFC.
     svg += buildDxfUnderlaySvg(
       dxfUnderlays,
-      (x, y) => ({ x, y }),
+      mapUnderlay,
       mmToModel,
       1, // text height is already in model units (metres)
       escapeXml,
@@ -830,13 +760,11 @@ function useDrawingExport({
       return path;
     };
 
-    // DXF reference underlays (issue #1782) - beneath everything. Data
-    // exists only for plan ('down') sections, where the sheet mapping has
-    // no axis flips, so the plain drawing→paper transform matches the canvas.
+    svg += drawingReferenceSvg(useViewerStore.getState(), drawing.config.plane, modelToPaper);
     svg += buildDxfUnderlaySvg(
       dxfUnderlays,
-      (x, y) => ({ x: x * scaleFactor + translateX, y: y * scaleFactor + translateY }),
-      (mm) => mm * 0.3, // mm on paper, matching the model outline convention
+      modelToPaper,
+      (mm) => mm, // CAD lineweights are paper millimetres, as in raw SVG/PDF.
       scaleFactor, // metres -> mm on paper
       escapeXml,
     );
@@ -993,25 +921,24 @@ function useDrawingExport({
     // every fresh draw — neither of which this callback controls.
     // `cachedSheetTransformRef` is a ref: stable identity, read at call time.
   }, [drawing, activeSheet, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, dxfUnderlays, scanSection, sectionPlane.axis, isPinned, ifcDataStore, storeModels, heightAnnotations]);
-
   // Export SVG
   const handleExportSVG = useCallback(() => {
     // Use sheet export if enabled, otherwise raw drawing export
-    const svg = (sheetEnabled && activeSheet) ? generateSheetSVG() : generateExportSVG();
+    const svg = tryDrawingSvg(() => (sheetEnabled && activeSheet) ? generateSheetSVG() : generateExportSVG());
     if (!svg) return;
     const stem = (sheetEnabled && activeSheet)
       ? `${sanitizeFilename(activeSheet.name, { fallback: 'sheet' })}-${sectionPlane.axis}-${sectionPlane.position}`
       : `section-${sectionPlane.axis}-${sectionPlane.position}`;
     downloadFile(svg, `${stem}.svg`, 'image/svg+xml');
+    trackExportCompleted({ format: 'svg', surface: 'drawing_panel' });
     posthog.capture('drawing_exported', { format: 'svg', axis: sectionPlane.axis, sheet_enabled: sheetEnabled });
   }, [generateExportSVG, generateSheetSVG, sheetEnabled, activeSheet, sectionPlane]);
-
   // Export DXF (issue #1861). Unlike SVG, DXF has no paper space, so this
   // always exports the raw model-space drawing (sheet frame/title block are
   // not represented) — real-world metres, with a plan ('down') section
   // re-georeferenced to true IFC world coordinates (and further to
   // map/CRS coordinates when the model has an IfcMapConversion). DXF
-  // reference underlays are not embedded in this export; see PR notes.
+  // reference vectors are embedded from the same mapped drawing geometry.
   // The point-cloud scan overlay (issue #1805) is likewise deliberately
   // excluded: it is a raster-like screen aid (tens of thousands of circles),
   // not vector content — SVG export carries it (opt-in) instead.
@@ -1053,6 +980,7 @@ function useDrawingExport({
       showHiddenLines: displayOptions.showHiddenLines,
       coordinateTransform,
       metadataComment,
+      underlays: mappedDxfUnderlayOptions(dxfUnderlays, sectionPlane.axis),
     });
     // Trassia (audit finding M-11): a cut set at a station on an
     // IfcAlignment names itself after that axis and station
@@ -1062,16 +990,16 @@ function useDrawingExport({
       ?? `section-${sectionPlane.axis}-${sectionPlane.position}`;
     if (!download) return encodeDxfCp1252(dxf).bytes;
     downloadDxf(dxf, `${stem}.dxf`);
+    trackExportCompleted({ format: 'dxf', surface: 'drawing_panel' });
     posthog.capture('drawing_exported', {
       format: 'dxf',
       axis: sectionPlane.axis,
       georeferenced: isGeoreferenced,
     });
   }, [
-    drawing, displayOptions.showHiddenLines, sectionPlane, ifcDataStore, coordinateInfo,
+    drawing, dxfUnderlays, displayOptions.showHiddenLines, sectionPlane, ifcDataStore, coordinateInfo,
     storeModels, anchorModelIdOverride, georefMutations, mutationVersion, heightAnnotations,
   ]);
-
   // Export scaled PDF (issue #2042): a true-vector PDF sized so the
   // requested scale ("1:N") is EXACT — the page itself is sized to the
   // drawing extent + margin (via computePdfScaleLayout) rather than fit
@@ -1081,9 +1009,10 @@ function useDrawingExport({
   // v1 scope, deliberately smaller than the SVG export: cut-polygon
   // OUTLINES and drawing LINES only (matching what an engineer actually
   // measures off a printed section). Not yet included: area fills /
-  // hatching, DXF underlays, text/cloud annotations, and the point-cloud
+  // hatching, text/cloud annotations, and the point-cloud
   // scan overlay. Those are straightforward follow-ups once this scale
-  // plumbing is reviewed; see the PR description.
+  // plumbing is reviewed; see the PR description. Reference raster pages and
+  // DXF vectors are included beneath these strokes (#6615).
   //
   // The drawing-sheet frame / title block / scale bar are NOT on that list
   // any more, and this path is not where they will arrive. It is the
@@ -1147,7 +1076,7 @@ function useDrawingExport({
     // vector — see `useDrawingExport.pdfVectorPaths.test.tsx`, which pins
     // both halves of that split.
     if (sheetEnabled && activeSheet) {
-      const svg = generateSheetSVG();
+      const svg = tryDrawingSvg(generateSheetSVG);
       if (!svg) return;
       const paper = chSvgPaperSize(svg);
       const widthMm = paper.width, heightMm = paper.height;
@@ -1181,6 +1110,7 @@ function useDrawingExport({
 
           const stem = `${sanitizeFilename(activeSheet.name, { fallback: 'sheet' })}-${sectionPlane.axis}-${sectionPlane.position}`;
           downloadFile(doc.output('blob'), `${stem}.pdf`, 'application/pdf');
+          trackExportCompleted({ format: 'pdf', surface: 'drawing_panel' });
           posthog.capture('drawing_exported', {
             format: 'pdf',
             axis: sectionPlane.axis,
@@ -1192,8 +1122,7 @@ function useDrawingExport({
             raster_capped: fit.capped,
           });
         } catch (err) {
-          // eslint-disable-next-line no-alert -- matches the raw-drawing PDF path's alert() below; a blocking alert is the existing convention for an export that FAILED, and toast.info here is only used for an export that succeeded in a degraded form.
-          alert(err instanceof Error ? `Could not export PDF: ${err.message}` : 'Could not export PDF.');
+          toast.error(err instanceof Error ? t('section2d.export.pdfFailed', { error: err.message }) : t('section2d.export.pdfFailedGeneric'));
         }
       })();
       return;
@@ -1213,11 +1142,17 @@ function useDrawingExport({
     try {
       layout = computePdfSectionLayout(drawing.bounds, currentAxis, effectiveScale, 10);
     } catch (err) {
-      // eslint-disable-next-line no-alert -- matches handlePrint's popup-blocked alert below; a blocking alert is the existing convention for an export that FAILED, and toast.info here is only used for an export that succeeded in a degraded form.
-      alert(err instanceof Error ? err.message : 'Could not export PDF: invalid scale.');
+      toast.error(err instanceof Error ? t('section2d.export.invalidScaleDetail', { error: err.message }) : t('section2d.export.invalidScale'));
       return;
     }
     const baseMapPoint = makeSectionMapPoint(currentAxis, layout);
+
+    let referenceSnapshot: ReturnType<typeof snapshotDrawingReferences>;
+    try { referenceSnapshot = snapshotDrawingReferences(useViewerStore.getState(), drawing.config.plane); }
+    catch (error) { toast.error(error instanceof Error ? error.message : t('section2d.export.pdfFailedGeneric')); return; }
+    // Own mapped vectors at click time; model/reference edits during async export
+    // cannot replace the geometry whose bounds/scale were used above.
+    const vectorSnapshot = structuredClone(dxfUnderlays);
 
     void (async () => {
       try {
@@ -1250,6 +1185,10 @@ function useDrawingExport({
           format: [widthMm, heightMm],
           orientation: widthMm >= heightMm ? 'landscape' : 'portrait',
         });
+
+        const raster = await rasterizeReferenceLayer(referenceSnapshot, widthMm, heightMm, mapPoint);
+        if (raster) doc.addImage(raster, 'PNG', 0, 0, widthMm, heightMm);
+        drawDxfUnderlaysPdf(doc, vectorSnapshot, mapPoint, 1000 / effectiveScale);
 
         doc.setDrawColor(0, 0, 0);
         doc.setLineCap('round');
@@ -1320,6 +1259,7 @@ function useDrawingExport({
         // re-deriving it.
         const stem = `section-${sectionPlane.axis}-${sectionPlane.position}-1-${formatScaleFactorLabel(effectiveScale)}`;
         downloadFile(doc.output('blob'), `${stem}.pdf`, 'application/pdf');
+        trackExportCompleted({ format: 'pdf', surface: 'drawing_panel' });
         posthog.capture('drawing_exported', {
           format: 'pdf',
           axis: sectionPlane.axis,
@@ -1327,27 +1267,22 @@ function useDrawingExport({
         });
       } catch (err) {
         // The dynamic `jspdf` import, PDF construction and download all run
-        // in this async IIFE, outside the synchronous try/catch above (which
-        // only guards the scale/layout arithmetic). A failed chunk load —
-        // the most likely failure here — used to surface as an unhandled
-        // promise rejection with no user feedback at all. Match the
-        // synchronous path's alert() rather than fail silently.
-        // eslint-disable-next-line no-alert -- matches the synchronous scale-validation alert above.
-        alert(err instanceof Error ? `Could not export PDF: ${err.message}` : 'Could not export PDF.');
-      }
+        // in this async IIFE, outside the synchronous try/catch above.
+        toast.error(err instanceof Error ? t('section2d.export.pdfFailed', { error: err.message }) : t('section2d.export.pdfFailedGeneric'));
+      } finally { referenceSnapshot.release(); }
     })();
-  }, [drawing, displayOptions.scale, displayOptions.showHiddenLines, sectionPlane, sheetEnabled, activeSheet, generateSheetSVG, heightAnnotations]);
+  }, [drawing, dxfUnderlays, displayOptions.scale, displayOptions.showHiddenLines, sectionPlane, sheetEnabled, activeSheet, generateSheetSVG, heightAnnotations, t]);
 
   // Print handler
   const handlePrint = useCallback(() => {
     // Use sheet export if enabled, otherwise raw drawing export
-    const svg = (sheetEnabled && activeSheet) ? generateSheetSVG() : generateExportSVG();
+    const svg = tryDrawingSvg(() => (sheetEnabled && activeSheet) ? generateSheetSVG() : generateExportSVG());
     if (!svg) return;
 
     // Create a new window for printing
     const printWindow = window.open('', '_blank', 'width=800,height=600');
     if (!printWindow) {
-      alert('Please allow popups to print');
+      toast.error(t('section2d.export.allowPopups'));
       return;
     }
 
@@ -1404,7 +1339,7 @@ function useDrawingExport({
       </html>
     `);
     printWindow.document.close();
-  }, [generateExportSVG, generateSheetSVG, sheetEnabled, activeSheet, sectionPlane]);
+  }, [generateExportSVG, generateSheetSVG, sheetEnabled, activeSheet, sectionPlane, t]);
 
   useEffect(() => {
     if (!drawingFromStore) return;

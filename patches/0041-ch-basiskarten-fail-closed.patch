@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/CesiumOverlay.tsx b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-index c8aa252..0a98a7f 100644
+index 5022b6a6e17b9a6ad6770f5bf3586472e0dedbdf..6e721cd6265333e9dca3d6d3bac5ce4c187c7856 100644
 --- a/apps/viewer/src/components/viewer/CesiumOverlay.tsx
 +++ b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-@@ -45,6 +45,9 @@ import { useChCesiumTiles } from './cesium/useChCesiumTiles';
+@@ -46,6 +46,9 @@ import { useChCesiumTiles } from './cesium/useChCesiumTiles';
  import { useChSwisstopoUmgebung } from './cesium/useChSwisstopoUmgebung';
  // Trassia overlay (Paket V-WFS) — amtliche WFS-Ebenen als geklemmte Overlays.
  import { useChWfsLayers } from './cesium/useChWfsLayers';
@@ -12,7 +12,7 @@ index c8aa252..0a98a7f 100644
  
  export interface CesiumOverlayProps {
    mapConversion?: MapConversion;
-@@ -212,7 +215,30 @@ export function CesiumOverlay({
+@@ -213,7 +216,30 @@ export function CesiumOverlay({
          scene.globe.showGroundAtmosphere = false;
          scene.backgroundColor = Cesium.Color.TRANSPARENT;
          scene.globe.baseColor = Cesium.Color.TRANSPARENT;
@@ -45,7 +45,7 @@ index c8aa252..0a98a7f 100644
            // map (no satellite imagery, no 3D massing) for users who find the
            // photorealistic globe overwhelming (#1744). The globe drapes the
 diff --git a/apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts b/apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts
-index 49fdb59..42ca329 100644
+index 49fdb5972f49df672143a65fa6a874675afb591c..42ca32997c2b076976d2811256336a63ca6a7c4f 100644
 --- a/apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts
 +++ b/apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts
 @@ -17,6 +17,11 @@ import type { CesiumViewerLifetime } from './cesium-viewer-lifetime';

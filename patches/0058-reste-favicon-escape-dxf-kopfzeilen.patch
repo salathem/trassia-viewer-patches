@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
-index 64e8128..3846547 100644
+index 345a522d001316324fc22cdc16e1cb42ba0b4c4e..b628b6f73abdeaab7a23976b2bbadbcbf565f969 100644
 --- a/apps/viewer/src/hooks/useDrawingExport.ts
 +++ b/apps/viewer/src/hooks/useDrawingExport.ts
-@@ -41,6 +41,7 @@ import type { IfcDataStore } from '@ifc-lite/parser';
+@@ -44,6 +44,7 @@ import type { IfcDataStore } from '@ifc-lite/parser';
  import { useViewerStore } from '@/store';
  import { buildDxfExportTransform, resolveDxfExportGeoreference } from '@/hooks/dxfExportGeoref';
  import { downloadDxf } from '@/hooks/dxfDownload';
@@ -10,7 +10,7 @@ index 64e8128..3846547 100644
  import { DEFAULT_SCAN_SVG_CAP, type ScanBandPoint } from '@/hooks/scanSectionMath';
  import { computeSvgExportViewport, svgExportMmToWorld } from '@/hooks/svgExportViewport';
  import { makePropertiesGetter } from '@/hooks/drawingElementProperties';
-@@ -1029,9 +1030,13 @@ function useDrawingExport({
+@@ -956,9 +957,13 @@ function useDrawingExport({
      // R12 has no $INSUNITS (see dxf/writer.ts); state the unit — and the
      // target CRS when the export is actually map-projected — in the 999
      // comment every DXF reader shows a human but none need to parse.
@@ -27,23 +27,33 @@ index 64e8128..3846547 100644
        showHiddenLines: displayOptions.showHiddenLines,
        coordinateTransform,
 diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-index 940c2ee..74a5bc3 100644
+index 0e0095951eed0f1fadadef1bb6a3e133c1b0e65d..08e0074bfa23db23097a97dc26ef5c268c15aabb 100644
 --- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
 +++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-@@ -375,6 +375,11 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
-     // Escape: one step per press — leave the tool, else clear the selection; double-press
-     // also closes all panels. Never resets visibility; only A / Home do (#5595).
-     if (key === 'escape') {
-+      // Trassia (TODO #40, Tester 03.09.): Escape in einem offenen Menue oder
-+      // Dialog gehoert dem Menue (Radix schliesst es selbst) — sonst schloss
-+      // ein Escape im Export-Menue des 2D-Panels das ganze Schnittwerkzeug.
-+      const ziel = e.target as HTMLElement | null;
-+      if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content]')) return;
-       e.preventDefault();
-       const now = Date.now();
-       const timeSinceLastEscape = now - lastEscapeRef.current;
+@@ -26,7 +26,9 @@ import {
+ 
+ interface KeyboardShortcutsOptions { enabled?: boolean }
+ 
+-function escapeGlobal(closeAll: boolean): void {
++function escapeGlobal(closeAll: boolean, event?: KeyboardEvent): boolean | void {
++  const target = event?.target as HTMLElement | null;
++  if (target?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content]')) return false;
+   const state = useViewerStore.getState();
+   if (closeAll) {
+     state.showWorkspacePanel('properties');
+@@ -143,8 +145,8 @@ const RUNNERS: readonly [KeyCommandId, CommandRun][] = [
+   ['measure.cancel', cancelMeasurement],
+   ['measure.finish', finishMeasurement],
+   ['measure.toggleSnap', () => { useViewerStore.getState().toggleSnap(); }],
+-  ['selection.escape', () => { escapeGlobal(false); }],
+-  ['ui.closeAllPanels', () => { escapeGlobal(true); }],
++  ['selection.escape', (event) => escapeGlobal(false, event)],
++  ['ui.closeAllPanels', (event) => escapeGlobal(true, event)],
+   ['ui.toggleTheme', () => { useViewerStore.getState().toggleTheme(); }],
+ ];
+ 
 diff --git a/apps/viewer/src/main.tsx b/apps/viewer/src/main.tsx
-index 75e646e..6dcf38d 100644
+index 75e646e1488878436eee3f2f4bf84baf931d0676..6dcf38da6e3ce0b26a82a3d56087a7e3a18541fe 100644
 --- a/apps/viewer/src/main.tsx
 +++ b/apps/viewer/src/main.tsx
 @@ -22,5 +22,9 @@ import { mountViewer } from './bootstrap';
@@ -57,7 +67,7 @@ index 75e646e..6dcf38d 100644
  
  mountViewer(document.getElementById('root')!);
 diff --git a/packages/drawing-2d/src/dxf/writer.ts b/packages/drawing-2d/src/dxf/writer.ts
-index c01ffd7..8a040ea 100644
+index c01ffd7d158856568cfd319751a718438c0cb09c..8a040eae0a555948aec9fe71556fae3c1456686b 100644
 --- a/packages/drawing-2d/src/dxf/writer.ts
 +++ b/packages/drawing-2d/src/dxf/writer.ts
 @@ -181,7 +181,15 @@ export class DxfWriter {

@@ -1,4 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/selectionHandlers.ts b/apps/viewer/src/components/viewer/selectionHandlers.ts
+index d56fd1753df8fa966eb56ad7f4d65d5f0b4eadd9..035b2678560c6f0c1d3aed3874893b7fa6dfc047 100644
 --- a/apps/viewer/src/components/viewer/selectionHandlers.ts
 +++ b/apps/viewer/src/components/viewer/selectionHandlers.ts
 @@ -7,6 +7,7 @@
@@ -9,20 +10,20 @@ diff --git a/apps/viewer/src/components/viewer/selectionHandlers.ts b/apps/viewe
  import { isTouchSelectionClick, selectViewportTarget } from './referenceSelection.js';
  import type { PickResult } from '@ifc-lite/renderer';
  import type { MouseHandlerContext } from './mouseHandlerTypes.js';
-@@ -66,6 +67,16 @@
-       handleAngleClick(ctx, x, y);
-     } else if (mode === 'radius') {
-       handleRadiusClick(ctx, x, y);
-+    }
-+    return;
-+  }
-+
+@@ -60,6 +61,16 @@ export async function handleSelectionClick(ctx: MouseHandlerContext, e: MouseEve
+   // corrupt each other's state (see `setMeasureMode` in measurementSlice.ts).
+   if (tool === 'measure') return handleMeasureClickAt(ctx, x, y);
+ 
 +  // Trassia: same magnetic measurement pick, transaction owned by Section.
 +  if (tool === 'section' && chLineCaptureActive()) {
 +    const picked = raycastForPolylinePoint(ctx, x, y);
 +    if (picked) {
 +      ctx.setSnapTarget(picked.snapTarget);
 +      chAppendLineCapturePoint([picked.point.x, picked.point.y, picked.point.z]);
-     }
-     return;
-   }
++    }
++    return;
++  }
++
+   // Section-tool face-pick (issue #243): clicking any visible face places
+   // the clip plane through it. Intercept BEFORE the generic select path
+   // so the click doesn't also flip the selection.

@@ -1,34 +1,42 @@
+diff --git a/apps/viewer/src/i18n/en.ts b/apps/viewer/src/i18n/en.ts
+index f532d90fe54af6ffa5a33ef3c1084a22455538ed..73cdb74b8d58210599c503f3e8bb0fa6e6e0b0ca 100644
+--- a/apps/viewer/src/i18n/en.ts
++++ b/apps/viewer/src/i18n/en.ts
+@@ -110,6 +110,7 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
+ 
+ /** English is assembled from feature catalogues so no locale becomes a monolith. */
+ export const en = {
++  'trassia.panel.kubatur': 'Cut and fill',
+   'trassia.panel.drape': 'Terrain drape',
+   ...analysisPanelEn,
+   ...annotationsEn,
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index e38eee2..235ed99 100644
+index b0fac740105b2b9f9749444e0584e1eb671bfcdc..26da97077c87fcd1a6256cae915514786f914960 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
-@@ -59,7 +59,9 @@ export type WorkspacePanelId =
-   | 'placement'
-   | 'presentation'
-   // Trassia overlay (not upstream) — Paket V-DRAPE.
+@@ -60,7 +60,8 @@ export type WorkspacePanelId =
+   | 'changes'
+   | 'model'
+   | 'changeSets'
 -  | 'drape';
 +  | 'drape'
-+  // Trassia overlay (not upstream) — Paket V-KUBATUR.
 +  | 'kubatur';
  
- /** Activity-bar clustering — a divider is drawn whenever the group changes. */
- export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
-@@ -184,6 +186,10 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
-   // Alt+1..0-Zuordnung der ersten zehn Eintraege unberuehrt bleibt — dieses
-   // Panel bekommt keine Ziffer und ist ueber die Leiste erreichbar.
-   { id: 'drape', title: 'Terrain drape', short: 'Drape', Icon: Mountain, group: 'author', region: 'side' },
-+  // Trassia (Paket V-KUBATUR): Auftrag/Abtrag zwischen zwei Modellen entlang
-+  // einer Achse. ANGEHAENGT, aus demselben Grund wie `drape` — keine Ziffer,
-+  // erreichbar ueber die Leiste.
-+  { id: 'kubatur', title: 'Cut and fill', short: 'Cut/fill', Icon: Ruler, group: 'author', region: 'side' },
+ /** Shared task grouping for the rail, ribbon panel browser, and palette commands (#5873). */
+ export type PanelGroup = 'coordinate' | 'check' | 'quantify' | 'automate' | 'site' | 'author';
+@@ -203,6 +204,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   // import as files. Flag-free like 'changes' / 'model'. APPENDED (no Alt shortcut).
+   { id: 'changeSets', titleKey: 'changeSets.panel.title', Icon: GitBranch, group: 'author', region: 'side' },
+   { id: 'drape', titleKey: 'trassia.panel.drape', Icon: Mountain, group: 'author', region: 'side' },
++  { id: 'kubatur', titleKey: 'trassia.panel.kubatur', Icon: Ruler, group: 'quantify', region: 'side' },
  ];
  
  // The bottom strip (Script / Schedule / Lists) is table-driven; the id union and
 diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-index c6d15e6..c50a1dc 100644
+index d2a427782e273fe6d154f7f7b2fca08a7ee3a55d..a449320dd6e53c4878ee593bfce2def9cab8616a 100644
 --- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
 +++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-@@ -36,6 +36,8 @@ import { PlacementPanel } from '@/components/viewer/placement/PlacementPanel';
+@@ -39,6 +39,8 @@ import { ModelInspectorPanel } from '@/components/viewer/model-inspector/ModelIn
  import { useViewerStore } from '@/store';
  // Trassia overlay (not upstream) — Paket V-DRAPE, siehe ChDrapePanel.tsx.
  import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
@@ -37,12 +45,11 @@ index c6d15e6..c50a1dc 100644
  // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
  // dynamic chunk keeps it out of the initial bundle until first opened.
  const LayersPanel = lazy(() =>
-@@ -147,6 +149,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+@@ -149,6 +151,7 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+     case 'zones': return <ZonesPanel onClose={onClose} />;
      case 'loadReport': return <LoadReportPanel onClose={onClose} />;
-     // Trassia (Paket V-DRAPE).
      case 'drape': return <ChDrapePanel onClose={onClose} />;
-+    // Trassia (Paket V-KUBATUR).
 +    case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
+     case 'changes': return <ChangesPanel onClose={onClose} />;
      case 'layers': return <LayersPanelBody onClose={onClose} />;
      case 'sources': return <SourcesPanelBody onClose={onClose} />;
-     case 'charts': return <ChartsPanelBody />;

@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/sidebar/SidebarPanelHost.tsx b/apps/viewer/src/components/viewer/sidebar/SidebarPanelHost.tsx
-index bb169d4..5111962 100644
+index 5296ea84718e62ec54d8a820a3beaa3f3ab605de..581eb29581aee3ca6ddf6789d1091d988dcdb54a 100644
 --- a/apps/viewer/src/components/viewer/sidebar/SidebarPanelHost.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/SidebarPanelHost.tsx
-@@ -198,7 +198,7 @@ function SplitContainer({
+@@ -217,7 +217,7 @@ function SplitContainer({
    primary: React.ReactNode;
    secondaryId: WorkspacePanelId;
  }) {
@@ -11,7 +11,7 @@ index bb169d4..5111962 100644
    return (
      <div ref={containerRef} className="h-full flex flex-col panel-container">
        {/* Top half: flex-basis is the ratio; min-height stops it collapsing. */}
-@@ -214,7 +214,7 @@ function SplitContainer({
+@@ -233,7 +233,7 @@ function SplitContainer({
            close (closing it clears the split). */}
        <div className="flex-1 min-h-[120px] flex flex-col overflow-hidden">
          <div className="flex-1 min-h-0 overflow-hidden">
@@ -21,10 +21,10 @@ index bb169d4..5111962 100644
        </div>
      </div>
 diff --git a/apps/viewer/src/hooks/usePanelControls.ts b/apps/viewer/src/hooks/usePanelControls.ts
-index 79a10b9..b306e1b 100644
+index e7bf8ce5123aea7aaf68e688a0a209108c03902d..3271ea5bde829b1123234d5a640257d5ad4e3392 100644
 --- a/apps/viewer/src/hooks/usePanelControls.ts
 +++ b/apps/viewer/src/hooks/usePanelControls.ts
-@@ -170,6 +170,7 @@ export function usePanelControls(): PanelControls {
+@@ -171,6 +171,7 @@ export function usePanelControls(): PanelControls {
    }, []);
  
    const closePanel = useCallback((id: WorkspacePanelId) => {
@@ -32,29 +32,28 @@ index 79a10b9..b306e1b 100644
      if (isLeftPanel(id)) {
        useViewerStore.getState().setLeftPanelCollapsed(true);
        return;
-diff --git a/apps/viewer/src/store/index.ts b/apps/viewer/src/store/index.ts
-index df4fbe8..5d0b485 100644
---- a/apps/viewer/src/store/index.ts
-+++ b/apps/viewer/src/store/index.ts
-@@ -6,6 +6,7 @@
+diff --git a/apps/viewer/src/store/createViewerActions.ts b/apps/viewer/src/store/createViewerActions.ts
+index f1222277ca490e8854b5a996f596df7a3ae13103..912cc3e130f967e2959a9aa75ffdf2003ca936f5 100644
+--- a/apps/viewer/src/store/createViewerActions.ts
++++ b/apps/viewer/src/store/createViewerActions.ts
+@@ -4,6 +4,7 @@
  
- import { createAppearanceSlice, type AppearanceSlice } from './slices/appearanceSlice.js';
- import { create } from 'zustand';
+ /** Cross-slice viewer actions. Domain state stays in its owning slice; this
+  * composition seam preserves reset side effects and workspace routing. */
 +import { chSidebarClosePatch } from '@/lib/ch/panel-close';
- import { createLoadingSlice, type LoadingSlice } from './slices/loadingSlice.js';
- import { createSelectionSlice, type SelectionSlice } from './slices/selectionSlice.js';
- import { createVisibilitySlice, type VisibilitySlice } from './slices/visibilitySlice.js';
-@@ -186,6 +187,9 @@ export type ViewerState = AppearanceSlice & LoadingSlice &
-   UnitDisplaySlice & SpaceMouseSlice & ZonesSlice & ModelTagsSlice &
-   ExtensionsSlice & SourcesSlice & {
-     resetViewerState: () => void;
-+    /** Ephemeral close intent; not persisted in the layout. */
-+    sidebarCloseRevision: number;
-+    closeDockedSidebarPanel: (panel: WorkspacePanelId) => boolean;
-     /**
-      * Open one right-side analysis panel and close the others, so the chosen
-      * panel is always the topmost/active one. The right panel renders a single
-@@ -357,6 +361,17 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
+ import type { StateCreator } from 'zustand';
+ import type { ViewerState } from './index.js';
+ import type { WorkspacePanelId } from '@/lib/panels/registry';
+@@ -17,6 +18,8 @@ import { DEFAULT_CONTROLS_MODE } from './slices/cameraSlice.js';
+ import { endClashScenePresentation, type ClashSceneTeardown } from '@/lib/clash/visibility-ownership';
+ 
+ export interface ViewerActions {
++  sidebarCloseRevision: number;
++  closeDockedSidebarPanel: (panel: WorkspacePanelId) => boolean;
+   resetViewerState: () => void;
+   /**
+    * Open one right-side analysis panel and close the others, so the chosen
+@@ -127,6 +130,15 @@ export const createViewerActions: StateCreator<ViewerState, [], [], ViewerAction
      endClashScenePresentation(() => get() as unknown as ClashSceneTeardown, 'federation-cleared');
    },
  
@@ -64,32 +63,19 @@ index df4fbe8..5d0b485 100644
 +    const patch = chSidebarClosePatch(get(), panel);
 +    if (patch === null) return false;
 +    set(patch);
-+    // Persist through the existing layout action after the atomic transition.
 +    get().setSidebarMode(get().sidebarMode);
 +    return true;
 +  },
-+
-   openWorkspacePanel: (panel) => {
+   openWorkspacePanel: (panel, surface) => {
      const [set, get] = args;
-     // Docking into the sidebar: if the panel was floating or popped out, re-dock
-@@ -440,15 +455,12 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
-     const isActive = s.sidebarActivePanel === panel
+     trackPanelOpened(panel, surface, isBottomPanel(panel) || get().sidebarMode !== 'expanded' ? undefined : get().sidebarActivePanel);
+@@ -214,8 +226,7 @@ export const createViewerActions: StateCreator<ViewerState, [], [], ViewerAction
        && !s.floatingPanels.some((p) => p.id === panel)
        && !s.poppedOutIds.includes(panel);
--    // Trassia (Paket SEITENLEISTE, Marco-Befund 2026-09-02): ein zweiter Klick
--    // auf das aktive Symbol schliesst das Panel und laesst NICHTS erscheinen —
--    // die Leiste klappt auf ihre Symbolspalte zusammen. Vorher sprang der
--    // Upstream still auf den Information-Fallback (bei Information selbst war
--    // der Klick ein No-op). showWorkspacePanel('properties') raeumt weiterhin
--    // alle Flags; das Zusammenklappen danach ist die einzige Ergaenzung.
-+    // Trassia: a second click closes this tool, just like its header X.
-+    // A remaining split panel takes its place; with no survivor the sidebar
-+    // collapses to icons, preserving the existing single-panel behaviour.
      if (isActive) {
 -      get().showWorkspacePanel('properties');
 -      get().setSidebarMode('collapsed');
-+      // Same targeted close as the panel header; preserve a second tool.
 +      get().closeDockedSidebarPanel(panel);
-     } else {
-       get().showWorkspacePanel(panel);
      }
+     else get().showWorkspacePanel(panel, surface);
+   },

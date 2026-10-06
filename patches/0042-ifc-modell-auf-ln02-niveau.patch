@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
-index 9464e12..70c967f 100644
+index 9464e12e7e997e8e211a9995436bda243e9abc21..70c967feb6dd77ff5551d051ea8d381bd896b7aa 100644
 --- a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
 +++ b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
 @@ -30,6 +30,8 @@ import {
@@ -27,7 +27,7 @@ index 9464e12..70c967f 100644
          setCesiumTerrainSaveHeight(
            terrainHForFrame !== null
 diff --git a/apps/viewer/src/lib/geo/cesium-bridge.ts b/apps/viewer/src/lib/geo/cesium-bridge.ts
-index 4883a4d..85690e3 100644
+index 4883a4dddd6bac05b4d01a5d2bc279e6a8023fef..85690e39f3ca707561fecfed9bbf1749d5e47d03 100644
 --- a/apps/viewer/src/lib/geo/cesium-bridge.ts
 +++ b/apps/viewer/src/lib/geo/cesium-bridge.ts
 @@ -37,6 +37,8 @@ import {

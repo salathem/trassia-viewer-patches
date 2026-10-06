@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/vite.config.ts b/apps/viewer/vite.config.ts
-index 0e273db..bf7ebae 100644
+index 0e273db7e56fba73e3de6b685cfcde9de8f5093d..bf7ebaeb9bafd83f2868df5ac1c6d128ec76c70e 100644
 --- a/apps/viewer/vite.config.ts
 +++ b/apps/viewer/vite.config.ts
 @@ -336,6 +336,17 @@ export default defineConfig({

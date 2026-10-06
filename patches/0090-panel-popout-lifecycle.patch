@@ -1,6 +1,28 @@
+diff --git a/apps/viewer/src/hooks/usePanelControls.ts b/apps/viewer/src/hooks/usePanelControls.ts
+index 3271ea5bde829b1123234d5a640257d5ad4e3392..c7a0b00406889537d3f1cfa6a9b8b668ef7ed10d 100644
+--- a/apps/viewer/src/hooks/usePanelControls.ts
++++ b/apps/viewer/src/hooks/usePanelControls.ts
+@@ -131,6 +131,7 @@ export function usePanelControls(): PanelControls {
+       useViewerStore.getState().setLeftPanelCollapsed(false);
+       return;
+     }
++    closePanelWindow(id);
+     useViewerStore.getState().openPanelInHome(id, source);
+   }, []);
+ 
+@@ -171,6 +172,7 @@ export function usePanelControls(): PanelControls {
+   }, []);
+ 
+   const closePanel = useCallback((id: WorkspacePanelId) => {
++    closePanelWindow(id); // close intent includes an unfinished pop-out request
+     if (useViewerStore.getState().closeDockedSidebarPanel(id)) return;
+     if (isLeftPanel(id)) {
+       useViewerStore.getState().setLeftPanelCollapsed(true);
+diff --git a/apps/viewer/src/services/panel-windows.ts b/apps/viewer/src/services/panel-windows.ts
+index 1c2909f5c14024a29c31e83eec96edac1396aa87..20a5b6bd4ee3383bddb81a76cb06a766708f758a 100644
 --- a/apps/viewer/src/services/panel-windows.ts
 +++ b/apps/viewer/src/services/panel-windows.ts
-@@ -44,6 +44,8 @@
+@@ -45,6 +45,8 @@ export interface PanelWindowEntry {
  }
  
  const open = new Map<WorkspacePanelId, PanelWindowEntry>();
@@ -9,7 +31,7 @@
  const listeners = new Set<() => void>();
  let snapshot: PanelWindowEntry[] = [];
  
-@@ -143,26 +145,35 @@
+@@ -144,26 +146,35 @@ export async function openPanelWindow(id: WorkspacePanelId): Promise<PanelWindow
      return existing.kind;
    }
  
@@ -49,7 +71,7 @@
    if (!win) return null; // blocked by a popup blocker
  
    try {
-@@ -185,7 +196,10 @@
+@@ -186,7 +197,10 @@ export async function openPanelWindow(id: WorkspacePanelId): Promise<PanelWindow
    open.set(id, entry);
  
    // Closing the child (its own X, or the user closing the window) re-docks.
@@ -61,7 +83,7 @@
    win.addEventListener('pagehide', onClosed, { once: true });
    win.addEventListener('unload', onClosed, { once: true });
  
-@@ -195,11 +209,13 @@
+@@ -196,11 +210,13 @@ export async function openPanelWindow(id: WorkspacePanelId): Promise<PanelWindow
  
  /** Close a popped-out panel (re-dockable from the activity bar afterwards). */
  export function closePanelWindow(id: WorkspacePanelId): void {
@@ -75,21 +97,3 @@
    for (const id of [...open.keys()]) detach(id, true);
  }
  
---- a/apps/viewer/src/hooks/usePanelControls.ts
-+++ b/apps/viewer/src/hooks/usePanelControls.ts
-@@ -130,6 +130,7 @@
-       useViewerStore.getState().setLeftPanelCollapsed(false);
-       return;
-     }
-+    closePanelWindow(id); // also cancel a PiP window still waiting for permission
-     useViewerStore.getState().openPanelInHome(id);
-   }, []);
- 
-@@ -170,6 +171,7 @@
-   }, []);
- 
-   const closePanel = useCallback((id: WorkspacePanelId) => {
-+    closePanelWindow(id); // close intent includes an unfinished pop-out request
-     if (useViewerStore.getState().closeDockedSidebarPanel(id)) return;
-     if (isLeftPanel(id)) {
-       useViewerStore.getState().setLeftPanelCollapsed(true);

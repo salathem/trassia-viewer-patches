@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/CesiumOverlay.tsx b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-index b821220..4214934 100644
+index 070f92acba877f05336c222f36905294b4aef866..3f7c5090a2e3e0d53b909f0e9fbac02b7aa07356 100644
 --- a/apps/viewer/src/components/viewer/CesiumOverlay.tsx
 +++ b/apps/viewer/src/components/viewer/CesiumOverlay.tsx
-@@ -36,6 +36,10 @@ import { useCesiumModel } from './cesium/useCesiumModel';
+@@ -37,6 +37,11 @@ import { useCesiumModel } from './cesium/useCesiumModel';
  import { useCesiumSolar } from './cesium/useCesiumSolar';
  import { useCesiumCameraSync } from './cesium/useCesiumCameraSync';
  import { CesiumViewerLifetime } from './cesium/cesium-viewer-lifetime';
@@ -10,10 +10,11 @@ index b821220..4214934 100644
 +// ZUSAETZLICHE Primitive in derselben Szene. Warum nicht als weiterer Fall in
 +// addDataSourceLayer(): siehe cesium/useChCesiumTiles.ts.
 +import { useChCesiumTiles } from './cesium/useChCesiumTiles';
- 
++
  export interface CesiumOverlayProps {
    mapConversion?: MapConversion;
-@@ -449,6 +453,11 @@ export function CesiumOverlay({
+   cameraMapConversion?: MapConversion;
+@@ -449,6 +454,11 @@ export function CesiumOverlay({
    // ─── Camera sync: mirror the viewport's pose onto the globe, per frame ──
    useCesiumCameraSync({ status, viewerRef, bridgeRef, cameraBridgeRef, terrainClipY, rafRef });
  

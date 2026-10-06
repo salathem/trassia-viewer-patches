@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/lib/geo/ifc-spatial-reference.test.ts b/apps/viewer/src/lib/geo/ifc-spatial-reference.test.ts
-index 11092f3..0ba3ef7 100644
+index 11092f3c1e2a8c311dc9552d0b58a6f643626f91..0ba3ef72b5434dfa9539feff374f0d753b50c9bd 100644
 --- a/apps/viewer/src/lib/geo/ifc-spatial-reference.test.ts
 +++ b/apps/viewer/src/lib/geo/ifc-spatial-reference.test.ts
 @@ -38,5 +38,8 @@ describe('IFC spatial-reference adapter (#5048)', () => {
@@ -12,7 +12,7 @@ index 11092f3..0ba3ef7 100644
    });
  });
 diff --git a/apps/viewer/src/lib/geo/ifc-spatial-reference.ts b/apps/viewer/src/lib/geo/ifc-spatial-reference.ts
-index 9976bec..c8162cc 100644
+index 9976bec1e62699b30b7c508d218c4342cf602997..c8162cc4fcb30e5e031f76b3b2610192deb056d8 100644
 --- a/apps/viewer/src/lib/geo/ifc-spatial-reference.ts
 +++ b/apps/viewer/src/lib/geo/ifc-spatial-reference.ts
 @@ -33,6 +33,12 @@ function declaredVerticalEpsg(name: string | undefined): string | undefined {

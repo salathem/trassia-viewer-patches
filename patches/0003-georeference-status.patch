@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx b/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx
-index c639f78..d86d3d0 100644
+index b2b2df30ba382e520dc7ce9e25076b52f5f26c5c..166edaef3245e99b7d98d72c2693a4c16eb2b385 100644
 --- a/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx
 +++ b/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx
 @@ -16,6 +16,8 @@ import { useAnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
@@ -22,7 +22,7 @@ index c639f78..d86d3d0 100644
  
    return (
 diff --git a/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx b/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx
-index 4337460..30e2654 100644
+index 0144007d795674eb7e63cc77e34aa1165569ad62..84d8c136f1d78828f8154517f1887e2a710003d8 100644
 --- a/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx
 +++ b/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx
 @@ -56,6 +56,8 @@ import {

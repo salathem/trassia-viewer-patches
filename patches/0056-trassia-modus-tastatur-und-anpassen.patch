@@ -1,11 +1,11 @@
 diff --git a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
-index 0e3f61f..5429ace 100644
+index 613daa9faf293ebc1d0510b85e4cd24395404a5f..171fc761726e21ae954c094bc2fbd6de49e8445e 100644
 --- a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
-@@ -25,6 +25,10 @@ import { useViewerStore } from '@/store';
- import { useTranslation } from '@/i18n';
+@@ -26,6 +26,10 @@ import { useTranslation } from '@/i18n';
  import { getPanelDef, type WorkspacePanelId } from '@/lib/panels/registry';
  import { resetLayout } from '@/store/layoutReset';
+ import { registerKeyboardCommand } from '@/lib/commands/dispatcher';
 +// Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
 +// 2026-09-03): der Anpassen-Dialog listet im Trassia-Modus nur die Panels, die
 +// die Leiste auch anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
@@ -13,7 +13,7 @@ index 0e3f61f..5429ace 100644
  
  export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
    const { t } = useTranslation();
-@@ -40,8 +44,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+@@ -41,8 +45,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
    const [overId, setOverId] = useState<string | null>(null);
  
    // Shown panels keep their rail order; hidden ones live in their own section.
@@ -25,11 +25,11 @@ index 0e3f61f..5429ace 100644
    // Move focus into the popover on open and restore it to the trigger on close.
    useEffect(() => {
 diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-index 2462c82..940c2ee 100644
+index 7ce4a9ce1e145c7a3f1f6c221ab6db777828ff30..0e0095951eed0f1fadadef1bb6a3e133c1b0e65d 100644
 --- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
 +++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-@@ -12,6 +12,10 @@ import { useViewerStore } from '@/store';
- import { resetVisibilityForHomeFromStore } from '@/store/homeView';
+@@ -12,6 +12,10 @@ import { showAllFromStore } from '@/store/homeView';
+ import { hideSelectionFromStore } from '@/store/hideSelection';
  import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
  import { bottomPanelFlags } from '@/lib/panels/bottom-panels';
 +// Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
@@ -37,16 +37,14 @@ index 2462c82..940c2ee 100644
 +// anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
 +import { chLeisteZeigt } from '@/lib/ch/modus';
  import { closeAllPanelWindows } from '@/services/panel-windows';
- import { eventKey, isTextEntryTarget, WALK_MOVEMENT_KEYS } from '@/lib/keyboard-event';
- import {
-@@ -122,7 +126,9 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
-     // (Alt+1 = ¡ on macOS). 1-9 map to the first nine; 0 maps to the tenth.
-     if (e.altKey && !ctrl) {
-       const shortcutPanel = workspacePanelForShortcutCode(e.code);
--      if (shortcutPanel) {
-+      // Trassia (TODO #36): ein nicht angebotenes Panel bleibt zu; die Taste
-+      // faellt durch wie eine unbelegte (kein preventDefault).
-+      if (shortcutPanel && chLeisteZeigt(shortcutPanel)) {
-         e.preventDefault();
-         useViewerStore.getState().openPanelInHome(shortcutPanel);
-         return;
+ import { WALK_MOVEMENT_KEYS, eventKey, isTextEditingElement } from '@/lib/keyboard-event';
+ import { bindModelWorkspaceKeys } from '@/lib/commands/modeling/keys-workspace';
+@@ -113,7 +117,7 @@ const RUNNERS: readonly [KeyCommandId, CommandRun][] = [
+   ['tool.annotate', () => { useViewerStore.getState().setActiveTool('annotate'); }],
+   ['ui.openPanel', (event) => {
+     const panel = workspacePanelForShortcutCode(event.code);
+-    if (!panel) return false;
++    if (!panel || !chLeisteZeigt(panel)) return false;
+     useViewerStore.getState().openPanelInHome(panel, 'shortcut');
+   }],
+   ['ui.toggleSidebar', () => { useViewerStore.getState().cycleSidebarMode(); }],

@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
-index 72d9b46..73c7406 100644
+index 72d9b463135c27969aeecd0cafa4920565a76e73..73c74062f0b9664d5a297897abd27ea289a4c549 100644
 --- a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
 @@ -31,6 +31,24 @@ const ACTIVITY_BAR_PX = 48; // w-12
@@ -41,7 +41,7 @@ index 72d9b46..73c7406 100644
        const teardown = () => {
          document.removeEventListener('mousemove', move);
 diff --git a/apps/viewer/src/store/slices/sidebarSlice.test.ts b/apps/viewer/src/store/slices/sidebarSlice.test.ts
-index 747d999..23385d4 100644
+index e44e4012f21ed2c92c611827e7688e7fc41a74ac..6e3ea0478d3118b74ae175d9150a3ce77bd87662 100644
 --- a/apps/viewer/src/store/slices/sidebarSlice.test.ts
 +++ b/apps/viewer/src/store/slices/sidebarSlice.test.ts
 @@ -59,7 +59,16 @@ describe('sidebarSlice (#1208)', () => {
@@ -63,10 +63,10 @@ index 747d999..23385d4 100644
  
    it('reorders a panel to the front', () => {
 diff --git a/apps/viewer/src/store/slices/sidebarSlice.ts b/apps/viewer/src/store/slices/sidebarSlice.ts
-index 3c97ffe..900eb7d 100644
+index 29e8fbf0f6ec1cd142b6610db818557bab419fbd..5272a159041d81f35df690755ebd11949448d987 100644
 --- a/apps/viewer/src/store/slices/sidebarSlice.ts
 +++ b/apps/viewer/src/store/slices/sidebarSlice.ts
-@@ -57,7 +57,19 @@ export interface SidebarLayoutSnapshot {
+@@ -58,7 +58,19 @@ export interface SidebarLayoutSnapshot {
  }
  
  const STORAGE_KEY = 'ifc-lite:sidebar-layout-v1';
@@ -86,4 +86,4 @@ index 3c97ffe..900eb7d 100644
 +const MIN_WIDTH_PCT = 6;
  const MAX_WIDTH_PCT = 60;
  
- // Display order in the rail. Hierarchy (#1267) is appended to WORKSPACE_PANELS
+ // Fresh layouts cluster the registry's task groups; persisted custom order is

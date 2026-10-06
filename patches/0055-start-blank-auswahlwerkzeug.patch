@@ -1,17 +1,13 @@
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index 081c4b0..03eeba5 100644
+index 77c37f7e4fb0a0cfdcd383f753cfb0cb713d7660..32f738642c102c4b81bcd1a36014e705f44e3fca 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -587,7 +587,11 @@ export function ViewportContainer() {
-     // resets activeTool back to 'select'. Setting addElement before that
-     // races and leaves the user in select mode despite the click.
+@@ -526,7 +526,7 @@ export function ViewportContainer() {
+     // Must await: loadFile() calls resetViewerState() internally, which
+     // closes any Model workspace session; entering before that races.
      await loadFile(file);
--    setActiveTool('addElement');
-+    // Trassia (U2, Tester M3): im Trassia-Modus bleibt das leere Projekt im
-+    // Auswahlwerkzeug — Author-Reiter und Add-element-Panel werden dort nicht
-+    // angeboten, ein unsichtbar scharfes Wandwerkzeug zeichnete beim ersten
-+    // Klick in die Szene eine Wand. Im Vollmodus wie Upstream.
-+    if (chVollmodus()) setActiveTool('addElement');
-   }, [webgpu.supported, loadFile, setActiveTool]);
+-    launchModelCommand('wall.place'); // straight into drawing walls (#6232)
++    if (chVollmodus()) launchModelCommand('wall.place'); // straight into drawing walls (#6232)
+   }, [guardWebGpu, loadFile]);
  
    // Issue #540 "Merge Multilayer Walls" reload. The setting changes the produced

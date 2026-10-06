@@ -15,6 +15,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { useViewerStore } from '@/store';
+import type { UiSurface } from '@/lib/analytics-ui-events';
 import {
   isAnalysisPanel,
   isLeftPanel,
@@ -35,9 +36,9 @@ export interface PanelControls {
   isOpen: (id: WorkspacePanelId) => boolean;
   panelLocation: (id: WorkspacePanelId) => PanelLocation;
   /** Open a panel in its home region (right pane or bottom strip). */
-  openInHome: (id: WorkspacePanelId) => void;
+  openInHome: (id: WorkspacePanelId, source?: UiSurface) => void;
   /** Toggle a panel in its home region (second activation closes it). */
-  toggle: (id: WorkspacePanelId) => void;
+  toggle: (id: WorkspacePanelId, source?: UiSurface) => void;
   /** Pop the panel into an in-app floating window. */
   floatPanel: (id: WorkspacePanelId) => void;
   /** Tear the panel off into an OS / PiP window (another screen). */
@@ -123,18 +124,18 @@ export function usePanelControls(): PanelControls {
     [floatingIds, poppedIds, isDockedInHome],
   );
 
-  const openInHome = useCallback((id: WorkspacePanelId) => {
+  const openInHome = useCallback((id: WorkspacePanelId, source: UiSurface = 'rail') => {
     // Hierarchy's home is the left slot, so reveal it instead of routing through
     // the right-pane / bottom-strip flags (#1267).
     if (isLeftPanel(id)) {
       useViewerStore.getState().setLeftPanelCollapsed(false);
       return;
     }
-    closePanelWindow(id); // also cancel a PiP window still waiting for permission
-    useViewerStore.getState().openPanelInHome(id);
+    closePanelWindow(id);
+    useViewerStore.getState().openPanelInHome(id, source);
   }, []);
 
-  const toggle = useCallback((id: WorkspacePanelId) => {
+  const toggle = useCallback((id: WorkspacePanelId, source: UiSurface = 'rail') => {
     if (isLeftPanel(id)) {
       const s = useViewerStore.getState();
       s.setLeftPanelCollapsed(!s.leftPanelCollapsed);
@@ -147,8 +148,8 @@ export function usePanelControls(): PanelControls {
       useViewerStore.getState().setSidebarSecondaryPanel(null);
       return;
     }
-    if (isBottomPanel(id)) useViewerStore.getState().toggleBottomPanel(id);
-    else useViewerStore.getState().toggleWorkspacePanel(id);
+    if (isBottomPanel(id)) useViewerStore.getState().toggleBottomPanel(id, source);
+    else useViewerStore.getState().toggleWorkspacePanel(id, source);
   }, []);
 
   const floatPanel = useCallback((id: WorkspacePanelId) => {

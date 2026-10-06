@@ -1,17 +1,17 @@
 diff --git a/apps/viewer/src/components/viewer/Viewport.tsx b/apps/viewer/src/components/viewer/Viewport.tsx
-index f8eed29..f4af857 100644
+index 849d113698a0e3da903aa9d12b1d8254f7194e91..7864e237aadc1fb1852c0cd3e5ed4a87d35c1311 100644
 --- a/apps/viewer/src/components/viewer/Viewport.tsx
 +++ b/apps/viewer/src/components/viewer/Viewport.tsx
-@@ -69,6 +69,8 @@ import { useDxfUnderlays3DLines } from '../../hooks/useDxfUnderlay.js';
- import { useLandXmlRendererOverlay } from '../../hooks/useLandXmlOverlayLines.js';
- import { selectLandXmlViewportPick } from './landXmlViewportSelection.js';
+@@ -74,6 +74,8 @@ import { useLandXmlRendererOverlay } from '../../hooks/useLandXmlOverlayLines.js
+ import { useCentrelineRendererOverlay } from '../../hooks/useCentrelineRendererOverlay.js';
+ import { selectPickedGlobalId, toggleGlobalIdInSelection } from './viewport-selection.js';
  import { uploadDxfLines3DGuarded } from './dxf-lines-3d-upload.js';
 +// Trassia overlay (not upstream) — Paket V-DRAPE, siehe hooks/useChDrapeLines.ts.
 +import { chDrapeMergeLines, useChDrapeLines } from '@/hooks/useChDrapeLines';
  import { subscribeViewportHealth } from './device-loss-report.js';
- import { runGpuUpload } from './gpu-upload-guard.js';
+ import { useAuthoringOverlay } from './useAuthoringOverlay.js';
  import { anchorWorldLineVertices, rendererLineVertexData } from '@/lib/renderer/line-overlay-rte';
-@@ -1476,7 +1478,20 @@ export function Viewport({
+@@ -1325,7 +1327,20 @@ export function Viewport({
    // a load-time choice — see DxfUnderlayPanel.tsx), independent of the 2D
    // drawing panel's underlay. Only line paths are lifted to 3D; fills/text
    // are not (see dxfUnderlayToWorldLines3D's doc).
@@ -34,41 +34,26 @@ index f8eed29..f4af857 100644
      const renderer = rendererRef.current;
      if (!renderer || !isInitialized) return;
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index cbfdc53..75f193e 100644
+index ba3b2aeb24b140483ad0b137383e4c65f6e1a2d4..4c1608c66f6c4011c3fd37c1e1afdc19f4d0d354 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -60,6 +60,8 @@ import { recordDownloadedSourceFile } from '@/lib/sources/persistence';
+@@ -61,6 +61,7 @@ import { recordDownloadedSourceFile } from '@/lib/sources/persistence';
  import { sanitizeFilename } from '@/lib/export/download';
  import { enqueueSourceLoad } from '@/lib/sources/loadQueue';
  import { toast, Toaster } from '@/components/ui/toast';
-+// Trassia overlay (not upstream) — Paket V-DRAPE, siehe lib/ch/drape-ingest.ts.
 +import { chDrapeTakeDroppedFiles, chDrapeUnderlayCandidates } from '@/lib/ch/drape-ingest';
- import { describeUnsupportedFormat } from '@/hooks/ingest/unsupportedFormat';
- import { Upload, Command, AlertTriangle, ChevronDown, ExternalLink, Plus } from 'lucide-react';
+ import { reportFileOpenRejected } from '@/hooks/ingest/fileOpenRejected';
+ import { Upload, AlertTriangle, ChevronDown, ExternalLink, Plus } from 'lucide-react';
  import { createBlankIfcFile } from '@/utils/createBlankIfc';
-@@ -477,7 +479,24 @@ export function ViewportContainer() {
-     // a dropped site plan must never replace or federate with the model.
-     const allDropped0 = Array.from(e.dataTransfer.files);
-     const { dxfFiles, modelFiles: allDropped } = splitDxfFiles(allDropped0);
--    if (dxfFiles.length > 0) void ingestDxfFiles(dxfFiles);
-+    // Trassia (Paket V-DRAPE v2): dieselbe Datei ZUSAETZLICH auf das Gelaende
-+    // legen. Die 2D-Unterlage bleibt fuer normal grosse Dateien, wie sie war —
-+    // hier kommt nur eine 3D-Fassung dazu, die im Panel „Terrain drape" ein-
-+    // und ausschaltbar ist. GeoJSON kommt nicht durch `splitDxfFiles`, also
-+    // wird aus der vollen Liste gelesen.
-+    //
-+    // Die Unterlage kommt DANACH und nur fuer die Dateien, aus denen sie etwas
-+    // machen kann (Befund M-2: sonst stehen „contains no drawable 2D entities"
-+    // und „draped onto the terrain" nebeneinander). Sehr grosse DXF bleiben
-+    // ganz draussen — `importDxf` laeuft auf dem Hauptthread und in einem Zug,
-+    // und bei 153 MB steht der Tab dabei trotz unseres Workers
-+    // (`chDrapeUnderlayCandidates`; der Hinweis dazu steht im Toast).
-+    void chDrapeTakeDroppedFiles(allDropped0).then((fuerUnterlage) => {
-+      const dxfFuerUnterlage = chDrapeUnderlayCandidates(
-+        dxfFiles.filter((f) => fuerUnterlage.includes(f)),
-+      );
-+      if (dxfFuerUnterlage.length > 0) void ingestDxfFiles(dxfFuerUnterlage);
-+    });
-     if (allDropped.length === 0) return;
+@@ -438,7 +439,10 @@ export function ViewportContainer() {
+     const attempt = () => {
+       if (!guardWebGpu(attempt)) return;
+       const { dxfFiles, modelFiles: allDropped } = splitDxfFiles(droppedFiles);
+-      if (dxfFiles.length > 0) void ingestDxfFiles(dxfFiles);
++      void chDrapeTakeDroppedFiles(droppedFiles).then((forUnderlay) => {
++        const candidates = chDrapeUnderlayCandidates(dxfFiles.filter(f => forUnderlay.includes(f)));
++        if (candidates.length > 0) void ingestDxfFiles(candidates);
++      });
+       if (allDropped.length === 0) return;
  
-     // Keep glTF sidecars beside the document until they are packed into GLB.
+       // Keep glTF sidecars beside the document until they are packed into GLB.

@@ -9,7 +9,8 @@
  *
  *  - `SectionHint` — the one hint line in the HUD's bottom-center region;
  *  - `SectionPlaneVisualization` — the face-picked plane's drag gizmo and
- *    the pick preview.
+ *    the pick preview;
+ *  - `SectionBoxVisualization` — the section box's faces and handles (#5513).
  *
  * What remains here is the tool's lifecycle: restoring the last-used mode
  * on open, disarming the face pick on close, and never leaving a scan
@@ -19,12 +20,15 @@
 import { useEffect } from 'react';
 import { useViewerStore, loadLastSectionMode } from '@/store';
 import { SectionPlaneVisualization } from './SectionVisualization';
+import { SectionBoxVisualization } from './SectionBoxVisualization';
 import { SectionHint } from './SectionHint';
+import { startAlignmentTool, useAlignmentToolState } from '@/lib/section/alignment-controller';
 // Trassia overlay (not upstream) — Achsschnitt, Querprofil-Werkzeuge und Profil-Reiter
 // als eigenes HUD-Element; siehe overlay/apps/viewer/src/components/viewer/tools/ChSchnittKarte.tsx
 import { ChSchnittKarte } from './ChSchnittKarte';
 
 export function SectionOverlay() {
+  useEffect(startAlignmentTool, []);
   const sectionEnabled = useViewerStore((s) => s.sectionPlane.enabled);
   const setSectionPlaneAxis = useViewerStore((s) => s.setSectionPlaneAxis);
   const setSectionPlanePosition = useViewerStore((s) => s.setSectionPlanePosition);
@@ -53,6 +57,9 @@ export function SectionOverlay() {
   //                  enabled by these setters so the cut is immediately
   //                  visible — matches the user's mental model of
   //                  "opening the tool where I left it".
+  //   • 'box'      — a parked box resumes by itself (`section-active.ts`);
+  //                  with no box left (a new file), arm the pick like a
+  //                  first open (#5513).
   //
   // Cleanup disarms pick mode on unmount so leaving the tool doesn't
   // leave pick mode armed for the next tool.
@@ -60,7 +67,9 @@ export function SectionOverlay() {
     const mode = loadLastSectionMode();
     let armTimer: ReturnType<typeof setTimeout> | null = null;
 
-    if (mode.kind === 'cardinal') {
+    if (useViewerStore.getState().sectionPlane.custom?.alignment) {
+      setSectionPickMode(false);
+    } else if (mode.kind === 'cardinal') {
       // Read current flipped via getState() so we don't pull the live
       // store value into the dep array (which would re-run the effect
       // every flip and clobber the restore on each interaction).
@@ -68,8 +77,14 @@ export function SectionOverlay() {
       setSectionPlaneAxis(mode.axis);
       setSectionPlanePosition(mode.position);
       if (currentFlipped !== mode.flipped) flipSectionPlane();
-    } else {
-      armTimer = setTimeout(() => setSectionPickMode(true), 200);
+    } else if (mode.kind === 'pick' || !useViewerStore.getState().sectionPlane.box) {
+      armTimer = setTimeout(() => {
+        // A user may choose an alignment before the opening-click debounce
+        // expires; the old face-pick timer must not cancel that evaluator.
+        if (!useAlignmentToolState.getState().choosing && !useViewerStore.getState().sectionPlane.custom?.alignment) {
+          setSectionPickMode(true);
+        }
+      }, 200);
     }
 
     return () => {
@@ -91,6 +106,7 @@ export function SectionOverlay() {
 
       {/* Section plane visualization overlay */}
       <SectionPlaneVisualization enabled={sectionEnabled} />
+      <SectionBoxVisualization />
     </>
   );
 }

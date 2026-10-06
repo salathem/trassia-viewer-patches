@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/store/store-sync.ts b/apps/viewer/src/store/store-sync.ts
-index 278d254..163ef72 100644
+index 278d2546a20578c135677ff1f4db92f186e287f3..163ef72e666d3e7bed9dc0e83c9304cd9c2664ea 100644
 --- a/apps/viewer/src/store/store-sync.ts
 +++ b/apps/viewer/src/store/store-sync.ts
 @@ -22,6 +22,9 @@ export const SIDEBAR_PANEL_FLAGS: ReadonlyArray<readonly [keyof ViewerState, Wor

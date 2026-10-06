@@ -1,8 +1,17 @@
 diff --git a/apps/viewer/src/components/viewer/PropertiesPanel.tsx b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-index 83a0557..36f5a3f 100644
+index 0ff6b36578714f6208a78f854018ce48e86d04ee..5d16190142475f18bfcd979f0aa8c5cd55ecc774 100644
 --- a/apps/viewer/src/components/viewer/PropertiesPanel.tsx
 +++ b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-@@ -34,6 +34,9 @@ import { getEffectiveGeoreference } from '@/lib/geo/effective-georef';
+@@ -3,7 +3,7 @@
+  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ 
+ import { ACTION_NAME_KEYS } from '@/lib/commands/action-names';
+-import { useMemo, useState, useCallback, useEffect } from 'react';
++import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+ import { useTranslation } from '@/i18n';
+ import { Copy, Check, Building2, Layers, Layers2, FileText, Calculator, Tag, MousePointer2, PenLine, Crosshair, Box, ChevronDown } from 'lucide-react';
+ import { Badge } from '@/components/ui/badge';
+@@ -38,6 +38,9 @@ import { getEffectiveGeoreference } from '@/lib/geo/effective-georef';
  import { displayStoreyElevationMeters } from '@/lib/geo/storey-elevation';
  import { useRenderFrameOffsets } from '@/hooks/useRenderFrameOffsets';
  import { PropertySetCard } from './properties/PropertySetCard';
@@ -10,22 +19,49 @@ index 83a0557..36f5a3f 100644
 +import { chSortPsetsChFirst, chFilterPsets, chPsetGroupLabel } from '@/lib/ch/ch-psets';
 +import { ChPropertyFilterBar } from './properties/ChPropertyFilterBar';
  import { QuantitySetCard } from './properties/QuantitySetCard';
- import { ModelMetadataPanel } from './properties/ModelMetadataPanel';
- import { useLandXmlSourceInspector } from './properties/useLandXmlSourceInspector';
-@@ -169,6 +172,10 @@ export function PropertiesPanel() {
-   const [copied, setCopied] = useState(false);
-   const [coordCopied, setCoordCopied] = useState<string | null>(null);
-   const [coordOpen, setCoordOpen] = useState(false);
-+  // Trassia: free-text filter over the rendered property sets. Component
-+  // state, deliberately not store state — it is a reading aid for the
-+  // current selection, not a viewer mode worth persisting or sharing.
+ import { SweptDiskInspection } from './properties/SweptDiskInspection';
+ import { ExtrusionInspection } from './properties/ExtrusionInspection';
+@@ -80,6 +83,29 @@ import { CopyValueButton } from './properties/CopyValueButton';
+ import { useCopyValue } from './properties/useCopyValue';
+ import { SelectionSummaryPanel } from './properties/SelectionSummaryPanel';
+ export function PropertiesPanel() {
++  const isMobile = useViewerStore((s) => s.isMobile);
++  // On a short mobile sheet the complete header and body share one scroll
++  // owner; an expanded coordinate reference cannot shrink the body to zero.
++  const propertiesFrameRef = useRef<HTMLDivElement>(null);
++  const [compactFrame, setCompactFrame] = useState(false);
++  const scrollWholePanel = isMobile || compactFrame;
++  const PropertiesScrollArea = scrollWholePanel ? 'div' : ScrollArea;
++  useEffect(() => {
++    const frame = propertiesFrameRef.current;
++    const tabs = frame?.querySelector<HTMLElement>('[data-properties-tabs]');
++    if (!frame || !tabs) return;
++    const measure = () => {
++      if (frame.clientHeight <= 0) return;
++      const headerHeight = tabs.getBoundingClientRect().top - frame.getBoundingClientRect().top + frame.scrollTop;
++      setCompactFrame(frame.clientHeight - headerHeight < 120);
++    };
++    measure();
++    if (typeof ResizeObserver === 'undefined') return;
++    const observer = new ResizeObserver(measure);
++    observer.observe(frame);
++    for (const child of frame.children) observer.observe(child);
++    return () => observer.disconnect();
++  });
+   const { t, locale } = useTranslation();
+   // Display-unit converter overrides (issue #1573 proposal 2) — read once
+   // here and threaded to every PropertySetCard/QuantitySetCard render site
+@@ -139,6 +165,7 @@ export function PropertiesPanel() {
+   const copied = copiedKey === 'globalId';
+   const [coordOpen, setCoordOpen] = usePersistentDisclosure('coordinates', false);
+   const [find, setFind] = useState('');
 +  const [chPropFilter, setChPropFilter] = useState('');
  
    // Inline property editing is gated by the global edit-mode pill in
    // the main toolbar (see `uiSlice.editEnabled`). Reading it from the
-@@ -1158,8 +1165,12 @@ export function PropertiesPanel() {
-   const renderedEntityDescription = overlayAttr(3) ?? entityNode?.description ?? undefined;
-   const renderedEntityObjectType = overlayAttr(4) ?? entityNode?.objectType ?? undefined;
+@@ -1084,8 +1111,12 @@ export function PropertiesPanel() {
+   const renderedEntityName = overlayAttr(2) ?? entityNode?.name ?? undefined;
+   const renderedEntityGlobalId = overlayAttr(0) ?? entityNode?.globalId;
    const renderedSpatialInfo = spatialInfo;
 -  const renderedOccurrenceProperties = occurrenceProperties;
 -  const renderedInheritedTypeProperties = inheritedTypeProperties;
@@ -38,7 +74,37 @@ index 83a0557..36f5a3f 100644
    const renderedMergedProperties = mergedProperties;
    const renderedQuantities = quantities;
    const renderedQuantitiesWithInheritedType = quantitiesWithInheritedType;
-@@ -1600,6 +1611,15 @@ export function PropertiesPanel() {
+@@ -1237,7 +1268,7 @@ export function PropertiesPanel() {
+   const entityGlobalId = renderedEntityGlobalId;
+ 
+   return (
+-    <div {...tourAnchor(TOUR_ANCHORS.propertiesPanel)} className="h-full flex flex-col border-l-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-black">
++    <div {...tourAnchor(TOUR_ANCHORS.propertiesPanel)} ref={propertiesFrameRef} className={scrollWholePanel ? "h-full min-h-0 overflow-y-auto border-l-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-black" : "h-full min-h-0 flex flex-col border-l-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-black"}>
+       {/* Entity Header */}
+       <div className="p-4 border-b-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-black space-y-3">
+         <div className="flex items-start gap-3">
+@@ -1506,9 +1537,10 @@ export function PropertiesPanel() {
+         </output>
+       )}
+       <Tabs
++        data-properties-tabs
+         value={propertiesActiveTab}
+         onValueChange={(v) => setPropertiesActiveTab(v as 'properties' | 'quantities' | 'bsdd' | 'raw-step')}
+-        className="flex-1 flex flex-col overflow-hidden"
++        className={scrollWholePanel ? "block" : "flex-1 min-h-0 flex flex-col overflow-hidden"}
+       >
+         <TabsList className="properties-tabs-list w-full shrink-0">
+           <TabsTrigger
+@@ -1549,7 +1581,7 @@ export function PropertiesPanel() {
+           </TabsTrigger>
+         </TabsList>
+ 
+-        <ScrollArea className="flex-1 bg-white dark:bg-black">
++        <PropertiesScrollArea className="flex-1 min-h-0 bg-white dark:bg-black">
+           <TabsContent value="properties" className="m-0 p-3 overflow-hidden">
+             {/* Task edit card — renders when exactly one Gantt task is
+                 selected. Shown above any entity properties because the
+@@ -1561,6 +1593,15 @@ export function PropertiesPanel() {
                  <TaskEditCard taskGlobalId={singleSelectedTaskGlobalId} />
                </div>
              )}
@@ -54,7 +120,7 @@ index 83a0557..36f5a3f 100644
              {/* Edit toolbar - only shown when edit mode is active */}
              {editMode && selectedEntity && (
                <>
-@@ -1645,6 +1665,7 @@ export function PropertiesPanel() {
+@@ -1604,6 +1645,7 @@ export function PropertiesPanel() {
                        <PropertySetCard
                          key={`occ-${pset.name}-${index}`}
                          pset={pset}
@@ -62,7 +128,7 @@ index 83a0557..36f5a3f 100644
                          modelId={selectedEntity?.modelId}
                          entityId={selectedEntity?.expressId}
                          enableEditing={editMode}
-@@ -1672,6 +1693,7 @@ export function PropertiesPanel() {
+@@ -1632,6 +1674,7 @@ export function PropertiesPanel() {
                        <PropertySetCard
                          key={`type-${pset.name}-${index}`}
                          pset={pset}
@@ -70,37 +136,42 @@ index 83a0557..36f5a3f 100644
                          modelId={selectedEntity?.modelId}
                          entityId={renderedTypeProperties.typeId}
                          enableEditing={editMode}
+@@ -1795,7 +1838,7 @@ export function PropertiesPanel() {
+               </p>
+             )}
+           </TabsContent>
+-        </ScrollArea>
++        </PropertiesScrollArea>
+       </Tabs>
+     </div>
+   );
 diff --git a/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx b/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx
-index 2e41481..b81a4e6 100644
+index 8431bbfa2e6b92fb8b770b147386e8532844a994..bf83fa8229c2fb74bf234a7bf981d333a5fc8289 100644
 --- a/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx
 +++ b/apps/viewer/src/components/viewer/properties/PropertySetCard.tsx
-@@ -39,9 +39,14 @@ export interface PropertySetCardProps {
+@@ -40,11 +40,12 @@ export interface PropertySetCardProps {
     *  renders CONVERTED into that unit instead of the file's raw value.
     *  Omitted (or empty) keeps the existing unconverted-file-unit display. */
    unitDisplayOverrides?: Record<string, string>;
-+  /** Trassia: family badge for a Swiss/Trassia provenance set — `Origin`,
-+   *  `Processing`, `Alignment`, `Client`, `Source data`. Undefined for an
-+   *  ordinary IFC set, which then renders exactly as before
-+   *  (see `lib/ch/ch-psets.ts`). */
 +  chGroupLabel?: string;
+   searchQuery?: string;
+   sectionScope?: string;
  }
  
--export function PropertySetCard({ pset, modelId, entityId, enableEditing, isTypeProperty, typeEditScope, focusedPropKey, projectUnits, unitDisplayOverrides }: PropertySetCardProps) {
-+export function PropertySetCard({ pset, modelId, entityId, enableEditing, isTypeProperty, typeEditScope, focusedPropKey, projectUnits, unitDisplayOverrides, chGroupLabel }: PropertySetCardProps) {
+-export function PropertySetCard({ pset, modelId, entityId, enableEditing, isTypeProperty, typeEditScope, focusedPropKey, projectUnits, unitDisplayOverrides, searchQuery, sectionScope = 'default' }: PropertySetCardProps) {
++export function PropertySetCard({ pset, modelId, entityId, enableEditing, isTypeProperty, typeEditScope, focusedPropKey, projectUnits, unitDisplayOverrides, searchQuery, chGroupLabel, sectionScope = 'default' }: PropertySetCardProps) {
    const { t } = useTranslation();
    // Check if any property in this set is mutated
    const hasMutations = pset.properties.some(p => p.isMutated);
-@@ -105,6 +110,13 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
+@@ -105,6 +106,11 @@ export function PropertySetCard({ pset, modelId, entityId, enableEditing, isType
            </Tooltip>
          )}
-         <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-0">{setDisplayName(pset.name, t('properties.propertySet.unnamed'))}</span>
-+        {/* Trassia: names WHY this set is at the top of the panel. Data
-+            provenance is the first question on a converted Swiss model. */}
+         <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-0"><PropertySearchHighlight text={setDisplayName(pset.name, t('properties.propertySet.unnamed'))} query={searchQuery} /></span>
 +        {chGroupLabel && (
 +          <span className="text-[9px] uppercase tracking-wider font-semibold bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200 border border-teal-300 dark:border-teal-700 px-1.5 py-0.5 shrink-0">
 +            {chGroupLabel}
 +          </span>
 +        )}
-         <span className="text-[10px] font-mono bg-zinc-100 dark:bg-zinc-900 px-1.5 py-0.5 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 shrink-0">{pset.properties.length}</span>
+         <span className="text-2xs font-mono bg-zinc-100 dark:bg-zinc-900 px-1.5 py-0.5 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 shrink-0">{pset.properties.length}</span>
+         <ChevronDown className="size-3 shrink-0 transition-transform group-data-[state=closed]/disclosure:-rotate-90" aria-hidden="true" />
        </CollapsibleTrigger>
-       <CollapsibleContent>

@@ -1,18 +1,18 @@
 diff --git a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
-index 2053651..7605f87 100644
+index f739e1879811fa5f2664abd9e1cded21ef35ea42..5338e7ce65f3d65693351fddba1b7592736ce627 100644
 --- a/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
 +++ b/apps/viewer/src/components/viewer/tools/SectionPanel.tsx
-@@ -20,6 +20,9 @@ import { useEffect } from 'react';
- import { useViewerStore, loadLastSectionMode } from '@/store';
- import { SectionPlaneVisualization } from './SectionVisualization';
+@@ -23,6 +23,9 @@ import { SectionPlaneVisualization } from './SectionVisualization';
+ import { SectionBoxVisualization } from './SectionBoxVisualization';
  import { SectionHint } from './SectionHint';
+ import { startAlignmentTool, useAlignmentToolState } from '@/lib/section/alignment-controller';
 +// Trassia overlay (not upstream) — Achsschnitt, Querprofil-Werkzeuge und Profil-Reiter
 +// als eigenes HUD-Element; siehe overlay/apps/viewer/src/components/viewer/tools/ChSchnittKarte.tsx
 +import { ChSchnittKarte } from './ChSchnittKarte';
  
  export function SectionOverlay() {
-   const sectionEnabled = useViewerStore((s) => s.sectionPlane.enabled);
-@@ -82,6 +85,9 @@ export function SectionOverlay() {
+   useEffect(startAlignmentTool, []);
+@@ -97,6 +100,9 @@ export function SectionOverlay() {
    return (
      <>
        <SectionHint />

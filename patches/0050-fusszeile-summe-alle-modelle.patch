@@ -1,8 +1,29 @@
+diff --git a/apps/viewer/src/components/viewer/PerformanceStats.tsx b/apps/viewer/src/components/viewer/PerformanceStats.tsx
+index 4e1765116691b1cdeb4cebebfc74345277638be8..ee586ec80228c1f5b46c6925ad1339385b600686 100644
+--- a/apps/viewer/src/components/viewer/PerformanceStats.tsx
++++ b/apps/viewer/src/components/viewer/PerformanceStats.tsx
+@@ -5,6 +5,7 @@
+ /** Diagnostic readouts mount only when the user enables performance stats. */
+ 
+ import { useEffect, useMemo, useState } from 'react';
++import { chZahlExakt } from '@/lib/ch/gesamt-statistik';
+ import { Triangle } from 'lucide-react';
+ import { Separator } from '@/components/ui/separator';
+ import { useTranslation } from '@/i18n';
+@@ -25,7 +26,7 @@ export function TriangleCount({ models, geometryResult }: {
+   }, [models, geometryResult]);
+ 
+   return (
+-    <div className="flex items-center gap-1.5">
++    <div className="flex items-center gap-1.5" title={`${chZahlExakt(count)} triangles`}>
+       <Triangle className="h-3.5 w-3.5" />
+       <span>{formatNumber(count)} {t('shellChrome.statusBar.trisCount', { count })}</span>
+     </div>
 diff --git a/apps/viewer/src/components/viewer/StatusBar.tsx b/apps/viewer/src/components/viewer/StatusBar.tsx
-index 25d0978..0d2f5e7 100644
+index 3097fdf5d186fcd40ab483a1c2dd61e738c38fa8..f4cba387871b0415d0052d320e0add0edb409d9a 100644
 --- a/apps/viewer/src/components/viewer/StatusBar.tsx
 +++ b/apps/viewer/src/components/viewer/StatusBar.tsx
-@@ -34,6 +34,8 @@ interface CountedModel {
+@@ -43,6 +43,8 @@ interface CountedModel {
  // Projektmappe wohnt in der halb leeren Fusszeile statt in einer eigenen
  // Kopfzeile ueber dem Bild.
  import { ChProjektFuss } from './ChProjektFuss';
@@ -11,21 +32,12 @@ index 25d0978..0d2f5e7 100644
  
  export function StatusBar() {
    const { t } = useTranslation();
-@@ -329,7 +331,7 @@ export function StatusBar() {
-       {/* Center: Model Stats */}
+@@ -296,7 +298,7 @@ export function StatusBar() {
        {/* Trassia: gap-4 -> gap-3, ein Abstand fuer die ganze Zeile. */}
        <div className="flex shrink-0 items-center gap-3">
+         <Separator orientation="vertical" className="h-3.5" />
 -        <div className="flex items-center gap-1.5">
 +        <div className="flex items-center gap-1.5" title={`${chZahlExakt(visibleElements)} elements${models.size > 1 ? ` in ${models.size} models` : ''}`}>
            <Boxes className="h-3.5 w-3.5" />
            <span>
              {formatNumber(visibleElements)}
-@@ -342,7 +344,7 @@ export function StatusBar() {
- 
-         <Separator orientation="vertical" className="h-3.5" />
- 
--        <div className="flex items-center gap-1.5">
-+        <div className="flex items-center gap-1.5" title={`${chZahlExakt(triangleCount)} triangles`}>
-           <Triangle className="h-3.5 w-3.5" />
-           <span>
-             {formatNumber(triangleCount)} {t('shellChrome.statusBar.trisCount', { count: triangleCount })}

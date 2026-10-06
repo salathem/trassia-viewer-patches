@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-index c9b349a..077ca57 100644
+index 246ec94f50c81e5c94b4a5feab836a833fe30078..78ce87e2da5866e1672b166b813beac83993e3bc 100644
 --- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
 +++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-@@ -40,6 +40,13 @@ import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
+@@ -44,6 +44,13 @@ import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
  import { useChProjectLoader } from '@/hooks/useChProjectLoader';
  import { ChProjectBanner } from './ChProjectBanner';
  import { ChLensEngine } from './ChLensEngine';
@@ -16,10 +16,11 @@ index c9b349a..077ca57 100644
  import { chReadProjectParam } from '@/lib/ch/project-manifest';
  import { EntityContextMenu } from './EntityContextMenu';
  import { AnonymizedExportDialog } from './anonymized-export/AnonymizedExportDialog';
-@@ -349,6 +356,17 @@ export function ViewerLayout() {
-             files hang in. */}
+@@ -273,6 +280,21 @@ export function ViewerLayout() {
+           </div>
+         )}
          <ChProjectBanner />
- 
++
 +        {/* Trassia: benannte Ansichten dieser Mappe (U3). Nur bei `?project=`,
 +            weil die Ablage am Mappen-Slug haengt. */}
 +        <ChViewsBar />
@@ -31,6 +32,9 @@ index c9b349a..077ca57 100644
 +        {/* Trassia: kein Bauteil, ein Beobachter (P4). */}
 +        <ChPanelStackKeeper />
 +
-         {/* Trassia: on a phone the Lens panel is never mounted (one bottom
-             sheet, closed at start), so nothing evaluates the lens a project
-             manifest set. This runs it where the panel cannot. */}
++        {/* Trassia: on a phone the Lens panel is never mounted (one bottom
++            sheet, closed at start), so nothing evaluates the lens a project
++            manifest set. This runs it where the panel cannot. */}
+         <ChLensEngine />
+         <ChLoadNoticeBanner />
+         <KeyboardShortcutsDialog open={shortcutsDialog.open} onClose={shortcutsDialog.close} initialTab={shortcutsDialog.tab} />

@@ -1,10 +1,10 @@
 diff --git a/apps/viewer/src/components/viewer/PropertiesPanel.tsx b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-index 36f5a3f..6a51624 100644
+index 5d16190142475f18bfcd979f0aa8c5cd55ecc774..c397e7f7a843604bf20d41fbc8078f02894267cc 100644
 --- a/apps/viewer/src/components/viewer/PropertiesPanel.tsx
 +++ b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-@@ -27,7 +27,9 @@ import type { EntityRef, FederatedModel } from '@/store/types';
- import { ZoneVolumeBreakdown } from './ZoneVolumeBreakdown';
+@@ -31,7 +31,9 @@ import { ZoneVolumeBreakdown } from './ZoneVolumeBreakdown';
  import type { ZoneSet } from '@/lib/zones';
+ import { overlayClassifications, overlayMaterials } from '@/lib/authoring/association-overlay';
  import { withInheritedTypeQuantities } from '@/lib/zones/inherited-quantities';
 -import { CoordVal, CoordRow } from './properties/CoordinateDisplay';
 +import { CoordRow } from './properties/CoordinateDisplay';
@@ -13,29 +13,30 @@ index 36f5a3f..6a51624 100644
  import { renderToWorldViewer } from './tools/measure-modes/coordinates';
  import { viewerToIfcAxes } from '@/lib/geo/coordinate-frame';
  import { getEffectiveGeoreference } from '@/lib/geo/effective-georef';
-@@ -1391,16 +1393,11 @@ export function PropertiesPanel() {
+@@ -1364,32 +1366,25 @@ export function PropertiesPanel() {
                <span className="font-bold uppercase tracking-wide shrink-0">{t('properties.panel.worldCoordinates')}</span>
                {!coordOpen && (
                  <>
 -                  {entityCoordinates && (
--                    <span className="font-mono text-[10px] text-teal-600/70 dark:text-teal-500/70 truncate min-w-0 flex-1 tabular-nums">
+-                    <span className="font-mono text-2xs text-teal-600/70 dark:text-teal-500/70 truncate min-w-0 flex-1 tabular-nums">
 -                      <CoordVal axis="E" value={entityCoordinates.worldZup.center.x} />{' '}
 -                      <CoordVal axis="N" value={entityCoordinates.worldZup.center.y} />{' '}
 -                      <CoordVal axis="Z" value={entityCoordinates.worldZup.center.z} />
 -                    </span>
 -                  )}
 -                  {renderedGeoref?.projectedCRS?.name && (
--                    <span className="font-mono text-[9px] text-teal-500/60 shrink-0">{renderedGeoref.projectedCRS.name}</span>
+-                    <span className="font-mono text-2xs text-teal-500/60 shrink-0">{renderedGeoref.projectedCRS.name}</span>
 -                  )}
+-                  <span className="text-2xs text-teal-500/0 group-hover/coord:text-teal-500/40 transition-colors shrink-0">{t('properties.panel.worldCoordinatesDetails')}</span>
 +                  {/* Trassia: the real projected coordinate (E/N/H through the
 +                      model's IfcMapConversion) plus the CRS of the frame those
 +                      numbers are actually in — or the model coordinate labelled
 +                      `local` with no EPSG chip at all. */}
 +                  <ChWorldSummary coordinates={entityCoordinates} />
-                   <span className="text-[9px] text-teal-500/0 group-hover/coord:text-teal-500/40 transition-colors shrink-0">{t('properties.panel.worldCoordinatesDetails')}</span>
++                  <span className="text-[9px] text-teal-500/0 group-hover/coord:text-teal-500/40 transition-colors shrink-0">{t('properties.panel.worldCoordinatesDetails')}</span>
                  </>
                )}
-@@ -1408,15 +1405,11 @@ export function PropertiesPanel() {
+             </CollapsibleTrigger>
              <CollapsibleContent>
                {entityCoordinates && (
                  <div className="px-2 py-1.5 space-y-0.5">
@@ -47,20 +48,22 @@ index 36f5a3f..6a51624 100644
 -                      { axis: 'Z', value: entityCoordinates.worldZup.center.z },
 -                    ]}
 -                    primary
--                    copyLabel="world"
+-                    copyName={t('properties.panel.worldCoordinates')}
 +                  {/* Trassia: replaces the former unlabelled E/N/Z row, which
 +                      showed model coordinates under national-coordinate
 +                      letters. `Local` (render frame) below is untouched. */}
 +                  <ChWorldRows
 +                    coordinates={entityCoordinates}
-                     coordCopied={coordCopied}
-                     onCopy={copyCoords}
++                    coordCopied={copiedKey}
++                    onCopy={(label, text) => copy(text, label)}
                    />
-diff --git a/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx b/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx
-index 0668b0a..b770e66 100644
---- a/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx
-+++ b/apps/viewer/src/components/viewer/tools/measure-parity.test.tsx
-@@ -1027,9 +1027,18 @@ describe('guard sanity', () => {
+                   <CoordRow
+                     label="Local"
+diff --git a/apps/viewer/src/components/viewer/tools/measure-ribbon.test.tsx b/apps/viewer/src/components/viewer/tools/measure-ribbon.test.tsx
+index 4e242a8c16b42af375830b3bce4a4f1c6a7d9b26..ba744d6d09196e2af29f0fca75b91d4488e3c0e1 100644
+--- a/apps/viewer/src/components/viewer/tools/measure-ribbon.test.tsx
++++ b/apps/viewer/src/components/viewer/tools/measure-ribbon.test.tsx
+@@ -1011,9 +1011,18 @@ describe('guard sanity', () => {
  
        const container = renderNode(<PropertiesPanel />);
        const text = container.textContent ?? '';

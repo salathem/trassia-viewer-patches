@@ -6,27 +6,27 @@ import { usePlacementCoordinateInfo } from '@/hooks/usePlacementCoordinateInfo';
 import { useFederatedGeometry } from './useFederatedGeometry';
 import { modelIndices } from '@/lib/model-placement/model-indices';
 import { useMemo, useRef, useState, useCallback, useEffect, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { useLevelDisplayEffect } from '@/hooks/useLevelDisplayEffect';
+import { useAuthoredGridOverlay } from './useAuthoredGridOverlay';
 import { ingestDxfFiles, splitDxfFiles } from '@/hooks/ingest/dxfIngest';
 import { Viewport } from './Viewport';
-import {
-  initialDragOverlayState,
-  reduceDragOverlay,
-  type DragOverlayEvent,
-  type DragOverlayState,
-} from './dragOverlayState';
+import { useWindowFileDrop } from './useWindowFileDrop';
 import { ViewportOverlays } from './ViewportOverlays';
 import { WebGpuTroubleshootingDetails, webGpuBannerBlurb } from './WebGpuTroubleshooting';
 import { ViewportWelcomeCard } from './ViewportWelcomeCard';
+import { ViewportLoadErrorCard } from './ViewportLoadErrorCard';
+import { WelcomeFooterChips } from './WelcomeFooterChips';
 import { useTranslation } from '@/i18n';
 import { MergeLayersBanner } from './MergeLayersBanner';
 import { GeometryModeBanner } from './GeometryModeBanner';
 import { LandXmlUnitsRefusalPrompt } from './LandXmlUnitsRefusalPrompt';
-import { LevelDisplayIndicator } from './LevelDisplayIndicator';
+import { VisibilityChips } from '@/components/viewport-ui/hud/VisibilityChips';
 import { ToolOverlays } from './ToolOverlays';
 import { ZoneOverlay, ZoneAssignmentSyncMount } from './tools/ZoneOverlay';
 import { AnnotationLayer } from './annotations/AnnotationLayer';
 import { CollabPresenceLayer } from './CollabPresenceLayer';
+import { MeasurementSceneLayer } from './scene/MeasurementSceneLayer';
 import { BasepointOverlay } from './BasepointOverlay';
 import { ChLaengsschnittNavigationMarker } from './ChLaengsschnittNavigationMarker';
 import { SceneOverlayRoot } from '@/components/viewport-ui/scene';
@@ -41,19 +41,20 @@ import { ChDxfWorldStandalone } from './ChDxfWorldStandalone';
 import { useSolarEnvironment } from '@/hooks/useSolarEnvironment';
 import { useSolarSweep } from '@/hooks/useSolarSweep';
 import { getViewerStoreApi, useViewerStore } from '@/store';
-import { toGlobalIdFromModels } from '@/store/globalId';
-import { collectIfcBuildingStoreyElementsWithIfcSpace } from '@/store/basketVisibleSet';
 import { isTypeVisible } from '@/store/typeVisibilityFilter';
-import type { AggregationRelationships } from '@/utils/aggregation';
+import { hasInstancedShards } from '@/store/instancedShardModels';
+import { isVisibleResultEmpty } from '@/lib/visibility/effective-empty';
+import { useVisibilityIsolation } from '@/hooks/useVisibilityIsolation';
+import { EmptyVisibilityNotice } from './EmptyVisibilityNotice';
 import { useIfc } from '@/hooks/useIfc';
-import { useWebGPU } from '@/hooks/useWebGPU';
+import { useWebGpuOpenGuard } from '@/hooks/useWebGpuOpenGuard';
 import type { RecentFileEntry } from '@/lib/recent-files';
 import {
   supportsFileSystemAccess,
   openIfcFilesWithHandles,
   handlesFromDataTransfer,
 } from '@/services/file-system-access';
-import { FILE_ACCEPT, isGltfBundleFile, isSupportedModelFile } from '@/services/supported-model-files';
+import { FILE_ACCEPT, isModelSidecarFile, isSupportedModelFile } from '@/services/supported-model-files';
 import { usePreparedModelFileRoute } from '@/hooks/ingest/usePreparedModelFileRoute';
 import {
   SOURCE_DOWNLOAD_EVENT,
@@ -65,41 +66,40 @@ import { recordDownloadedSourceFile } from '@/lib/sources/persistence';
 import { sanitizeFilename } from '@/lib/export/download';
 import { enqueueSourceLoad } from '@/lib/sources/loadQueue';
 import { toast, Toaster } from '@/components/ui/toast';
-// Trassia overlay (not upstream) — Paket V-DRAPE, siehe lib/ch/drape-ingest.ts.
 import { chDrapeTakeDroppedFiles, chDrapeUnderlayCandidates } from '@/lib/ch/drape-ingest';
-// Trassia overlay (not upstream) — Paket U2: das Startbild traegt im
-// Trassia-Modus keine fremde Werbung (LLM/MCP, Cloud, Tour, Layers-Demo,
-// ifclite.dev); im Vollmodus (?voll=1) bleibt alles. Siehe lib/ch/modus.ts.
 import { chVollmodus } from '@/lib/ch/modus';
-import { describeUnsupportedFormat } from '@/hooks/ingest/unsupportedFormat';
-import { Upload, Command, AlertTriangle, ChevronDown, ExternalLink, Plus } from 'lucide-react';
+import { reportFileOpenRejected } from '@/hooks/ingest/fileOpenRejected';
+import { Upload, AlertTriangle, ChevronDown, ExternalLink, Plus } from 'lucide-react';
 import { createBlankIfcFile } from '@/utils/createBlankIfc';
+import { launchModelCommand } from '@/lib/commands/modeling/keys-workspace';
 import type { MeshData, PointCloudAsset } from '@ifc-lite/geometry';
 import { type IfcDataStore, type MapConversion } from '@ifc-lite/parser';
 import { getEffectiveGeoreference } from '@/lib/geo/effective-georef';
 import { isMeshVisibleInViewMode, meshClassIsPlaced, meshIsNonOccurrence } from '@/lib/type-view-visibility';
 
+/**
+ * The primary container for the 3D viewport, managing IFC model loading,
+ * geometry streaming, scene overlays, and interaction tools.
+ */
 export function ViewportContainer() {
   // Drive Stacked / Solo / Exploded level display from the slice.
   // Mount-once hook — it self-gates on mode + gap + model changes.
   useLevelDisplayEffect();
+  // Grids authored this session are lines the mesher does not draw (#6232 D3).
+  useAuthoredGridOverlay();
 
   const { loadFile, loading, clearAllModels, loadFilesSequentially, addModel } = useIfc();
   // Resolves a source provider's display title for toasts; null outside the
   // SourceHostProvider tree (tests), in which case the machine name is shown.
   const sourceHost = useOptionalSourceHost();
-  const setActiveTool = useViewerStore((s) => s.setActiveTool);
   const releaseGeometryMemory = useViewerStore((s) => s.releaseGeometryMemory);
-  const selectedStoreys = useViewerStore((s) => s.selectedStoreys);
   const typeVisibility = useViewerStore((s) => s.typeVisibility);
   const typeViewMode = useViewerStore((s) => s.typeViewMode);
   const setHasTypeGeometry = useViewerStore((s) => s.setHasTypeGeometry);
-  const isolatedEntities = useViewerStore((s) => s.isolatedEntities);
-  const classFilter = useViewerStore((s) => s.classFilter);
+  const hiddenEntities = useViewerStore((s) => s.hiddenEntities);
   const resetViewerState = useViewerStore((s) => s.resetViewerState);
   const bcfOverlayVisible = useViewerStore((s) => s.bcfOverlayVisible);
   const cesiumEnabled = useViewerStore((s) => s.cesiumEnabled);
-  const solarEnabled = useViewerStore((s) => s.solarEnabled);
   const cesiumPlacementDraft = useViewerStore((s) => s.cesiumPlacementDraft);
   const cesiumPlacementDraftModelId = useViewerStore((s) => s.cesiumPlacementDraftModelId);
   const anchorModelIdOverride = useViewerStore((s) => s.anchorModelIdOverride);
@@ -109,10 +109,9 @@ export function ViewportContainer() {
   // Subscribe to mutationVersion so Cesium reacts to georef edits
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [showTroubleshooting, setShowTroubleshooting] = useState(false);
   const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>([]);
-  const webgpu = useWebGPU();
+  const { webgpu, guard: guardWebGpu } = useWebGpuOpenGuard();
   // `webGpuBannerBlurb` is a plain function, not a component — pass this
   // component's own `t` so the banner headline re-renders on a live locale
   // switch instead of reading the registry's non-reactive `resolve` default
@@ -172,13 +171,9 @@ export function ViewportContainer() {
     return collected;
   }, [storeModels, geometryResult, modelIdToIndex, typeVisibility]);
 
-  // Extract georeferencing info merged with any live mutations (for Cesium overlay).
-  // Reacts to: model load, Cesium toggle, and every georef field edit.
-  // Also computed while the solar study runs without Cesium — the WebGPU sun
-  // needs the site's lat/lon + map rotation to track the studied instant.
+  // Keep the placement panel context available regardless of map/solar toggles.
+  // The Cesium overlay and solar study also consume this effective georeference.
   const georef = useMemo(() => {
-    if (!cesiumEnabled && !solarEnabled) return null;
-
     const applyPlacementDraft = <T extends { mapConversion?: MapConversion }>(
       modelId: string,
       effective: T,
@@ -207,8 +202,8 @@ export function ViewportContainer() {
     // The ungated `selectAnchorGeoref` (lib/geo/useAnchorGeoreference) shares this
     // "pinned anchor, else first model with a usable map-conversion georef"
     // selection for the basepoint overlay and the measure-tool XYZ readout. This
-    // memo stays bespoke on purpose: it is gated on Cesium/solar, iterates in the
-    // store's insertion order (not loadedAt), and layers the placement-draft
+    // memo stays bespoke on purpose: it iterates in the store's insertion order
+    // (not loadedAt), and layers the placement-draft
     // preview + storey elevations that only the Cesium bridge consumes.
     const orderedModels = (() => {
       if (!anchorModelIdOverride) return Array.from(storeModels);
@@ -263,8 +258,6 @@ export function ViewportContainer() {
 
     return null;
   }, [
-    cesiumEnabled,
-    solarEnabled,
     storeModels,
     ifcDataStore,
     georefMutations,
@@ -320,34 +313,6 @@ export function ViewportContainer() {
   useEffect(() => {
     setCesiumSourceModelId(georef?.sourceModelId ?? null);
   }, [georef?.sourceModelId, setCesiumSourceModelId]);
-
-  // Track drag enter/leave depth so the overlay doesn't flicker when the
-  // cursor moves between child elements (each child boundary fires its own
-  // dragenter/dragleave that bubbles to the container). See dragOverlayState.ts.
-  const dragStateRef = useRef<DragOverlayState>(initialDragOverlayState);
-
-  const applyDragEvent = useCallback((event: DragOverlayEvent) => {
-    dragStateRef.current = reduceDragOverlay(dragStateRef.current, event, webgpu.supported);
-    setIsDragging(dragStateRef.current.dragging);
-  }, [webgpu.supported]);
-
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    applyDragEvent('enter');
-  }, [applyDragEvent]);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    // Needed to allow the drop, but does not toggle drag state (avoids flicker)
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    applyDragEvent('leave');
-  }, [applyDragEvent]);
 
   const isSupportedFile = isSupportedModelFile;
 
@@ -470,103 +435,75 @@ export function ViewportContainer() {
       window.removeEventListener(SOURCE_DOWNLOAD_EVENT, handleSourceDownload);
   }, [addModel, resetViewerState, clearAllModels, sourceHost]);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    applyDragEvent('drop');
-
-    // Block file loading if WebGPU not supported
-    if (!webgpu.supported) {
-      return;
-    }
-
+  // Window drops on any viewer chrome route through the same guarded loader.
+  // Unsupported WebGPU reports through the shared load-error card (#5851).
+  const handleDrop = useCallback((dataTransfer: DataTransfer) => {
     // Capture live handles synchronously — the DataTransferItemList is neutered
-    // once this handler returns, so this must run before any await.
-    const handlesPromise = handlesFromDataTransfer(e.dataTransfer);
+    // once the drop event returns, so this must run before any await.
+    const handlesPromise = handlesFromDataTransfer(dataTransfer);
+    const droppedFiles = Array.from(dataTransfer.files);
+    const attempt = () => {
+      if (!guardWebGpu(attempt)) return;
+      const { dxfFiles, modelFiles: allDropped } = splitDxfFiles(droppedFiles);
+      void chDrapeTakeDroppedFiles(droppedFiles).then((forUnderlay) => {
+        const candidates = chDrapeUnderlayCandidates(dxfFiles.filter(f => forUnderlay.includes(f)));
+        if (candidates.length > 0) void ingestDxfFiles(candidates);
+      });
+      if (allDropped.length === 0) return;
 
-    // DXF reference underlays split off before model routing (issue #1782):
-    // a dropped site plan must never replace or federate with the model.
-    const allDropped0 = Array.from(e.dataTransfer.files);
-    const { dxfFiles, modelFiles: allDropped } = splitDxfFiles(allDropped0);
-    // Trassia (Paket V-DRAPE v2): dieselbe Datei ZUSAETZLICH auf das Gelaende
-    // legen. Die 2D-Unterlage bleibt fuer normal grosse Dateien, wie sie war —
-    // hier kommt nur eine 3D-Fassung dazu, die im Panel „Terrain drape" ein-
-    // und ausschaltbar ist. GeoJSON kommt nicht durch `splitDxfFiles`, also
-    // wird aus der vollen Liste gelesen.
-    //
-    // Die Unterlage kommt DANACH und nur fuer die Dateien, aus denen sie etwas
-    // machen kann (Befund M-2: sonst stehen „contains no drawable 2D entities"
-    // und „draped onto the terrain" nebeneinander). Sehr grosse DXF bleiben
-    // ganz draussen — `importDxf` laeuft auf dem Hauptthread und in einem Zug,
-    // und bei 153 MB steht der Tab dabei trotz unseres Workers
-    // (`chDrapeUnderlayCandidates`; der Hinweis dazu steht im Toast).
-    void chDrapeTakeDroppedFiles(allDropped0).then((fuerUnterlage) => {
-      const dxfFuerUnterlage = chDrapeUnderlayCandidates(
-        dxfFiles.filter((f) => fuerUnterlage.includes(f)),
-      );
-      if (dxfFuerUnterlage.length > 0) void ingestDxfFiles(dxfFuerUnterlage);
-    });
-    if (allDropped.length === 0) return;
+      // Keep glTF sidecars beside the document until they are packed into GLB.
+      const supportedFiles = allDropped.filter(file => isSupportedFile(file) || isModelSidecarFile(file));
 
-    // Keep glTF sidecars beside the document until they are packed into GLB.
-    const supportedFiles = allDropped.filter(file => isSupportedFile(file) || isGltfBundleFile(file));
-
-    if (supportedFiles.length === 0) {
-      // Tell the user *why* — common case is a Recap project / SketchUp
-      // file dropped because they assumed our viewer would understand it.
-      const explained = allDropped.find((f) => describeUnsupportedFormat(f.name));
-      if (explained) {
-        toast.error(`${explained.name}: ${describeUnsupportedFormat(explained.name)}`);
+      if (supportedFiles.length === 0) {
+        reportFileOpenRejected(allDropped);
+        return;
       }
-      return;
-    }
 
-    void handlesPromise.then((opened) => {
-      // Prefer the handle-paired files (Chromium): each file + handle comes from
-      // the same dropped item, so no filename matching is needed. Fall back to
-      // the plain dropped files when no handles were captured (Firefox/Safari).
-      const supportedOpened = (opened ?? []).filter((o) => isSupportedFile(o.file) || isGltfBundleFile(o.file));
-      const useHandles = supportedOpened.length > 0;
-      const files = useHandles ? supportedOpened.map((o) => o.file) : supportedFiles;
-      const handles = useHandles ? supportedOpened.map((o) => o.handle) : undefined;
+      void handlesPromise.then((opened) => {
+        // Prefer the handle-paired files (Chromium): each file + handle comes from
+        // the same dropped item, so no filename matching is needed. Fall back to
+        // the plain dropped files when no handles were captured (Firefox/Safari).
+        const supportedOpened = (opened ?? []).filter((o) => isSupportedFile(o.file) || isModelSidecarFile(o.file));
+        const useHandles = supportedOpened.length > 0;
+        const files = useHandles ? supportedOpened.map((o) => o.file) : supportedFiles;
+        const handles = useHandles ? supportedOpened.map((o) => o.handle) : undefined;
 
-      void prepareAndRoute(files, handles);
-    });
-  }, [prepareAndRoute, applyDragEvent, isSupportedFile, webgpu.supported]);
+        void prepareAndRoute(files, handles);
+      });
+    };
+    attempt();
+  }, [prepareAndRoute, isSupportedFile, guardWebGpu]);
+  // `accept` only steers the drop cursor/overlay; handleDrop's own guard (not
+  // this flag) is what shows the load-error card when unsupported (#5851).
+  const isDragging = useWindowFileDrop(handleDrop, webgpu.supported);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    // Block file loading if WebGPU not supported
-    if (!webgpu.supported) {
-      return;
-    }
-
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    // DXF reference underlays split off before model routing (issue #1782).
-    const { dxfFiles, modelFiles } = splitDxfFiles(Array.from(files));
-    if (dxfFiles.length > 0) void ingestDxfFiles(dxfFiles);
-
-    // Filter to supported files (IFC, IFCX, GLB). The <input> path yields no
-    // live handle, so these models are not refreshable.
-    const supportedFiles = modelFiles.filter(file => isSupportedFile(file) || isGltfBundleFile(file));
-
-    if (supportedFiles.length === 0) {
-      e.target.value = '';
-      return;
-    }
-
-    void prepareAndRoute(supportedFiles);
-
-    // Reset input so same file can be selected again
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    // Reset while the event still owns this input; Retry uses the captured Files.
     e.target.value = '';
-  }, [prepareAndRoute, isSupportedFile, webgpu.supported]);
+    const attempt = () => {
+      if (!guardWebGpu(attempt)) return;
+
+      // DXF reference underlays split off before model routing (issue #1782).
+      const { dxfFiles, modelFiles } = splitDxfFiles(files);
+      if (dxfFiles.length > 0) void ingestDxfFiles(dxfFiles);
+
+      // Filter to supported files (IFC, IFCX, GLB). The <input> path yields no
+      // live handle, so these models are not refreshable.
+      const supportedFiles = modelFiles.filter(file => isSupportedFile(file) || isModelSidecarFile(file));
+
+      if (supportedFiles.length > 0) void prepareAndRoute(supportedFiles);
+      else reportFileOpenRejected(modelFiles);
+    };
+    attempt();
+  }, [prepareAndRoute, isSupportedFile, guardWebGpu]);
 
   // Preferred open path: the File System Access picker (Chromium) captures a
   // live handle per file so the model can be refreshed from disk. Falls back to
   // the hidden <input type="file"> on browsers without the API.
   const handleOpenClick = useCallback(async () => {
-    if (!webgpu.supported) return;
+    if (!guardWebGpu(() => { void handleOpenClick(); })) return;
     if (!supportsFileSystemAccess()) {
       fileInputRef.current?.click();
       return;
@@ -576,26 +513,24 @@ export function ViewportContainer() {
     // DXF reference underlays split off before model routing (issue #1782).
     const dxfPicked = opened.filter((o) => o.file.name.toLowerCase().endsWith('.dxf'));
     if (dxfPicked.length > 0) void ingestDxfFiles(dxfPicked.map((o) => o.file));
-    const supported = opened.filter((o) => isSupportedFile(o.file) || isGltfBundleFile(o.file));
-    if (supported.length === 0) return;
+    const supported = opened.filter((o) => isSupportedFile(o.file) || isModelSidecarFile(o.file));
+    if (supported.length === 0) {
+      reportFileOpenRejected(opened.map((o) => o.file));
+      return;
+    }
 
     const files = supported.map((o) => o.file);
     prepareAndRoute(files, supported.map((o) => o.handle));
-  }, [prepareAndRoute, isSupportedFile, webgpu.supported]);
+  }, [prepareAndRoute, isSupportedFile, guardWebGpu]);
 
   const handleStartBlank = useCallback(async () => {
-    if (!webgpu.supported) return;
+    if (!guardWebGpu(() => { void handleStartBlank(); })) return;
     const file = createBlankIfcFile();
-    // Must await: loadFile() calls resetViewerState() internally which
-    // resets activeTool back to 'select'. Setting addElement before that
-    // races and leaves the user in select mode despite the click.
+    // Must await: loadFile() calls resetViewerState() internally, which
+    // closes any Model workspace session; entering before that races.
     await loadFile(file);
-    // Trassia (U2, Tester M3): im Trassia-Modus bleibt das leere Projekt im
-    // Auswahlwerkzeug — Author-Reiter und Add-element-Panel werden dort nicht
-    // angeboten, ein unsichtbar scharfes Wandwerkzeug zeichnete beim ersten
-    // Klick in die Szene eine Wand. Im Vollmodus wie Upstream.
-    if (chVollmodus()) setActiveTool('addElement');
-  }, [webgpu.supported, loadFile, setActiveTool]);
+    if (chVollmodus()) launchModelCommand('wall.place'); // straight into drawing walls (#6232)
+  }, [guardWebGpu, loadFile]);
 
   // Issue #540 "Merge Multilayer Walls" reload. The setting changes the produced
   // geometry, so it only takes on a re-load. Re-load the active model IN PLACE
@@ -816,8 +751,8 @@ export function ViewportContainer() {
       // IfcSpace / IfcOpeningElement alpha down to <= 0.3 here, which stomped
       // lens / Pset colour rules even when the user explicitly chose alpha 1.0.
       // Defaults still come from styling.rs / default-materials.ts; the
-      // renderer promotes overridden entities to the opaque pipeline so the
-      // overlay paint pass finds matching depth. See issue #677.
+      // renderer promotes overridden entities to the opaque pipeline, the
+      // only draws its colour table paints (#6076). See issue #677.
       cache.push(mesh);
     }
 
@@ -852,76 +787,19 @@ export function ViewportContainer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mergedGeometryResult, filteredGeometry, geometryVersion]);
 
-  // Compute combined isolation set (storeys + manual isolation)
-  // This is passed to the renderer for batch-level visibility filtering
-  // Now supports multi-model: aggregates elements from all models for selected storeys
-  // IMPORTANT: Returns globalIds (meshes use globalIds after federation registry transformation)
-  const computedIsolatedIds = useMemo(() => {
-    // Compute storey isolation if storeys are selected
-    let storeyIsolation: Set<number> | null = null;
-    if (selectedStoreys.size > 0) {
-      const combinedGlobalIds = new Set<number>();
+  // Shared pure intersection for the renderer and the empty-result notice.
+  const computedIsolatedIds = useVisibilityIsolation();
 
-      // Check each federated model's storeys
-      for (const [, model] of storeModels) {
-        const hierarchy = model.ifcDataStore?.spatialHierarchy;
-        if (!hierarchy) continue;
-        // Pass the relationship graph so storey isolation pulls in the parts of
-        // any decomposing assembly (stair flights, railings, …) — they live off
-        // the spatial tree via IfcRelAggregates and would otherwise vanish (#1133).
-        const relationships = model.ifcDataStore?.relationships as AggregationRelationships | undefined;
-
-        for (const storeyId of selectedStoreys) {
-          const localStoreyId = hierarchy.byStorey.has(storeyId)
-            ? storeyId
-            : storeyId - (model.idOffset ?? 0);
-          const storeyElementIds = collectIfcBuildingStoreyElementsWithIfcSpace(hierarchy, localStoreyId, relationships);
-          if (storeyElementIds) {
-            for (const originalExpressId of storeyElementIds) {
-              combinedGlobalIds.add(toGlobalIdFromModels(storeModels, model.id, originalExpressId));
-            }
-          }
-        }
-      }
-
-      // Legacy single-model mode (offset = 0)
-      if (ifcDataStore?.spatialHierarchy && storeModels.size === 0) {
-        const hierarchy = ifcDataStore.spatialHierarchy;
-        const relationships = ifcDataStore.relationships as AggregationRelationships | undefined;
-        for (const storeyId of selectedStoreys) {
-          const storeyElementIds = collectIfcBuildingStoreyElementsWithIfcSpace(hierarchy, storeyId, relationships);
-          if (storeyElementIds) {
-            for (const id of storeyElementIds) {
-              combinedGlobalIds.add(id);
-            }
-          }
-        }
-      }
-
-      if (combinedGlobalIds.size > 0) {
-        storeyIsolation = combinedGlobalIds;
-      }
-    }
-
-    // Collect all active filters and intersect them
-    const filters: Set<number>[] = [];
-    if (storeyIsolation !== null) filters.push(storeyIsolation);
-    if (classFilter !== null) filters.push(classFilter.ids);
-    if (isolatedEntities !== null) filters.push(isolatedEntities);
-
-    if (filters.length === 0) return null;
-    if (filters.length === 1) return filters[0];
-
-    // Intersect all active filters — start from smallest for efficiency
-    const sorted = filters.sort((a, b) => a.size - b.size);
-    const intersection = new Set<number>();
-    for (const id of sorted[0]) {
-      if (sorted.every(s => s.has(id))) {
-        intersection.add(id);
-      }
-    }
-    return intersection;
-  }, [storeModels, ifcDataStore, selectedStoreys, isolatedEntities, classFilter]);
+  const visibleResultEmpty = useMemo(() => isVisibleResultEmpty({
+    models: storeModels, geometryResult, hiddenEntities,
+  }, {
+    meshes: filteredGeometry,
+    pointClouds: mergedPointClouds,
+    isolatedIds: computedIsolatedIds,
+    hasUnenumeratedInstances: [...storeModels].some(([id, model]) => model.visible
+      && hasInstancedShards(id) && !model.geometryResult?.instancedGeometryHashes?.size),
+  }), [storeModels, geometryResult, filteredGeometry, geometryVersion, mergedPointClouds,
+    computedIsolatedIds, hiddenEntities]);
 
   // Grid Pattern
   const GridPattern = () => (
@@ -954,10 +832,6 @@ export function ViewportContainer() {
       <div
         className="relative h-full w-full bg-white dark:bg-black text-zinc-900 dark:text-zinc-50 overflow-hidden"
         data-viewport
-        onDragEnter={handleDragEnter}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
       >
         <GridPattern />
 
@@ -970,14 +844,15 @@ export function ViewportContainer() {
           className="hidden"
         />
 
-        {/* Drop overlay */}
-        {isDragging && (
-          <div className="pointer-events-none absolute inset-0 z-50 bg-primary/10 backdrop-blur-[2px] flex items-center justify-center p-8">
+        {/* Drop overlay — full window, since the whole window is the drop target (#5845) */}
+        {isDragging && createPortal(
+          <div className="pointer-events-none fixed inset-0 z-50 bg-primary/10 backdrop-blur-[2px] flex items-center justify-center p-8">
             <div className="border-4 border-dashed border-primary bg-white/90 dark:bg-black/90 p-12 max-w-2xl w-full text-center shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] transition-all">
               <Upload className="h-20 w-20 mx-auto text-primary mb-6" />
               <p className="text-3xl font-black uppercase tracking-tight text-primary">{t('viewportLighting.container.emptyState.dropOverlay.title')}</p>
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
 
         {/* WebGPU Not Supported Banner — compact on mobile; tokens, not the hard-coded Tokyo Night hex (#5504). */}
@@ -1042,6 +917,11 @@ export function ViewportContainer() {
           </div>
         )}
 
+        {/* One load-error card for every failed open attempt (#5851) —
+            picker, drop, ?model= autoload — shown here too since a failure
+            with nothing loaded yet renders THIS branch, not ViewportOverlays'. */}
+        <ViewportLoadErrorCard />
+
         {/* Empty state content — mobile-optimized padding and scrollable.
             The scroll container must NOT center via justify-center: a flex
             child taller than an overflow-auto parent gets its top clipped
@@ -1064,31 +944,7 @@ export function ViewportContainer() {
               dropped: it repeated toolbar affordances without offering an
               action, and its height pushed the welcome card off-screen. */}
 
-          {/* Footer chips - left: discovery link to the marketing site for first-time
-              visitors, right: shortcuts cue for power users. Both desktop-only.
-              IN FLOW, not absolute: the welcome column scrolls on short
-              viewports, and absolutely-anchored chips ride the scroll and
-              land on top of the content (#1736 follow-up).
-              Trassia (U2): der Marketing-Chip nur im Vollmodus; die Shortcuts
-              bleiben. */}
-          <div className="mt-10 hidden w-full max-w-3xl items-center justify-between gap-4 md:flex">
-            {chVollmodus() ? (
-            <a
-              href="https://ifclite.dev"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group inline-flex items-center gap-2 text-xs font-mono px-3 py-1.5 bg-zinc-100 dark:bg-[#1f2335] border border-zinc-300 dark:border-[#3b4261] text-zinc-500 dark:text-[#565f89] hover:border-primary hover:text-primary transition-colors"
-            >
-              <span>{t('viewportLighting.container.emptyState.footer.discoverPrompt')}</span>
-              <span className="font-bold text-primary group-hover:translate-x-0.5 transition-transform">{t('viewportLighting.container.emptyState.footer.discoverLink')}</span>
-            </a>
-            ) : <span />}
-            <div className="flex items-center gap-2 text-xs font-mono px-3 py-1.5 bg-zinc-100 dark:bg-[#1f2335] border border-zinc-300 dark:border-[#3b4261] text-zinc-500 dark:text-[#565f89]">
-              <Command className="h-3 w-3" />
-              <span>{t('viewportLighting.container.emptyState.footer.shortcutsLabel')}</span>
-              <span className="px-1.5 ml-1 font-bold text-primary bg-primary/20">?</span>
-            </div>
-          </div>
+          <WelcomeFooterChips />
 
           </div>
         </div>
@@ -1103,14 +959,10 @@ export function ViewportContainer() {
     <div
       className="relative h-full w-full bg-zinc-50 dark:bg-black overflow-hidden"
       data-viewport
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
     >
       {/* Drop overlay for a loaded file - "Add Model"; `status-ok` (tokens, #5504) sets it apart from the plain overlay above. */}
-      {isDragging && (
-        <div className="pointer-events-none absolute inset-0 z-50 bg-status-ok/10 backdrop-blur-[2px] flex items-center justify-center">
+      {isDragging && createPortal(
+        <div className="pointer-events-none fixed inset-0 z-50 bg-status-ok/10 backdrop-blur-[2px] flex items-center justify-center">
           <div className="bg-background border-4 border-dashed border-status-ok p-8 shadow-2xl">
             <div className="text-center">
               <Plus className="h-12 w-12 mx-auto text-status-ok mb-4" />
@@ -1120,7 +972,8 @@ export function ViewportContainer() {
               </p>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* Cesium 3D world context overlay — rendered behind the WebGPU canvas (web only) */}
@@ -1136,13 +989,10 @@ export function ViewportContainer() {
           storeyElevations={georef.storeyElevations}
         />
       )}
-      {/* Trassia (UX-KOPF): Schweizer Umgebung (swisstopo-Gebaeude/Vegetation/
-          Terrain + amtliche WFS-Ebenen) — eigenes kleines Panel, gleicher
-          Ankerbereich; geoeffnet ueber den Umgebungs-Knopf im View-Tab. */}
       <ChUmgebungPanel />
       {!georef && <ChDxfWorldStandalone />}
       <ChDxfWorldPanel hasUnreferencedModel={!georef && models.size > 0} />
-      {cesiumEnabled && georef?.mapConversion && georef.baseMapConversion && (
+      {georef?.mapConversion && georef.baseMapConversion && (
         <CesiumPlacementGizmo
           modelId={georef.sourceModelId}
           mapConversion={georef.mapConversion}
@@ -1175,6 +1025,7 @@ export function ViewportContainer() {
         <BasepointOverlay />
         <ChLaengsschnittNavigationMarker />
         <ZoneOverlay />
+        <MeasurementSceneLayer />
         <ToolOverlays />
       </SceneOverlayRoot>
       <ViewportOverlays />
@@ -1187,7 +1038,8 @@ export function ViewportContainer() {
       {/* #5175: offers a retry with a user-chosen linear unit when a LandXML
           load refuses because the source declares no <Units>. */}
       <LandXmlUnitsRefusalPrompt />
-      <LevelDisplayIndicator />
+      <VisibilityChips />
+      <EmptyVisibilityNotice visible={visibleResultEmpty} />
       <ZoneAssignmentSyncMount />
       <DrawingRuntimeHost mergedGeometry={mergedGeometryResult} computedIsolatedIds={computedIsolatedIds} />
       <Toaster variant="absolute" />

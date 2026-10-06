@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx b/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
-index 05c148e..c9a2749 100644
+index 3e00faa0a7d0a722d85e31fc047a36b3ba4df796..bb81e9822e607c1d470b2b157235b76c3784dc13 100644
 --- a/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
 +++ b/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
-@@ -13,9 +13,17 @@ import { Drawing2DCanvas } from '../Drawing2DCanvas';
+@@ -15,9 +15,17 @@ import { Drawing2DCanvas } from '../Drawing2DCanvas';
  import { TextAnnotationEditor } from '../TextAnnotationEditor';
  import type { DrawingViewModel } from './useDrawingViewModel';
  import type { DrawingLayers } from './useDrawingLayers';
@@ -20,7 +20,7 @@ index 05c148e..c9a2749 100644
    const { drawing, status, sectionPlane, viewTransform, displayOptions } = vm;
    const hasContent = !!drawing && (drawing.cutPolygons.length > 0 || drawing.lines?.length > 0 || layers.dxfUnderlayData.length > 0 || vm.hasReferences);
    const editingAnnotation = vm.textAnnotation2DEditing
-@@ -29,6 +37,14 @@ export function DrawingCanvasView({ vm, layers }: { vm: DrawingViewModel; layers
+@@ -31,6 +39,14 @@ export function DrawingCanvasView({ vm, layers }: { vm: DrawingViewModel; layers
        className={`relative min-h-0 flex-1 overflow-hidden bg-white dark:bg-zinc-950 ${vm.cursorClass}`}
        {...vm.canvasMouseHandlers}
      >
@@ -34,8 +34,8 @@ index 05c148e..c9a2749 100644
 +
        {status === 'generating' && (
          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80">
-           <Loader2 className="mb-4 h-8 w-8 animate-spin text-primary" />
-@@ -89,6 +105,10 @@ export function DrawingCanvasView({ vm, layers }: { vm: DrawingViewModel; layers
+           <Spinner className="mb-4 h-8 w-8 text-primary" />
+@@ -91,6 +107,10 @@ export function DrawingCanvasView({ vm, layers }: { vm: DrawingViewModel; layers
            scanOpacity={displayOptions.scanSectionOpacity}
            unitDisplayOverrides={vm.unitDisplayOverrides}
            paperTheme={vm.paperTheme}
@@ -47,10 +47,10 @@ index 05c148e..c9a2749 100644
        )}
  
 diff --git a/apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx b/apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx
-index 0be05c9..002f909 100644
+index d91cee9cf5137a929293bd5ef9324077d8120181..43c49d73005a24673563952c7ea5f2e33c0ef6cb 100644
 --- a/apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx
 +++ b/apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx
-@@ -19,6 +19,8 @@ import { useTranslation } from '@/i18n';
+@@ -20,6 +20,8 @@ import { useTranslation } from '@/i18n';
  import type { TranslationKey } from '@/i18n/en';
  import type { DrawingDrawer } from './useDrawingViewModel';
  import { DrawerToggle, IconAction, ToggleChip, ToolSegment, ToolbarDivider } from './DrawingToolbarControls';
@@ -59,7 +59,7 @@ index 0be05c9..002f909 100644
  
  export type DrawingWidthTier = 'wide' | 'compact' | 'narrow';
  
-@@ -134,6 +136,9 @@ export function DrawingToolbar(p: DrawingToolbarProps) {
+@@ -136,6 +138,9 @@ export function DrawingToolbar(p: DrawingToolbarProps) {
          {!narrow && <IconAction icon={ZoomIn} label={t('section2d.zoom.in')} onClick={p.onZoomIn} />}
          <IconAction icon={Maximize2} label={t('section2d.zoom.fit')} onClick={p.onFit} />
          {!narrow && <IconAction icon={p.pinned ? Pin : PinOff} label={pinLabel} pressed={p.pinned} onClick={p.onTogglePinned} />}

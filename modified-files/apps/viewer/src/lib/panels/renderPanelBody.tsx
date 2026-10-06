@@ -28,11 +28,14 @@ import { ListPanel } from '@/components/viewer/lists/ListPanel';
 import { RoomPanel } from '@/components/viewer/RoomPanel';
 import { ZonesPanel } from '@/components/viewer/ZonesPanel';
 import { LoadReportPanel } from '@/components/viewer/LoadReportPanel';
+import { ChangesPanel } from '@/components/viewer/ChangesPanel';
+import { ChangeSetPanel } from '@/components/viewer/change-sets/ChangeSetPanel';
 import { CostPanel } from '@/components/viewer/CostPanel';
 import { EnvironmentPanel } from '@/components/viewer/EnvironmentPanel';
 import { PointCloudPanel } from '@/components/viewer/PointCloudPanel';
 import { MeasurementsPanel } from '@/components/viewer/MeasurementsPanel';
 import { PlacementPanel } from '@/components/viewer/placement/PlacementPanel';
+import { ModelInspectorPanel } from '@/components/viewer/model-inspector/ModelInspectorPanel';
 import { useViewerStore } from '@/store';
 // Trassia overlay (not upstream) — Paket V-DRAPE, siehe ChDrapePanel.tsx.
 import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
@@ -162,12 +165,10 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
     case 'collab': return <RoomPanel onClose={onClose} />;
     case 'zones': return <ZonesPanel onClose={onClose} />;
     case 'loadReport': return <LoadReportPanel onClose={onClose} />;
-    // Trassia (Paket V-DRAPE).
     case 'drape': return <ChDrapePanel onClose={onClose} />;
-    // Trassia (Paket V-KUBATUR).
     case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
-    // Trassia (Paket V-LAENGSSCHNITT).
     case 'laengsschnitt': return <ChLaengsschnittPanel onClose={onClose} />;
+    case 'changes': return <ChangesPanel onClose={onClose} />;
     // Trassia (Trassierungs-Spike S0, nur bei `?entwurf=1`).
     case 'entwurf': return (
       <ChEntwurfFehlergrenze>
@@ -188,5 +189,7 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
     case 'pointclouds': return <PointCloudPanelBody onClose={onClose} />;
     case 'measurements': return <MeasurementsPanel onClose={onClose} />;
     case 'placement': return <PlacementPanel onClose={onClose} />;
+    case 'model': return <ModelInspectorPanel onClose={onClose} />;
+    case 'changeSets': return <ChangeSetPanel onClose={onClose} />;
   }
 }

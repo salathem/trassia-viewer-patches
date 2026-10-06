@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
-index 70c967f..2a02a36 100644
+index 70c967feb6dd77ff5551d051ea8d381bd896b7aa..2a02a361e18501913247f382a205938582566c40 100644
 --- a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
 +++ b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
 @@ -19,6 +19,7 @@
@@ -47,36 +47,116 @@ index 70c967f..2a02a36 100644
          });
        }
        catch (err) { console.warn('[CesiumOverlay] terrain query failed:', err); }
+diff --git a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.a11y.test.tsx b/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.a11y.test.tsx
+index 33949fccc192b6972391efe21bc52b32e0ccf92f..557b281ae5719512fa3d6846359d28ebcf2448bc 100644
+--- a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.a11y.test.tsx
++++ b/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.a11y.test.tsx
+@@ -19,10 +19,11 @@
+  *   one interactive element inside another.
+  */
+ import '@/test/setup-dom.js';
+-import { afterEach, before, describe, it } from 'node:test';
++import { afterEach, before, beforeEach, describe, it } from 'node:test';
+ import assert from 'node:assert/strict';
+ import { cleanup, render, click } from '@/test/render.js';
+ import { useViewerStore } from '@/store';
++import { fixtureModel, fixtureModels } from '@/test/store-fixture';
+ import type { MapConversion, ProjectedCRS } from '@ifc-lite/parser';
+ import { GeoreferencingPanel } from './GeoreferencingPanel.js';
+ 
+@@ -34,6 +35,10 @@ before(() => {
+   initialState = useViewerStore.getState();
+ });
+ 
++beforeEach(() => {
++  useViewerStore.setState({ ...fixtureModels(fixtureModel('A')), editEnabled: true, collabRole: null });
++});
++
+ afterEach(() => {
+   cleanup();
+   useViewerStore.setState(initialState, true);
 diff --git a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx b/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx
-index a26c84b..d33d82e 100644
+index 4701b172b5cb40de5a38047e86a695dfff16d7f5..d8df96e54af74ee0f5f5d998f148eb24515ba551 100644
 --- a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx
 +++ b/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx
-@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
- import { Badge } from '@/components/ui/badge';
+@@ -18,6 +18,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
+ import { Checkbox } from '@/components/ui/checkbox';
  import { computeAngleToGridNorth, type GeoreferenceInfo, type MapConversion, type ProjectedCRS } from '@ifc-lite/parser';
  import { useViewerStore } from '@/store';
++import { mutationPermission, mutationDenialKey } from '@/store/mutation-permission';
 +import { CH_AUTOMATIC_TERRAIN_HEIGHT, CH_TERRAIN_HEIGHT_NOTICE } from '@/lib/ch/kontext/terrain-policy';
  import { posthog } from '@/lib/analytics';
  import type { CoordinateInfo, GeometryResult } from '@ifc-lite/geometry';
  import { EpsgLookupDialog, type EpsgResult } from './EpsgLookupDialog';
-@@ -879,7 +880,9 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
+@@ -62,6 +64,10 @@ export interface GeoreferencingPanelProps {
+ 
+ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVersion, coordinateInfo, geometryResult, lengthUnitScale, storeyElevations }: GeoreferencingPanelProps) {
+   const { t, locale } = useTranslation();
++  const mutationDenied = useViewerStore((s) => {
++    const permission = mutationPermission(s, modelId);
++    return permission.allowed ? null : permission.reason;
++  });
+   const georefMutations = useViewerStore(s => s.georefMutations);
+   const setGeorefField = useViewerStore(s => s.setGeorefField);
+   const setGeorefFields = useViewerStore(s => s.setGeorefFields);
+@@ -245,13 +251,15 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
+ 
+   const handleSave = useCallback((entity: 'projectedCRS' | 'mapConversion', field: string, value: string | number) => {
+     if (!modelId || !setGeorefField) return;
++    const permission = mutationPermission(useViewerStore.getState(), modelId);
++    if (!permission.allowed) { toast.error(t(mutationDenialKey(permission.reason))); return; }
+     const oldValue = entity === 'projectedCRS'
+       ? mergedCRS?.[field as keyof ProjectedCRS]
+       : mergedConversion?.[field as keyof MapConversion];
+     setGeorefField(modelId, entity, field, value, oldValue as string | number | undefined);
+     posthog.capture('georeference_set', { method: 'crs_field', entity, field });
+     requestAlignmentReload();
+-  }, [modelId, setGeorefField, mergedCRS, mergedConversion, requestAlignmentReload]);
++  }, [modelId, setGeorefField, t, mergedCRS, mergedConversion, requestAlignmentReload]);
+ 
+   // Handle angle edit: compute and set both XAxisAbscissa and XAxisOrdinate
+   const handleAngleChange = useCallback((abscissa: number, ordinate: number) => {
+@@ -339,7 +347,7 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
+   }, [modelId, setGeorefFields, mergedCRS, mergedConversion, mutations, initializeMapConversionDefaults, requestAlignmentReload]);
+ 
+   const hasData = mergedCRS || mergedConversion;
+-  const editable = enableEditing && !!modelId && canUseStandardGeoreferencing;
++  const editable = enableEditing && !!modelId && canUseStandardGeoreferencing && mutationDenied === null;
+ 
+   // When no georef data exists, show "Add Georeferencing" in edit mode
+   if (!hasData && !georef?.hasGeoreference) {
+@@ -402,6 +410,15 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
+           </span>
+         </div>
+       )}
++      {enableEditing && mutationDenied && (
++        <div className="px-3 py-2 text-xs text-muted-foreground">
++          {mutationDenied === 'edit-mode' ? (
++            <button type="button" className="min-h-8 underline underline-offset-2" onClick={() => useViewerStore.getState().toggleEditEnabled()}>
++              Bearbeitungsmodus einschalten
++            </button>
++          ) : <output>{t(mutationDenialKey(mutationDenied))}</output>}
++        </div>
++      )}
+       {/* Federation alignment badge + anchor / re-align controls.
+           Hidden when only one model is loaded — alignment is a federation concept. */}
+       {modelId && models.size > 1 && <FederationAlignmentControls modelId={modelId} />}
+@@ -594,7 +611,7 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
            <div className="flex items-center gap-2">
              <Mountain className="h-3 w-3 text-teal-500 shrink-0" />
-             <span className="text-[10px] text-zinc-600 dark:text-zinc-400 flex-1">{t('properties.georef.visibleSurfaceHeight')}</span>
+             <span className="text-xs text-zinc-600 dark:text-zinc-400 flex-1">{t('properties.georef.visibleSurfaceHeight')}</span>
 -            {cesiumTerrainHeight !== null ? (
-+            {!CH_AUTOMATIC_TERRAIN_HEIGHT ? (
-+              <span className="text-[9px] text-zinc-500 dark:text-zinc-400">{CH_TERRAIN_HEIGHT_NOTICE}</span>
-+            ) : cesiumTerrainHeight !== null ? (
-               <span className="text-[9px] font-mono text-teal-500" title={cesiumTerrainSource ?? undefined}>
++            {!CH_AUTOMATIC_TERRAIN_HEIGHT ? <span>{CH_TERRAIN_HEIGHT_NOTICE}</span> : cesiumTerrainHeight !== null ? (
+               <span className="text-xs font-mono text-teal-500" title={cesiumTerrainSource ?? undefined}>
                  {t('properties.georef.heightMeters', { value: formatLocaleNumber(locale, cesiumTerrainHeight, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })}
                </span>
-@@ -887,12 +890,12 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
-               <span className="text-[9px] font-mono text-zinc-400">{t('properties.georef.queryingEllipsis')}</span>
+@@ -602,12 +619,12 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
+               <span className="text-xs font-mono text-zinc-400">{t('properties.georef.queryingEllipsis')}</span>
              )}
            </div>
 -          {cesiumTerrainSource && (
 +          {CH_AUTOMATIC_TERRAIN_HEIGHT && cesiumTerrainSource && (
-             <div className="ml-5 text-[9px] text-zinc-500 dark:text-zinc-400">
+             <div className="ml-5 text-xs text-zinc-500 dark:text-zinc-400">
                {t('properties.georef.sampledVia', { source: cesiumTerrainSource })}
              </div>
            )}
@@ -85,10 +165,22 @@ index a26c84b..d33d82e 100644
              <div className="flex items-center gap-1 ml-5">
                <button
                  onClick={() => handleSave('mapConversion', 'orthogonalHeight', oHeightForBaseAltitude(cesiumTerrainSaveHeight))}
-@@ -959,7 +962,7 @@ function TerrainHeightButton({ modelId, editable, onApply }: {
-   // Only show when this panel's model is the active Cesium model and the
-   // geoid-corrected snap target is ready (#1456): never fall back to the raw
-   // ellipsoidal sample, which would skip the correction.
+diff --git a/apps/viewer/src/components/viewer/properties/georef-terrain-height-button.tsx b/apps/viewer/src/components/viewer/properties/georef-terrain-height-button.tsx
+index 06d139738295df01635c4bb9a697f7cb7f02d28e..15cbc215a229fc27dda09b14da98e7ab709d99d2 100644
+--- a/apps/viewer/src/components/viewer/properties/georef-terrain-height-button.tsx
++++ b/apps/viewer/src/components/viewer/properties/georef-terrain-height-button.tsx
+@@ -2,6 +2,7 @@
+  * License, v. 2.0. If a copy of the MPL was not distributed with this
+  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ 
++import { CH_AUTOMATIC_TERRAIN_HEIGHT } from '@/lib/ch/kontext/terrain-policy';
+ import { Mountain } from 'lucide-react';
+ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+ import { useViewerStore } from '@/store';
+@@ -23,7 +24,7 @@ export function TerrainHeightButton({ modelId, editable, onApply }: {
+   const sourceModelId = useViewerStore(s => s.cesiumSourceModelId);
+ 
+   // Only the active Cesium model, once the geoid-corrected snap target is ready (#1456).
 -  if (!cesiumEnabled || terrainHeight === null || terrainSaveHeight === null || !editable || !modelId || modelId !== sourceModelId) return null;
 +  if (!CH_AUTOMATIC_TERRAIN_HEIGHT || !cesiumEnabled || terrainHeight === null || terrainSaveHeight === null || !editable || !modelId || modelId !== sourceModelId) return null;
  
