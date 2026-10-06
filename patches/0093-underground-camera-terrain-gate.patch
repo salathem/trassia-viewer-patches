@@ -1,0 +1,21 @@
+diff --git a/apps/viewer/src/components/viewer/cesium/useCesiumCameraSync.ts b/apps/viewer/src/components/viewer/cesium/useCesiumCameraSync.ts
+--- a/apps/viewer/src/components/viewer/cesium/useCesiumCameraSync.ts
++++ b/apps/viewer/src/components/viewer/cesium/useCesiumCameraSync.ts
+@@ -15,6 +15,8 @@
+ import type { CesiumBridge } from '@/lib/geo/cesium-bridge';
+ import { getGlobalRenderer } from '@/hooks/useBCF';
+ import { getCesiumModule } from './cesium-module';
++import { chUndergroundGet } from '@/lib/ch/underground-store';
++import { chUndergroundKameraFrei } from '@/lib/ch/underground-bounds';
+ 
+ export interface UseCesiumCameraSyncParams {
+   status: 'idle' | 'loading' | 'ready' | 'error';
+@@ -70,7 +72,7 @@
+       const camUp = camera.getUp();
+       const fov = camera.getFOV();
+ 
+-      if (terrainClipY !== null) {
++      if (terrainClipY !== null && !chUndergroundKameraFrei(chUndergroundGet())) {
+         const minCameraY = terrainClipY + 0.05;
+         if (camPos.y < minCameraY) {
+           const dy = minCameraY - camPos.y;
