@@ -1,0 +1,80 @@
+diff --git a/apps/viewer/src/components/viewer/tools/SectionVisualization.tsx b/apps/viewer/src/components/viewer/tools/SectionVisualization.tsx
+--- a/apps/viewer/src/components/viewer/tools/SectionVisualization.tsx
++++ b/apps/viewer/src/components/viewer/tools/SectionVisualization.tsx
+@@ -22,6 +22,8 @@
+ import type { CustomSectionPlane } from '@/store/types';
+ import { useTranslation } from '@/i18n';
+ import { capturePointer, releasePointer } from '@/lib/pointer-capture';
++import { chMoveAxisSection, chAxisSectionInputActive } from '@/lib/ch/axis-section-input';
++import { setAlignmentDistance } from '@/lib/section/alignment-controller';
+ import { AxisArrow, Handle, PlaneOutline, useSceneProjector } from '../../viewport-ui/scene';
+ import { isAnchorVisible, vec3Key } from '../../viewport-ui/scene/projection';
+ import { useWakeOnChange } from '../../viewport-ui/scene/useWakeOnChange';
+@@ -103,6 +105,7 @@
+ 
+   const dragRef = useRef<{
+     startDistance: number;
++    lastCursor: ScreenPoint;
+     startCursor: ScreenPoint;
+     screenNormal: ScreenPoint;
+     pixelsPerMeter: number;
+@@ -121,6 +124,7 @@
+     capturePointer(e.target as Element, e.pointerId);
+     dragRef.current = {
+       startDistance: customPlane.distance,
++      lastCursor: { x: e.clientX, y: e.clientY },
+       startCursor: { x: e.clientX, y: e.clientY },
+       screenNormal: { x: dx / ppm, y: dy / ppm },
+       pixelsPerMeter: ppm,
+@@ -132,12 +136,31 @@
+     const s = dragRef.current;
+     if (!s) return;
+     e.stopPropagation();
++    // Follow the current tangent through bends, using incremental cursor motion.
++    const { foot: f, tip: tp } = screen.current;
++    if (f && tp) {
++      const dx = tp.x - f.x;
++      const dy = tp.y - f.y;
++      const ppm = Math.hypot(dx, dy);
++      if (ppm >= 1e-3) {
++        const delta = ((e.clientX - s.lastCursor.x) * dx + (e.clientY - s.lastCursor.y) * dy) / (ppm * ppm);
++        if (chMoveAxisSection(delta)) {
++          s.lastCursor = { x: e.clientX, y: e.clientY };
++          return;
++        }
++        if (customPlane.alignment) {
++          void setAlignmentDistance(customPlane.alignment.geometricHorizontalDistanceMeters + delta);
++          s.lastCursor = { x: e.clientX, y: e.clientY };
++          return;
++        }
++      } else if (chAxisSectionInputActive() || customPlane.alignment) return;
++    } else if (chAxisSectionInputActive() || customPlane.alignment) return;
+     const cdx = e.clientX - s.startCursor.x;
+     const cdy = e.clientY - s.startCursor.y;
+     // Project the cursor delta onto the screen-projected normal, then pixels -> metres.
+     const along = cdx * s.screenNormal.x + cdy * s.screenNormal.y;
+     setDistance(s.startDistance + along / s.pixelsPerMeter);
+-  }, [setDistance]);
++  }, [setDistance, customPlane.alignment]);
+ 
+   const handlePointerUp = useCallback((e: React.PointerEvent<SVGCircleElement>) => {
+     if (!dragRef.current) return;
+diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
+--- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
++++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
+@@ -30,6 +30,7 @@
+ import { BasepointOverlay } from './BasepointOverlay';
+ import { ChLaengsschnittNavigationMarker } from './ChLaengsschnittNavigationMarker';
+ import { SceneOverlayRoot } from '@/components/viewport-ui/scene';
++import { ChSectionWheelInput } from './ChSectionWheelInput';
+ import { DrawingRuntimeHost } from './drawing/DrawingRuntimeHost';
+ import { BCFOverlay } from './bcf/BCFOverlay';
+ import { CesiumOverlay } from './CesiumOverlay';
+@@ -1018,6 +1019,7 @@
+       />
+       {/* ONE scene-overlay kernel per viewport (#5486, #5511, #5512, was
+           two roots until `ToolOverlays` (#5502) consolidated here). */}
++      <ChSectionWheelInput />
+       <SceneOverlayRoot>
+         <AnnotationLayer />
+         <CollabPresenceLayer />

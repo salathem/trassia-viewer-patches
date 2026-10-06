@@ -30,6 +30,7 @@ import { MeasurementSceneLayer } from './scene/MeasurementSceneLayer';
 import { BasepointOverlay } from './BasepointOverlay';
 import { ChLaengsschnittNavigationMarker } from './ChLaengsschnittNavigationMarker';
 import { SceneOverlayRoot } from '@/components/viewport-ui/scene';
+import { ChSectionWheelInput } from './ChSectionWheelInput';
 import { DrawingRuntimeHost } from './drawing/DrawingRuntimeHost';
 import { BCFOverlay } from './bcf/BCFOverlay';
 import { CesiumOverlay } from './CesiumOverlay';
@@ -1018,6 +1019,7 @@ export function ViewportContainer() {
       />
       {/* ONE scene-overlay kernel per viewport (#5486, #5511, #5512, was
           two roots until `ToolOverlays` (#5502) consolidated here). */}
+      <ChSectionWheelInput />
       <SceneOverlayRoot>
         <AnnotationLayer />
         <CollabPresenceLayer />

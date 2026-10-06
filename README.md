@@ -9,10 +9,10 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0094`, numbers no longer in use are listed below)
+- `patches/` — the exact patches (`0001`–`0096`, numbers no longer in use are listed below)
   applied, in numeric order, on top of upstream commit
   `e79f27342beb01a6f30d9b63c44795ecd118f4de` (tag `@ifc-lite/wasm@10.3.0`)
-- `modified-files/` — the 95 modified files in full source form
+- `modified-files/` — the 101 modified files in full source form
   (exactly extracted from the bound 10.3.0 build image):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/ChatPanel.tsx`
@@ -128,7 +128,7 @@ upstream layout. The other patches keep their described purpose; some were
 re-anchored to the moved upstream code (e.g. the sidebar exclusivity logic now
 lives in `store/store-sync.ts`).
 
-- `0001`–`0094` — Swiss coordinate readout for the measurement tools
+- `0001`–`0096` — Swiss coordinate readout for the measurement tools
   (LV95/LV03 formatting, georeference status).
 - `0004`–`0005` — property panel: Swiss/Trassia provenance property sets sorted
   to the top with a family badge, a free-text filter over the selected element's
@@ -415,3 +415,15 @@ Contact: kontakt@trassia.com
 Infrastructure candidate: patch 0093 permits below-terrain camera motion only while the bounded underground clip is ready. Source extraction image: `sha256:cad35c0b9ddf36ce59eff9b91d394b2cea27c86ca64790559b07dee1d5908642`. This source offer does not claim live promotion.
 
 Infrastructure finalization: patch 0094 publishes the completed geometry status for staged/federated IFC models. Source extraction image: `sha256:8ae9c168fe02f3ee124dbf11b5e9c13835dff4e2a870bde7d48d8db0397a264d`. This source offer does not claim live promotion.
+
+## Axis section input and local camera navigation
+
+Patches 0095 and 0096 keep axis dragging on station and anchor model navigation at visible screen-centre depth.
+Source extraction image: `sha256:c8ef551148a621feee5a8537cfb0d76fceb47beeedf0a88dcd4d2ef79285d565`. This local offer does not claim publication or live promotion.
+
+- `apps/viewer/src/components/viewer/tools/SectionVisualization.tsx`
+- `apps/viewer/src/components/viewer/useMouseControls.ts`
+- `apps/viewer/src/components/viewer/wheelZoom.ts`
+- `apps/viewer/src/components/viewer/zoomSurface.ts`
+- `packages/renderer/src/camera-controls.ts`
+- `packages/renderer/src/camera.ts`
