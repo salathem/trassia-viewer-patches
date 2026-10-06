@@ -1,0 +1,22 @@
+diff --git a/apps/viewer/src/hooks/useIfcLoader.ts b/apps/viewer/src/hooks/useIfcLoader.ts
+--- a/apps/viewer/src/hooks/useIfcLoader.ts
++++ b/apps/viewer/src/hooks/useIfcLoader.ts
+@@ -656,6 +656,10 @@
+             sourceSchema: patch?.sourceSchema,
+             geometryResult,
++            loadState: patch?.loadState ?? 'complete',
++            geometryLoadState: (patch?.loadState ?? 'complete') === 'complete' ? 'complete' : undefined,
++            cacheState: patch?.cacheState ?? 'none',
++            loadError: patch?.loadError ?? null,
+             visible: target.visible ?? true,
+             collapsed: target.collapsed ?? (useViewerStore.getState().models.size > 0),
+             schemaVersion,
+             loadedAt: target.loadedAt ?? Date.now(),
+@@ -716,6 +720,7 @@
+           idOffset,
+           maxExpressId,
+           loadState: patch?.loadState ?? 'complete',
++          geometryLoadState: (patch?.loadState ?? 'complete') === 'complete' ? 'complete' : undefined,
+           cacheState: patch?.cacheState ?? 'none',
+           loadError: patch?.loadError ?? null,
+           pointCloudHandleId: patch?.pointCloudHandleId,
