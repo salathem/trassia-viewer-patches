@@ -1,0 +1,99 @@
+--- a/apps/viewer/src/hooks/useDrawingExport.ts
++++ b/apps/viewer/src/hooks/useDrawingExport.ts
+@@ -3,7 +3,7 @@
+  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ 
+ import { useCallback, useEffect } from 'react';
+-import { registerChSeriesExport } from '@/lib/ch/qp-serie-export';
++import { registerChSeriesExport, chSvgIncludeAnnotationBounds, chSvgPaperSize, chPdfAnnotationPaper } from '@/lib/ch/qp-serie-export';
+ import { useChQpHeightAnnotations } from '@/hooks/useChQpHeightAnnotations';
+ import type React from 'react';
+ import { posthog } from '@/lib/analytics';
+@@ -723,7 +723,7 @@
+     }
+ 
+     svg += '</svg>';
+-    return svg;
++    return chSvgIncludeAnnotationBounds(svg);
+   }, [drawing, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, measure2DResults, polygonArea2DResults, exportTextAnnotations, cloudAnnotations2D, sectionPlane.axis, dxfUnderlays, scanSection, ifcDataStore, storeModels]);
+ 
+   // Generate SVG with drawing sheet (frame, title block, scale bar)
+@@ -940,10 +940,6 @@
+     svg += '    </g>\n';
+ 
+     // POINT-CLOUD SCAN OVERLAY (issue #1805) — on top, inside the clipped
+-    for (const annotation of heightAnnotations) {
+-      const p = modelToPaper(annotation.position.x, annotation.position.y);
+-      svg += `<text x="${p.x.toFixed(4)}" y="${p.y.toFixed(4)}" font-size="2.5" fill="#174a68">${escapeXml(annotation.text)}</text>\n`;
+-    }
+     // drawing-content group like everything else. `modelToPaper` already
+     // applies the same flip + scale/translate the rest of the sheet uses.
+     if (displayOptions.showScanSection && displayOptions.scanSectionIncludeInExport) {
+@@ -956,6 +952,12 @@
+     }
+ 
+     svg += '  </g>\n\n';
++
++    // Height labels are paper annotations: geometric cropping must not cut glyphs.
++    for (const annotation of heightAnnotations) {
++      const p = modelToPaper(annotation.position.x, annotation.position.y);
++      svg += `<text x="${p.x.toFixed(4)}" y="${p.y.toFixed(4)}" font-size="2.5" fill="#174a68">${escapeXml(annotation.text)}</text>\n`;
++    }
+ 
+     // Render frame (on top of drawing content)
+     const frameResult = renderFrame(activeSheet.paper, activeSheet.frame);
+@@ -983,7 +985,7 @@
+     svg += '\n';
+ 
+     svg += '</svg>';
+-    return svg;
++    return chSvgIncludeAnnotationBounds(svg);
+     // `sectionPlane.axis` and `isPinned` are read INSIDE this callback (via
+     // `resolveSheetTransform`) and so must be here. Both were previously
+     // held up only by invariants elsewhere — `drawing` happens to change
+@@ -1147,7 +1149,8 @@
+     if (sheetEnabled && activeSheet) {
+       const svg = generateSheetSVG();
+       if (!svg) return;
+-      const { widthMm, heightMm } = activeSheet.paper;
++      const paper = chSvgPaperSize(svg);
++      const widthMm = paper.width, heightMm = paper.height;
+       void (async () => {
+         try {
+           const { jsPDF } = await import('jspdf');
+@@ -1213,12 +1216,33 @@
+       alert(err instanceof Error ? err.message : 'Could not export PDF: invalid scale.');
+       return;
+     }
+-    const mapPoint = makeSectionMapPoint(currentAxis, layout);
++    const baseMapPoint = makeSectionMapPoint(currentAxis, layout);
+ 
+     void (async () => {
+       try {
+         const { jsPDF } = await import('jspdf');
+-        const { widthMm, heightMm } = layout.page;
++        let widthMm = layout.page.widthMm, heightMm = layout.page.heightMm;
++        let offsetX = 0, offsetY = 0;
++        if (heightAnnotations.length) {
++          const measure = new jsPDF({ unit: 'mm' });
++          measure.setFontSize(7);
++          const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
++          for (const annotation of heightAnnotations) {
++            const p = baseMapPoint(annotation.position.x, annotation.position.y);
++            const size = measure.getTextDimensions(annotation.text);
++            bounds.minX = Math.min(bounds.minX, p.x);
++            bounds.maxX = Math.max(bounds.maxX, p.x + size.w);
++            bounds.minY = Math.min(bounds.minY, p.y - size.h);
++            bounds.maxY = Math.max(bounds.maxY, p.y + size.h * 0.3);
++          }
++          const paper = chPdfAnnotationPaper(widthMm, heightMm, bounds);
++          widthMm = paper.width; heightMm = paper.height;
++          offsetX = paper.offsetX; offsetY = paper.offsetY;
++        }
++        const mapPoint = (x: number, y: number) => {
++          const p = baseMapPoint(x, y);
++          return { x: p.x + offsetX, y: p.y + offsetY };
++        };
+         const doc = new jsPDF({
+           unit: 'mm',
+           format: [widthMm, heightMm],

@@ -1,0 +1,95 @@
+--- a/apps/viewer/src/services/panel-windows.ts
++++ b/apps/viewer/src/services/panel-windows.ts
+@@ -44,6 +44,8 @@
+ }
+ 
+ const open = new Map<WorkspacePanelId, PanelWindowEntry>();
++// A click may wait for PiP permission. Close/dock invalidates that exact request.
++const pending = new Map<WorkspacePanelId, object>();
+ const listeners = new Set<() => void>();
+ let snapshot: PanelWindowEntry[] = [];
+ 
+@@ -143,26 +145,35 @@
+     return existing.kind;
+   }
+ 
++  if (pending.has(id)) return null; // an opening request already owns this panel
++  const request = {};
++  pending.set(id, request);
+   const { width, height } = defaultSize(id);
+   const def = getPanelDef(id);
+   let win: Window | null = null;
+   let kind: PanelWindowKind = 'popup';
+ 
+   const pip = window.documentPictureInPicture;
+-  const pipPromise = pip ? pip.requestWindow({ width, height }) : null;
+-  if (pipPromise) {
++  if (pip) {
+     try {
+-      win = await pipPromise;
++      // Keep the call inside try: policy denial may throw synchronously too.
++      win = await pip.requestWindow({ width, height });
+       kind = 'pip';
+     } catch {
+       win = null; // user dismissed or PiP unavailable — fall through to popup
+     }
+   }
++  if (pending.get(id) !== request) {
++    try { win?.close(); } catch { /* already gone */ }
++    return null; // close / dock / parent unload wins over late permission
++  }
+   if (!win) {
+     const features = `popup,width=${width},height=${height},left=${Math.max(0, (window.screen?.availWidth ?? width) - width - 40)},top=120`;
+-    win = window.open('', `ifc-lite-panel-${id}`, features);
++    try { win = window.open('', `ifc-lite-panel-${id}`, features); }
++    catch { win = null; }
+     kind = 'popup';
+   }
++  pending.delete(id);
+   if (!win) return null; // blocked by a popup blocker
+ 
+   try {
+@@ -185,7 +196,10 @@
+   open.set(id, entry);
+ 
+   // Closing the child (its own X, or the user closing the window) re-docks.
+-  const onClosed = () => detach(id, false);
++  const onClosed = () => {
++    // A delayed event from a replaced child must not close its successor.
++    if (open.get(id) === entry) detach(id, false);
++  };
+   win.addEventListener('pagehide', onClosed, { once: true });
+   win.addEventListener('unload', onClosed, { once: true });
+ 
+@@ -195,11 +209,13 @@
+ 
+ /** Close a popped-out panel (re-dockable from the activity bar afterwards). */
+ export function closePanelWindow(id: WorkspacePanelId): void {
++  pending.delete(id);
+   detach(id, true);
+ }
+ 
+ /** Close every popped-out window — call on the parent tab unloading. */
+ export function closeAllPanelWindows(): void {
++  pending.clear();
+   for (const id of [...open.keys()]) detach(id, true);
+ }
+ 
+--- a/apps/viewer/src/hooks/usePanelControls.ts
++++ b/apps/viewer/src/hooks/usePanelControls.ts
+@@ -130,6 +130,7 @@
+       useViewerStore.getState().setLeftPanelCollapsed(false);
+       return;
+     }
++    closePanelWindow(id); // also cancel a PiP window still waiting for permission
+     useViewerStore.getState().openPanelInHome(id);
+   }, []);
+ 
+@@ -170,6 +171,7 @@
+   }, []);
+ 
+   const closePanel = useCallback((id: WorkspacePanelId) => {
++    closePanelWindow(id); // close intent includes an unfinished pop-out request
+     if (useViewerStore.getState().closeDockedSidebarPanel(id)) return;
+     if (isLeftPanel(id)) {
+       useViewerStore.getState().setLeftPanelCollapsed(true);

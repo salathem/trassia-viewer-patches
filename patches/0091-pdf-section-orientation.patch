@@ -1,0 +1,16 @@
+--- a/apps/viewer/src/hooks/pdfSectionLayout.ts
++++ b/apps/viewer/src/hooks/pdfSectionLayout.ts
+@@ -61,6 +61,11 @@
+   layout: PdfScaleLayout
+ ): (x: number, y: number) => { x: number; y: number } {
+   const { flipX, flipY } = axisFlipForSection(axis);
+-  return (x: number, y: number) =>
+-    worldPointToPdfMm({ x: flipX ? -x : x, y: flipY ? -y : y }, layout.transform);
++  return (x: number, y: number) => {
++    const p = worldPointToPdfMm({ x: flipX ? -x : x, y: flipY ? -y : y }, layout.transform);
++    // SVG uses axis-flipped coordinates in a downward-growing viewBox.
++    // worldPointToPdfMm adds a world-up -> paper-down flip of its own;
++    // undo only that extra flip, for geometry and annotations alike.
++    return { x: p.x, y: layout.page.heightMm - p.y };
++  };
+ }

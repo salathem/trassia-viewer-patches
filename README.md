@@ -9,10 +9,10 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0082`, numbers no longer in use are listed below)
+- `patches/` — the exact patches (`0001`–`0092`, numbers no longer in use are listed below)
   applied, in numeric order, on top of upstream commit
   `ca6fef8d72176bd83127e20a314e4fad9c0acf59` (tag `@ifc-lite/wasm@10.1.2`)
-- `modified-files/` — the 69 modified files in full source form
+- `modified-files/` — the 82 modified files in full source form
   (base commit + all patches applied):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/ChatPanel.tsx`
@@ -31,7 +31,9 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts`
   - `apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts`
   - `apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx`
+  - `apps/viewer/src/components/viewer/drawing/DrawingPanel.tsx`
   - `apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx`
+  - `apps/viewer/src/components/viewer/drawing/useDrawingLayers.ts`
   - `apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx`
   - `apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx`
   - `apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx`
@@ -40,6 +42,7 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx`
   - `apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx`
   - `apps/viewer/src/components/viewer/ribbon/tabs/ViewTab.tsx`
+  - `apps/viewer/src/components/viewer/selectionHandlers.ts`
   - `apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx`
   - `apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx`
   - `apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx`
@@ -57,32 +60,42 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/hooks/dxfExportGeoref.test.ts`
   - `apps/viewer/src/hooks/ingest/dxfIngest.ts`
   - `apps/viewer/src/hooks/keyboard-shortcuts-list.ts`
+  - `apps/viewer/src/hooks/pdfSectionLayout.ts`
   - `apps/viewer/src/hooks/useAnnotation2D.ts`
   - `apps/viewer/src/hooks/useDrawingExport.ts`
   - `apps/viewer/src/hooks/useDrawingGeneration.ts`
   - `apps/viewer/src/hooks/useIfcLoader.ts`
+  - `apps/viewer/src/hooks/useIfcServer.ts`
   - `apps/viewer/src/hooks/useKeyboardShortcuts.ts`
   - `apps/viewer/src/hooks/useMeasure2D.ts`
   - `apps/viewer/src/hooks/usePanelControls.ts`
+  - `apps/viewer/src/hooks/usePrivacyDisclosure.ts`
   - `apps/viewer/src/hooks/useViewControls.ts`
   - `apps/viewer/src/i18n/catalogues/properties.en.ts`
+  - `apps/viewer/src/i18n/catalogues/shell-chrome.en.ts`
   - `apps/viewer/src/lib/geo/cesium-bridge.ts`
   - `apps/viewer/src/lib/geo/ifc-spatial-reference.test.ts`
   - `apps/viewer/src/lib/geo/ifc-spatial-reference.ts`
+  - `apps/viewer/src/lib/ifc-load-cancellation.ts`
   - `apps/viewer/src/lib/panels/registry.ts`
   - `apps/viewer/src/lib/panels/renderPanelBody.tsx`
   - `apps/viewer/src/main.tsx`
+  - `apps/viewer/src/services/panel-windows.ts`
   - `apps/viewer/src/store/index.ts`
   - `apps/viewer/src/store/slices/measurementSlice.ts`
   - `apps/viewer/src/store/slices/sidebarSlice.test.ts`
   - `apps/viewer/src/store/slices/sidebarSlice.ts`
   - `apps/viewer/src/store/store-sync.ts`
+  - `apps/viewer/src/utils/acquireFileBuffer.ts`
   - `apps/viewer/vite.config.ts`
   - `packages/drawing-2d/src/dxf-exporter.test.ts`
   - `packages/drawing-2d/src/dxf-exporter.ts`
   - `packages/drawing-2d/src/dxf/writer.test.ts`
   - `packages/drawing-2d/src/dxf/writer.ts`
   - `packages/drawing-2d/src/index.ts`
+  - `packages/geometry/src/index.ts`
+  - `packages/server-client/src/client.ts`
+  - `packages/server-client/src/types.ts`
 - `LICENSE` — Mozilla Public License 2.0 (unchanged, from upstream)
 
 All files in this repository are licensed under the **MPL-2.0**.
@@ -102,7 +115,7 @@ upstream layout. The other patches keep their described purpose; some were
 re-anchored to the moved upstream code (e.g. the sidebar exclusivity logic now
 lives in `store/store-sync.ts`).
 
-- `0001`–`0003` — Swiss coordinate readout for the measurement tools
+- `0001`–`0092` — Swiss coordinate readout for the measurement tools
   (LV95/LV03 formatting, georeference status).
 - `0004`–`0005` — property panel: Swiss/Trassia provenance property sets sorted
   to the top with a family badge, a free-text filter over the selected element's

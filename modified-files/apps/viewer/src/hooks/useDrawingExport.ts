@@ -2,7 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
+import { registerChSeriesExport, chSvgIncludeAnnotationBounds, chSvgPaperSize, chPdfAnnotationPaper } from '@/lib/ch/qp-serie-export';
+import { useChQpHeightAnnotations } from '@/hooks/useChQpHeightAnnotations';
 import type React from 'react';
 import { posthog } from '@/lib/analytics';
 import { downloadFile, sanitizeFilename } from '@/lib/export/download';
@@ -14,6 +16,7 @@ import { chQpUndistorted } from '@/lib/ch/qp-corridor';
 import { toast } from '@/components/ui/toast';
 import { pdfLineStyleFor } from '@/lib/export/pdf-line-style';
 import {
+  encodeDxfCp1252,
   GraphicOverrideEngine,
   renderFrame,
   renderTitleBlock,
@@ -372,6 +375,8 @@ function useDrawingExport({
   // Plan soll enthalten, was er auf dem Schirm hatte. Ohne Ueberhoehung ist das
   // dasselbe Objekt, der Export also bitgleich mit dem Upstream.
   const drawing = chQpUndistorted(drawingFromStore);
+  const heightAnnotations = useChQpHeightAnnotations(drawingFromStore);
+  const exportTextAnnotations = [...textAnnotations2D, ...heightAnnotations];
   // Georef inputs for the DXF export (PR #1871 review, P1): placement edits
   // applied in CesiumPlacementEditor live in `georefMutations` (per model
   // id), not in `ifcDataStore`, and in a federation the georef frame is the
@@ -659,9 +664,9 @@ function useDrawingExport({
     }
 
     // 6. DRAW TEXT ANNOTATIONS
-    if (textAnnotations2D.length > 0) {
+    if (exportTextAnnotations.length > 0) {
       svg += '  <g id="text-annotations">\n';
-      for (const annotation of textAnnotations2D) {
+      for (const annotation of exportTextAnnotations) {
         if (!annotation.text.trim()) continue;
         const pt = { x: flipX ? -annotation.position.x : annotation.position.x, y: flipY ? -annotation.position.y : annotation.position.y };
         const fontSize = mmToModel(2.5);
@@ -718,8 +723,8 @@ function useDrawingExport({
     }
 
     svg += '</svg>';
-    return svg;
-  }, [drawing, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, measure2DResults, polygonArea2DResults, textAnnotations2D, cloudAnnotations2D, sectionPlane.axis, dxfUnderlays, scanSection, ifcDataStore, storeModels]);
+    return chSvgIncludeAnnotationBounds(svg);
+  }, [drawing, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, measure2DResults, polygonArea2DResults, exportTextAnnotations, cloudAnnotations2D, sectionPlane.axis, dxfUnderlays, scanSection, ifcDataStore, storeModels]);
 
   // Generate SVG with drawing sheet (frame, title block, scale bar)
   // This generates coordinates directly in paper mm space (like the canvas rendering)
@@ -948,6 +953,12 @@ function useDrawingExport({
 
     svg += '  </g>\n\n';
 
+    // Height labels are paper annotations: geometric cropping must not cut glyphs.
+    for (const annotation of heightAnnotations) {
+      const p = modelToPaper(annotation.position.x, annotation.position.y);
+      svg += `<text x="${p.x.toFixed(4)}" y="${p.y.toFixed(4)}" font-size="2.5" fill="#174a68">${escapeXml(annotation.text)}</text>\n`;
+    }
+
     // Render frame (on top of drawing content)
     const frameResult = renderFrame(activeSheet.paper, activeSheet.frame);
     svg += frameResult.svgElements;
@@ -974,14 +985,14 @@ function useDrawingExport({
     svg += '\n';
 
     svg += '</svg>';
-    return svg;
+    return chSvgIncludeAnnotationBounds(svg);
     // `sectionPlane.axis` and `isPinned` are read INSIDE this callback (via
     // `resolveSheetTransform`) and so must be here. Both were previously
     // held up only by invariants elsewhere — `drawing` happens to change
     // identity when the axis changes, and the canvas rewrote the cache on
     // every fresh draw — neither of which this callback controls.
     // `cachedSheetTransformRef` is a ref: stable identity, read at call time.
-  }, [drawing, activeSheet, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, dxfUnderlays, scanSection, sectionPlane.axis, isPinned, ifcDataStore, storeModels]);
+  }, [drawing, activeSheet, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, dxfUnderlays, scanSection, sectionPlane.axis, isPinned, ifcDataStore, storeModels, heightAnnotations]);
 
   // Export SVG
   const handleExportSVG = useCallback(() => {
@@ -1004,7 +1015,7 @@ function useDrawingExport({
   // The point-cloud scan overlay (issue #1805) is likewise deliberately
   // excluded: it is a raster-like screen aid (tens of thousands of circles),
   // not vector content — SVG export carries it (opt-in) instead.
-  const handleExportDXF = useCallback(() => {
+  const handleExportDXF = useCallback((download = true) => {
     if (!drawing) return;
     const isCustomPlane = sectionPlane.custom !== undefined;
     // Anchor-model effective georef, INCLUDING user placement edits
@@ -1038,6 +1049,7 @@ function useDrawingExport({
       : 'ifc-lite section export - units: metres';
     const metadataComment = [chUnitLine, ...chQpKopfzeilen()].join('\n');
     const dxf = exportToDXF(drawing, {
+      textAnnotations: heightAnnotations.map(a => ({ position: a.position, text: a.text, height: (displayOptions.scale || 100) * 2.5 / 1000 })),
       showHiddenLines: displayOptions.showHiddenLines,
       coordinateTransform,
       metadataComment,
@@ -1048,6 +1060,7 @@ function useDrawingExport({
     // name is kept for every other section, where it is the honest one.
     const stem = chSectionExportStem(sectionPlane.custom)
       ?? `section-${sectionPlane.axis}-${sectionPlane.position}`;
+    if (!download) return encodeDxfCp1252(dxf).bytes;
     downloadDxf(dxf, `${stem}.dxf`);
     posthog.capture('drawing_exported', {
       format: 'dxf',
@@ -1056,7 +1069,7 @@ function useDrawingExport({
     });
   }, [
     drawing, displayOptions.showHiddenLines, sectionPlane, ifcDataStore, coordinateInfo,
-    storeModels, anchorModelIdOverride, georefMutations, mutationVersion,
+    storeModels, anchorModelIdOverride, georefMutations, mutationVersion, heightAnnotations,
   ]);
 
   // Export scaled PDF (issue #2042): a true-vector PDF sized so the
@@ -1136,12 +1149,14 @@ function useDrawingExport({
     if (sheetEnabled && activeSheet) {
       const svg = generateSheetSVG();
       if (!svg) return;
-      const { widthMm, heightMm } = activeSheet.paper;
+      const paper = chSvgPaperSize(svg);
+      const widthMm = paper.width, heightMm = paper.height;
       void (async () => {
         try {
           const { jsPDF } = await import('jspdf');
           const { dataUrl, fit } = await rasterizeSvgToPngDataUrl(svg, widthMm, heightMm);
           const doc = new jsPDF({
+          compress: true,
             unit: 'mm',
             format: [widthMm, heightMm],
             orientation: widthMm >= heightMm ? 'landscape' : 'portrait',
@@ -1202,13 +1217,35 @@ function useDrawingExport({
       alert(err instanceof Error ? err.message : 'Could not export PDF: invalid scale.');
       return;
     }
-    const mapPoint = makeSectionMapPoint(currentAxis, layout);
+    const baseMapPoint = makeSectionMapPoint(currentAxis, layout);
 
     void (async () => {
       try {
         const { jsPDF } = await import('jspdf');
-        const { widthMm, heightMm } = layout.page;
+        let widthMm = layout.page.widthMm, heightMm = layout.page.heightMm;
+        let offsetX = 0, offsetY = 0;
+        if (heightAnnotations.length) {
+          const measure = new jsPDF({ unit: 'mm' });
+          measure.setFontSize(7);
+          const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+          for (const annotation of heightAnnotations) {
+            const p = baseMapPoint(annotation.position.x, annotation.position.y);
+            const size = measure.getTextDimensions(annotation.text);
+            bounds.minX = Math.min(bounds.minX, p.x);
+            bounds.maxX = Math.max(bounds.maxX, p.x + size.w);
+            bounds.minY = Math.min(bounds.minY, p.y - size.h);
+            bounds.maxY = Math.max(bounds.maxY, p.y + size.h * 0.3);
+          }
+          const paper = chPdfAnnotationPaper(widthMm, heightMm, bounds);
+          widthMm = paper.width; heightMm = paper.height;
+          offsetX = paper.offsetX; offsetY = paper.offsetY;
+        }
+        const mapPoint = (x: number, y: number) => {
+          const p = baseMapPoint(x, y);
+          return { x: p.x + offsetX, y: p.y + offsetY };
+        };
         const doc = new jsPDF({
+          compress: true,
           unit: 'mm',
           format: [widthMm, heightMm],
           orientation: widthMm >= heightMm ? 'landscape' : 'portrait',
@@ -1269,6 +1306,12 @@ function useDrawingExport({
         }
         doc.setLineDashPattern([], 0);
 
+        doc.setFontSize(7);
+        for (const annotation of heightAnnotations) {
+          const p = mapPoint(annotation.position.x, annotation.position.y);
+          doc.text(annotation.text, p.x, p.y);
+        }
+
         // v1 has no title block, so this filename is the SOLE record of the
         // sheet's scale — round-tripping through Math.round() here would
         // file a 1:99.5 export as "…-1-100", silently misreporting it (same
@@ -1293,7 +1336,7 @@ function useDrawingExport({
         alert(err instanceof Error ? `Could not export PDF: ${err.message}` : 'Could not export PDF.');
       }
     })();
-  }, [drawing, displayOptions.scale, displayOptions.showHiddenLines, sectionPlane, sheetEnabled, activeSheet, generateSheetSVG]);
+  }, [drawing, displayOptions.scale, displayOptions.showHiddenLines, sectionPlane, sheetEnabled, activeSheet, generateSheetSVG, heightAnnotations]);
 
   // Print handler
   const handlePrint = useCallback(() => {
@@ -1362,6 +1405,20 @@ function useDrawingExport({
     `);
     printWindow.document.close();
   }, [generateExportSVG, generateSheetSVG, sheetEnabled, activeSheet, sectionPlane]);
+
+  useEffect(() => {
+    if (!drawingFromStore) return;
+    return registerChSeriesExport({
+      drawing: drawingFromStore,
+      svg: () => (sheetEnabled && activeSheet) ? generateSheetSVG() : generateExportSVG(),
+      dxf: () => {
+        const bytes = handleExportDXF(false);
+        if (!bytes) throw new Error('Aktuelle DXF-Zeichnung fehlt.');
+        return bytes;
+      },
+      rasterize: async (svg, width, height) => (await rasterizeSvgToPngDataUrl(svg, width, height)).dataUrl,
+    });
+  }, [drawingFromStore, sheetEnabled, activeSheet, generateSheetSVG, generateExportSVG, handleExportDXF]);
 
   return {
     formatDistance,
