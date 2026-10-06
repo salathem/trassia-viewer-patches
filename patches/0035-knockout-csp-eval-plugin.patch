@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/vite.config.ts b/apps/viewer/vite.config.ts
-index bf7ebae..b2631a9 100644
+index bf7ebaeb9bafd83f2868df5ac1c6d128ec76c70e..b2631a9e2f2cdbcdd365956a5955eaebdbf9551a 100644
 --- a/apps/viewer/vite.config.ts
 +++ b/apps/viewer/vite.config.ts
 @@ -17,6 +17,9 @@ import { oauthCallbackRoutes } from './vite-plugins/oauth-callback';

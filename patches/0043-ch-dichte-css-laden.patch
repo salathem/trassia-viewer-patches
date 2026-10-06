@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/main.tsx b/apps/viewer/src/main.tsx
-index 28e2864..75e646e 100644
+index 28e2864f3a3cadcee60f087d18ccefe4d1bdda0e..75e646e1488878436eee3f2f4bf84baf931d0676 100644
 --- a/apps/viewer/src/main.tsx
 +++ b/apps/viewer/src/main.tsx
 @@ -16,5 +16,11 @@

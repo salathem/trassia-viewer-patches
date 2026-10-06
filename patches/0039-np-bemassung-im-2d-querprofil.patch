@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
-index f814074..f39175d 100644
+index f81407472e783be59c830e21beba833b0020aa08..f39175db504e17964071d604f99c1c14da4b9f2e 100644
 --- a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
 +++ b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
 @@ -23,6 +23,9 @@ import { type CachedSheetTransform } from '@/lib/drawing/sheet-geometry-key';

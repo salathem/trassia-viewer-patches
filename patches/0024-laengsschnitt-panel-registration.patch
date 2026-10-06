@@ -1,48 +1,51 @@
+diff --git a/apps/viewer/src/i18n/en.ts b/apps/viewer/src/i18n/en.ts
+index 73cdb74b8d58210599c503f3e8bb0fa6e6e0b0ca..f2ae1e076a2c4b068ac390c84b150c088697b880 100644
+--- a/apps/viewer/src/i18n/en.ts
++++ b/apps/viewer/src/i18n/en.ts
+@@ -110,6 +110,7 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
+ 
+ /** English is assembled from feature catalogues so no locale becomes a monolith. */
+ export const en = {
++  'trassia.panel.laengsschnitt': 'Longitudinal profile',
+   'trassia.panel.kubatur': 'Cut and fill',
+   'trassia.panel.drape': 'Terrain drape',
+   ...analysisPanelEn,
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index 235ed99..d2b53f3 100644
+index 26da97077c87fcd1a6256cae915514786f914960..9f277beaf94946c0a697ab22f177c3f2b997bac0 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
-@@ -23,6 +23,8 @@ import { BarChart3, Box, CalendarRange, ClipboardCheck, Cloud, Coins, Crosshair,
- import {
-   // Trassia overlay (not upstream) — Paket V-DRAPE.
-   Mountain,
-+  // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
-+  ChartSpline,
- } from 'lucide-react';
+@@ -21,7 +21,7 @@
+ // the viewer-embed bundle too, which has no unplugin-icons resolver for the
+ // `~icons/viewer/*` virtual modules (#6315 broke that build).
+ import { BarChart3, Box, CalendarRange, ClipboardCheck, Cloud, Coins, Crosshair, DraftingCompass, FileText, FileWarning, GitBranch, GitCompareArrows, History, Info, Layers as LayersIcon, ListTree, MessageSquare, Move3d, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
+-import { Mountain } from 'lucide-react';
++import { Mountain, ChartSpline } from 'lucide-react';
+ import type { TranslationKey } from '@/i18n';
  
  /** Every panel reachable from the unified sidebar rail. `properties` is the
-@@ -61,7 +63,9 @@ export type WorkspacePanelId =
-   // Trassia overlay (not upstream) — Paket V-DRAPE.
+@@ -61,7 +61,8 @@ export type WorkspacePanelId =
+   | 'model'
+   | 'changeSets'
    | 'drape'
-   // Trassia overlay (not upstream) — Paket V-KUBATUR.
 -  | 'kubatur';
 +  | 'kubatur'
-+  // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT.
 +  | 'laengsschnitt';
  
- /** Activity-bar clustering — a divider is drawn whenever the group changes. */
- export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
-@@ -190,6 +194,15 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
-   // einer Achse. ANGEHAENGT, aus demselben Grund wie `drape` — keine Ziffer,
-   // erreichbar ueber die Leiste.
-   { id: 'kubatur', title: 'Cut and fill', short: 'Cut/fill', Icon: Ruler, group: 'author', region: 'side' },
-+  // Trassia (Paket V-LAENGSSCHNITT): Hoehenprofil entlang einer Achse.
-+  // ANGEHAENGT wie `drape` und `kubatur` — keine Ziffer, erreichbar ueber die
-+  // Leiste. `prefersWide`, weil eine Profilzeichnung Breite braucht: ein
-+  // ausgeklinktes Fenster ist damit 780 x 680 statt 440 x 640 px
-+  // (`services/panel-windows.ts`). Auf die Breite der ANGEDOCKTEN
-+  // Seitenleiste wirkt das Feld nicht — `SIDEBAR_WIDE_WIDTH_PCT` steht
-+  // zwar unten in dieser Datei, wird aber nirgends gelesen (geprueft im
-+  // Pin 989da893: einzige Fundstelle ist die Deklaration selbst).
-+  { id: 'laengsschnitt', title: 'Longitudinal profile', short: 'Profile', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
+ /** Shared task grouping for the rail, ribbon panel browser, and palette commands (#5873). */
+ export type PanelGroup = 'coordinate' | 'check' | 'quantify' | 'automate' | 'site' | 'author';
+@@ -205,6 +206,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   { id: 'changeSets', titleKey: 'changeSets.panel.title', Icon: GitBranch, group: 'author', region: 'side' },
+   { id: 'drape', titleKey: 'trassia.panel.drape', Icon: Mountain, group: 'author', region: 'side' },
+   { id: 'kubatur', titleKey: 'trassia.panel.kubatur', Icon: Ruler, group: 'quantify', region: 'side' },
++  { id: 'laengsschnitt', titleKey: 'trassia.panel.laengsschnitt', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
  ];
  
  // The bottom strip (Script / Schedule / Lists) is table-driven; the id union and
 diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-index c50a1dc..1c2e74d 100644
+index a449320dd6e53c4878ee593bfce2def9cab8616a..fea955fc0282ad5c7481344560cf41d6f4f82523 100644
 --- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
 +++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-@@ -38,6 +38,9 @@ import { useViewerStore } from '@/store';
+@@ -41,6 +41,9 @@ import { useViewerStore } from '@/store';
  import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
  // Trassia overlay (not upstream) — Paket V-KUBATUR, siehe ChKubaturPanel.tsx.
  import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
@@ -52,12 +55,11 @@ index c50a1dc..1c2e74d 100644
  // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
  // dynamic chunk keeps it out of the initial bundle until first opened.
  const LayersPanel = lazy(() =>
-@@ -151,6 +154,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+@@ -152,6 +155,7 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+     case 'loadReport': return <LoadReportPanel onClose={onClose} />;
      case 'drape': return <ChDrapePanel onClose={onClose} />;
-     // Trassia (Paket V-KUBATUR).
      case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
-+    // Trassia (Paket V-LAENGSSCHNITT).
 +    case 'laengsschnitt': return <ChLaengsschnittPanel onClose={onClose} />;
+     case 'changes': return <ChangesPanel onClose={onClose} />;
      case 'layers': return <LayersPanelBody onClose={onClose} />;
      case 'sources': return <SourcesPanelBody onClose={onClose} />;
-     case 'charts': return <ChartsPanelBody />;

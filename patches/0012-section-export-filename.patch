@@ -1,20 +1,20 @@
 diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
-index da8027f..bebc98a 100644
+index 5c398f982bdf1e7420f4e490a2337c0e615f0502..347d06ad5cf2f6a60cb3177b680328447b8ae4bf 100644
 --- a/apps/viewer/src/hooks/useDrawingExport.ts
 +++ b/apps/viewer/src/hooks/useDrawingExport.ts
-@@ -6,6 +6,9 @@ import { useCallback } from 'react';
+@@ -8,6 +8,9 @@ import { drawingReferenceSvg, snapshotDrawingReferences, rasterizeReferenceLayer
  import type React from 'react';
- import { posthog } from '@/lib/analytics';
+ import { posthog, trackExportCompleted } from '@/lib/analytics';
  import { downloadFile, sanitizeFilename } from '@/lib/export/download';
 +// Trassia overlay (not upstream) — the station cut publishes what it is
 +// called; see overlay/apps/viewer/src/lib/ch/section-export-name.ts.
 +import { chSectionExportStem } from '@/lib/ch/section-export-name';
  import { toast } from '@/components/ui/toast';
+ import { useTranslation } from '@/i18n';
  import { pdfLineStyleFor } from '@/lib/export/pdf-line-style';
- import {
-@@ -1024,7 +1027,12 @@ function useDrawingExport({
-       coordinateTransform,
+@@ -952,7 +955,12 @@ function useDrawingExport({
        metadataComment,
+       underlays: mappedDxfUnderlayOptions(dxfUnderlays, sectionPlane.axis),
      });
 -    const stem = `section-${sectionPlane.axis}-${sectionPlane.position}`;
 +    // Trassia (audit finding M-11): a cut set at a station on an
@@ -24,5 +24,5 @@ index da8027f..bebc98a 100644
 +    const stem = chSectionExportStem(sectionPlane.custom)
 +      ?? `section-${sectionPlane.axis}-${sectionPlane.position}`;
      downloadDxf(dxf, `${stem}.dxf`);
+     trackExportCompleted({ format: 'dxf', surface: 'drawing_panel' });
      posthog.capture('drawing_exported', {
-       format: 'dxf',

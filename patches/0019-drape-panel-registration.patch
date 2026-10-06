@@ -1,62 +1,63 @@
+diff --git a/apps/viewer/src/i18n/en.ts b/apps/viewer/src/i18n/en.ts
+index 825de2796e718ae86e2f66c1bbd964a488019410..f532d90fe54af6ffa5a33ef3c1084a22455538ed 100644
+--- a/apps/viewer/src/i18n/en.ts
++++ b/apps/viewer/src/i18n/en.ts
+@@ -110,6 +110,7 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
+ 
+ /** English is assembled from feature catalogues so no locale becomes a monolith. */
+ export const en = {
++  'trassia.panel.drape': 'Terrain drape',
+   ...analysisPanelEn,
+   ...annotationsEn,
+   ...anonymizedExportEn,
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index b295002..e38eee2 100644
+index 5b5a674e6f56a920e82523717b38dedfd4f9d54c..b0fac740105b2b9f9749444e0584e1eb671bfcdc 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
-@@ -18,6 +18,12 @@
-  */
- 
- import { BarChart3, Box, CalendarRange, ClipboardCheck, Cloud, Coins, Crosshair, FileText, FileWarning, GitCompareArrows, Info, Layers as LayersIcon, ListTree, MessageSquare, Move3d, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
-+// Trassia overlay (not upstream) — Symbole der Trassia-Panels als eigener Import:
-+// robust gegen Umformatierungen der Upstream-Importzeile (Pin 10.x zog sie in eine Zeile).
-+import {
-+  // Trassia overlay (not upstream) — Paket V-DRAPE.
-+  Mountain,
-+} from 'lucide-react';
+@@ -21,6 +21,7 @@
+ // the viewer-embed bundle too, which has no unplugin-icons resolver for the
+ // `~icons/viewer/*` virtual modules (#6315 broke that build).
+ import { BarChart3, Box, CalendarRange, ClipboardCheck, Cloud, Coins, Crosshair, DraftingCompass, FileText, FileWarning, GitBranch, GitCompareArrows, History, Info, Layers as LayersIcon, ListTree, MessageSquare, Move3d, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
++import { Mountain } from 'lucide-react';
+ import type { TranslationKey } from '@/i18n';
  
  /** Every panel reachable from the unified sidebar rail. `properties` is the
-  *  Information panel (the right pane's default fallback). Each panel opens in
-@@ -51,7 +57,9 @@ export type WorkspacePanelId =
-   | 'pointclouds'
-   | 'measurements'
-   | 'placement'
--  | 'presentation';
-+  | 'presentation'
-+  // Trassia overlay (not upstream) — Paket V-DRAPE.
+@@ -58,7 +59,8 @@ export type WorkspacePanelId =
+   | 'presentation'
+   | 'changes'
+   | 'model'
+-  | 'changeSets';
++  | 'changeSets'
 +  | 'drape';
  
- /** Activity-bar clustering — a divider is drawn whenever the group changes. */
- export type PanelGroup = 'navigate' | 'inspect' | 'review' | 'author' | 'work';
-@@ -171,6 +179,11 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
-   // shortcut). Entry points: the status bar and the ribbon / classic
-   // toolbar's Present button.
-   { id: 'presentation', title: 'Presentation', short: 'Present', Icon: Presentation, group: 'work', region: 'bottom', prefersWide: true },
-+  // Trassia (Paket V-DRAPE): 2D-Daten (DXF, GeoJSON/WFS) auf die
-+  // Gelaendeoberflaeche legen. ANGEHAENGT, damit die eingefrorene
-+  // Alt+1..0-Zuordnung der ersten zehn Eintraege unberuehrt bleibt — dieses
-+  // Panel bekommt keine Ziffer und ist ueber die Leiste erreichbar.
-+  { id: 'drape', title: 'Terrain drape', short: 'Drape', Icon: Mountain, group: 'author', region: 'side' },
+ /** Shared task grouping for the rail, ribbon panel browser, and palette commands (#5873). */
+ export type PanelGroup = 'coordinate' | 'check' | 'quantify' | 'automate' | 'site' | 'author';
+@@ -200,6 +202,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   // Named change sets (#6232 D4): the active set collects new edits; export /
+   // import as files. Flag-free like 'changes' / 'model'. APPENDED (no Alt shortcut).
+   { id: 'changeSets', titleKey: 'changeSets.panel.title', Icon: GitBranch, group: 'author', region: 'side' },
++  { id: 'drape', titleKey: 'trassia.panel.drape', Icon: Mountain, group: 'author', region: 'side' },
  ];
  
  // The bottom strip (Script / Schedule / Lists) is table-driven; the id union and
 diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-index a36669d..c6d15e6 100644
+index 40b0b3361c524e24b9c7431076c068a67ffc87a7..d2a427782e273fe6d154f7f7b2fca08a7ee3a55d 100644
 --- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
 +++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-@@ -34,6 +34,8 @@ import { PointCloudPanel } from '@/components/viewer/PointCloudPanel';
- import { MeasurementsPanel } from '@/components/viewer/MeasurementsPanel';
+@@ -37,6 +37,8 @@ import { MeasurementsPanel } from '@/components/viewer/MeasurementsPanel';
  import { PlacementPanel } from '@/components/viewer/placement/PlacementPanel';
+ import { ModelInspectorPanel } from '@/components/viewer/model-inspector/ModelInspectorPanel';
  import { useViewerStore } from '@/store';
 +// Trassia overlay (not upstream) — Paket V-DRAPE, siehe ChDrapePanel.tsx.
 +import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
  // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
  // dynamic chunk keeps it out of the initial bundle until first opened.
  const LayersPanel = lazy(() =>
-@@ -143,6 +145,8 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+@@ -146,6 +148,7 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
      case 'collab': return <RoomPanel onClose={onClose} />;
      case 'zones': return <ZonesPanel onClose={onClose} />;
      case 'loadReport': return <LoadReportPanel onClose={onClose} />;
-+    // Trassia (Paket V-DRAPE).
 +    case 'drape': return <ChDrapePanel onClose={onClose} />;
+     case 'changes': return <ChangesPanel onClose={onClose} />;
      case 'layers': return <LayersPanelBody onClose={onClose} />;
      case 'sources': return <SourcesPanelBody onClose={onClose} />;
-     case 'charts': return <ChartsPanelBody />;

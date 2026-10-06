@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/StatusBar.tsx b/apps/viewer/src/components/viewer/StatusBar.tsx
-index 0d2f5e7..3fcff6f 100644
+index f4cba387871b0415d0052d320e0add0edb409d9a..1ceb1d992a183edc68b4917ed17288b428b10dd1 100644
 --- a/apps/viewer/src/components/viewer/StatusBar.tsx
 +++ b/apps/viewer/src/components/viewer/StatusBar.tsx
-@@ -36,6 +36,8 @@ interface CountedModel {
+@@ -45,6 +45,8 @@ interface CountedModel {
  import { ChProjektFuss } from './ChProjektFuss';
  // Trassia: exakte Zahlen im Tooltip; die Modellaggregation liefert Upstream.
  import { chZahlExakt } from '@/lib/ch/gesamt-statistik';
@@ -11,7 +11,7 @@ index 0d2f5e7..3fcff6f 100644
  
  export function StatusBar() {
    const { t } = useTranslation();
-@@ -401,6 +403,9 @@ export function StatusBar() {
+@@ -359,6 +361,9 @@ export function StatusBar() {
  
          <Separator orientation="vertical" className="h-3.5" />
  
@@ -21,7 +21,7 @@ index 0d2f5e7..3fcff6f 100644
          <a
            href="https://ifclite.dev"
            target="_blank"
-@@ -410,6 +415,17 @@ export function StatusBar() {
+@@ -368,6 +373,17 @@ export function StatusBar() {
          >
            {t('shellChrome.statusBar.ifcliteLinkLabel')}
          </a>
@@ -40,21 +40,18 @@ index 0d2f5e7..3fcff6f 100644
  
        <FlavorDialog open={flavorDialogOpen} onClose={() => setFlavorDialogOpen(false)} />
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index 5b7b448..081c4b0 100644
+index ad0e4edbd6804b07981591dd8d739026dc26f58f..77c37f7e4fb0a0cfdcd383f753cfb0cb713d7660 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -64,6 +64,10 @@ import { enqueueSourceLoad } from '@/lib/sources/loadQueue';
+@@ -64,6 +64,7 @@ import { sanitizeFilename } from '@/lib/export/download';
+ import { enqueueSourceLoad } from '@/lib/sources/loadQueue';
  import { toast, Toaster } from '@/components/ui/toast';
- // Trassia overlay (not upstream) — Paket V-DRAPE, siehe lib/ch/drape-ingest.ts.
  import { chDrapeTakeDroppedFiles, chDrapeUnderlayCandidates } from '@/lib/ch/drape-ingest';
-+// Trassia overlay (not upstream) — Paket U2: das Startbild traegt im
-+// Trassia-Modus keine fremde Werbung (LLM/MCP, Cloud, Tour, Layers-Demo,
-+// ifclite.dev); im Vollmodus (?voll=1) bleibt alles. Siehe lib/ch/modus.ts.
 +import { chVollmodus } from '@/lib/ch/modus';
- import { describeUnsupportedFormat } from '@/hooks/ingest/unsupportedFormat';
- import { Upload, Command, AlertTriangle, ChevronDown, ExternalLink, Plus } from 'lucide-react';
+ import { reportFileOpenRejected } from '@/hooks/ingest/fileOpenRejected';
+ import { Upload, AlertTriangle, ChevronDown, ExternalLink, Plus } from 'lucide-react';
  import { createBlankIfcFile } from '@/utils/createBlankIfc';
-@@ -1049,7 +1053,6 @@ export function ViewportContainer() {
+@@ -936,7 +937,6 @@ export function ViewportContainer() {
              recentFiles={recentFiles}
              loadFile={loadFile}
            />
@@ -62,24 +59,28 @@ index 5b7b448..081c4b0 100644
            {/* The old Select / Filter / Analyze feature-card grid was
                dropped: it repeated toolbar affordances without offering an
                action, and its height pushed the welcome card off-screen. */}
-@@ -1058,8 +1061,11 @@ export function ViewportContainer() {
-               visitors, right: shortcuts cue for power users. Both desktop-only.
-               IN FLOW, not absolute: the welcome column scrolls on short
-               viewports, and absolutely-anchored chips ride the scroll and
--              land on top of the content (#1736 follow-up). */}
-+              land on top of the content (#1736 follow-up).
-+              Trassia (U2): der Marketing-Chip nur im Vollmodus; die Shortcuts
-+              bleiben. */}
-           <div className="mt-10 hidden w-full max-w-3xl items-center justify-between gap-4 md:flex">
-+            {chVollmodus() ? (
-             <a
-               href="https://ifclite.dev"
-               target="_blank"
-@@ -1069,6 +1075,7 @@ export function ViewportContainer() {
-               <span>{t('viewportLighting.container.emptyState.footer.discoverPrompt')}</span>
-               <span className="font-bold text-primary group-hover:translate-x-0.5 transition-transform">{t('viewportLighting.container.emptyState.footer.discoverLink')}</span>
-             </a>
-+            ) : <span />}
-             <div className="flex items-center gap-2 text-xs font-mono px-3 py-1.5 bg-zinc-100 dark:bg-[#1f2335] border border-zinc-300 dark:border-[#3b4261] text-zinc-500 dark:text-[#565f89]">
-               <Command className="h-3 w-3" />
-               <span>{t('viewportLighting.container.emptyState.footer.shortcutsLabel')}</span>
+diff --git a/apps/viewer/src/components/viewer/WelcomeFooterChips.tsx b/apps/viewer/src/components/viewer/WelcomeFooterChips.tsx
+index feb693e5423e5854e21828937d740c743182ec26..031a19712073043f867cf427b38ccdba1dd3ae03 100644
+--- a/apps/viewer/src/components/viewer/WelcomeFooterChips.tsx
++++ b/apps/viewer/src/components/viewer/WelcomeFooterChips.tsx
+@@ -14,6 +14,7 @@
+  * clickable and did nothing.
+  */
+ 
++import { chVollmodus } from '@/lib/ch/modus';
+ import { Command } from 'lucide-react';
+ import { useTranslation } from '@/i18n';
+ import { EVENT_SHOW_SHORTCUTS } from '@/lib/tours/events';
+@@ -24,10 +25,10 @@ export function WelcomeFooterChips() {
+   const { t } = useTranslation();
+   return (
+     <div className="mt-10 hidden w-full max-w-3xl items-center justify-between gap-4 md:flex">
+-      <a href="https://ifclite.dev" target="_blank" rel="noopener noreferrer" className={`group inline-flex items-center gap-2 ${CHIP}`}>
++      {chVollmodus() ? <a href="https://ifclite.dev" target="_blank" rel="noopener noreferrer" className={`group inline-flex items-center gap-2 ${CHIP}`}>
+         <span>{t('viewportLighting.container.emptyState.footer.discoverPrompt')}</span>
+         <span className="font-bold text-primary group-hover:translate-x-0.5 transition-transform">{t('viewportLighting.container.emptyState.footer.discoverLink')}</span>
+-      </a>
++      </a> : <span />}
+       <button
+         type="button"
+         onClick={() => window.dispatchEvent(new CustomEvent(EVENT_SHOW_SHORTCUTS, { detail: { tab: 'shortcuts' } }))}

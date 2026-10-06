@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
-index b66d5ce..dbf795c 100644
+index 0597d126b43daa2fb21d061f37676bc2438ac043..7eef24aac802bd37b638228a135e3292eb806ad4 100644
 --- a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
-@@ -43,9 +43,9 @@ import { isCollabEnabled } from '@/lib/collab/config';
+@@ -43,9 +43,9 @@ import { useRailPanelIds } from '@/hooks/useRailPanelIds';
  import { pendingCompositionMutations } from '@/lib/layers/pending';
  import { activityAnchor, tourAnchor } from '@/lib/tours/anchors';
  import { CustomizeSidebar } from './CustomizeSidebar';
@@ -15,38 +15,28 @@ index b66d5ce..dbf795c 100644
  
  /** Alt+N shortcut KEY per panel, by registry index (frozen since #1200): 1-9,
   *  then 0. Only the first ten registry entries get a shortcut; later
-@@ -94,10 +94,7 @@ export function ActivityBar() {
-     (id) =>
-       (!hidden.has(id) || id === 'properties') &&
-       (id !== 'collab' || isCollabEnabled()) &&
--      (id !== 'pointclouds' || pointCloudAssetCount > 0) &&
--      // Trassia (Paket U2): die Kundenleiste. Nichts wird entfernt — Alt+N und
--      // der Anpassen-Dialog erreichen die uebrigen Panels weiterhin.
--      chLeisteZeigt(id),
-+      (id !== 'pointclouds' || pointCloudAssetCount > 0),
-   );
+@@ -82,7 +82,7 @@ export function ActivityBar() {
+   const [overId, setOverId] = useState<WorkspacePanelId | null>(null);
+ 
+   // One rail list for the activity bar and the mobile Panels sheet (#5853).
+-  const visibleIds = useRailPanelIds().filter(chLeisteZeigt);
++  const visibleIds = useRailPanelIds();
  
    const onIconClick = (id: WorkspacePanelId) => {
+     const region = getPanelDef(id)?.region;
 diff --git a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
-index 5429ace..45bc3a8 100644
+index 171fc761726e21ae954c094bc2fbd6de49e8445e..c66e162e9e345b1112df0b13a54757afa8562e77 100644
 --- a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
-@@ -25,10 +25,10 @@ import { useViewerStore } from '@/store';
- import { useTranslation } from '@/i18n';
- import { getPanelDef, type WorkspacePanelId } from '@/lib/panels/registry';
- import { resetLayout } from '@/store/layoutReset';
--// Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
--// 2026-09-03): der Anpassen-Dialog listet im Trassia-Modus nur die Panels, die
--// die Leiste auch anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
+@@ -29,7 +29,6 @@ import { registerKeyboardCommand } from '@/lib/commands/dispatcher';
+ // Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
+ // 2026-09-03): der Anpassen-Dialog listet im Trassia-Modus nur die Panels, die
+ // die Leiste auch anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
 -import { chLeisteZeigt } from '@/lib/ch/modus';
-+// Trassia (Paket U2/TODO #36, seit dem Reste-Paket, Marco 2026-09-04): der
-+// Anpassen-Dialog listet ALLE Panels — die Kundenleiste ist nur die Vorgabe der
-+// Verstecktliste (store/slices/sidebarSlice.ts); «Hidden» ist der Weg, ein
-+// Panel einzublenden. Siehe lib/ch/modus.ts.
  
  export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
    const { t } = useTranslation();
-@@ -44,8 +44,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+@@ -45,8 +44,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
    const [overId, setOverId] = useState<string | null>(null);
  
    // Shown panels keep their rail order; hidden ones live in their own section.
@@ -58,48 +48,41 @@ index 5429ace..45bc3a8 100644
    // Move focus into the popover on open and restore it to the trigger on close.
    useEffect(() => {
 diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-index 74a5bc3..34ac55c 100644
+index 08e0074bfa23db23097a97dc26ef5c268c15aabb..0f6156a803fb9d80e2494957db7edad3f7784517 100644
 --- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
 +++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-@@ -13,9 +13,10 @@ import { resetVisibilityForHomeFromStore } from '@/store/homeView';
- import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
- import { bottomPanelFlags } from '@/lib/panels/bottom-panels';
+@@ -15,7 +15,7 @@ import { bottomPanelFlags } from '@/lib/panels/bottom-panels';
  // Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
--// 2026-09-03): Alt+Ziffer oeffnet im Trassia-Modus nur Panels, die die Leiste
--// anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
+ // 2026-09-03): Alt+Ziffer oeffnet im Trassia-Modus nur Panels, die die Leiste
+ // anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
 -import { chLeisteZeigt } from '@/lib/ch/modus';
-+// 2026-09-03), seit dem Reste-Paket: Alt+Ziffer oeffnet im Trassia-Modus nur
-+// Panels, die in der Leiste stehen (nicht versteckt — der Nutzer kann sie im
-+// Anpassen-Dialog einblenden); ?voll=1 wie Upstream. Siehe lib/ch/modus.ts.
 +import { chVollmodus } from '@/lib/ch/modus';
  import { closeAllPanelWindows } from '@/services/panel-windows';
- import { eventKey, isTextEntryTarget, WALK_MOVEMENT_KEYS } from '@/lib/keyboard-event';
- import {
-@@ -128,7 +129,7 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
-       const shortcutPanel = workspacePanelForShortcutCode(e.code);
-       // Trassia (TODO #36): ein nicht angebotenes Panel bleibt zu; die Taste
-       // faellt durch wie eine unbelegte (kein preventDefault).
--      if (shortcutPanel && chLeisteZeigt(shortcutPanel)) {
-+      if (shortcutPanel && (chVollmodus() || !useViewerStore.getState().sidebarHiddenIds.includes(shortcutPanel))) {
-         e.preventDefault();
-         useViewerStore.getState().openPanelInHome(shortcutPanel);
-         return;
-@@ -379,7 +380,9 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
-       // Dialog gehoert dem Menue (Radix schliesst es selbst) — sonst schloss
-       // ein Escape im Export-Menue des 2D-Panels das ganze Schnittwerkzeug.
-       const ziel = e.target as HTMLElement | null;
--      if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content]')) return;
-+      // Tester M-3 (04.09.): auch der Anpassen-Dialog der Leiste (schliesst
-+      // sich selbst per Escape) gehoert dazu.
-+      if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return;
-       e.preventDefault();
-       const now = Date.now();
-       const timeSinceLastEscape = now - lastEscapeRef.current;
+ import { WALK_MOVEMENT_KEYS, eventKey, isTextEditingElement } from '@/lib/keyboard-event';
+ import { bindModelWorkspaceKeys } from '@/lib/commands/modeling/keys-workspace';
+@@ -28,7 +28,7 @@ interface KeyboardShortcutsOptions { enabled?: boolean }
+ 
+ function escapeGlobal(closeAll: boolean, event?: KeyboardEvent): boolean | void {
+   const target = event?.target as HTMLElement | null;
+-  if (target?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content]')) return false;
++  if (target?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return false;
+   const state = useViewerStore.getState();
+   if (closeAll) {
+     state.showWorkspacePanel('properties');
+@@ -119,7 +119,7 @@ const RUNNERS: readonly [KeyCommandId, CommandRun][] = [
+   ['tool.annotate', () => { useViewerStore.getState().setActiveTool('annotate'); }],
+   ['ui.openPanel', (event) => {
+     const panel = workspacePanelForShortcutCode(event.code);
+-    if (!panel || !chLeisteZeigt(panel)) return false;
++    if (!panel || (!chVollmodus() && useViewerStore.getState().sidebarHiddenIds.includes(panel))) return false;
+     useViewerStore.getState().openPanelInHome(panel, 'shortcut');
+   }],
+   ['ui.toggleSidebar', () => { useViewerStore.getState().cycleSidebarMode(); }],
 diff --git a/apps/viewer/src/store/slices/sidebarSlice.ts b/apps/viewer/src/store/slices/sidebarSlice.ts
-index 1250980..3188abf 100644
+index 5255c5136bcea309e4d87db54db58c38725c1187..b9a817afd74c75783ca0c9d2133782b6bfa5fc29 100644
 --- a/apps/viewer/src/store/slices/sidebarSlice.ts
 +++ b/apps/viewer/src/store/slices/sidebarSlice.ts
-@@ -28,6 +28,10 @@ import {
+@@ -29,6 +29,10 @@ import {
    SIDEBAR_DEFAULT_WIDTH_PCT,
    type WorkspacePanelId,
  } from '@/lib/panels/registry';
@@ -110,7 +93,7 @@ index 1250980..3188abf 100644
  
  /** Clamp the docked-split ratio so neither half can collapse to nothing. */
  const MIN_SPLIT_RATIO = 0.2;
-@@ -57,6 +61,11 @@ export interface SidebarLayoutSnapshot {
+@@ -58,6 +62,11 @@ export interface SidebarLayoutSnapshot {
  }
  
  const STORAGE_KEY = 'ifc-lite:sidebar-layout-v1';
@@ -122,7 +105,7 @@ index 1250980..3188abf 100644
  // Trassia (Paket V-PFLEGE, Teil A): von 14 auf 6 gesenkt.
  //
  // Diese Klemme ist die PERSISTENZ-Schranke — sie faengt kaputte oder
-@@ -188,21 +197,35 @@ function loadPersisted(): SidebarLayoutSnapshot {
+@@ -200,21 +209,35 @@ function loadPersisted(): SidebarLayoutSnapshot {
      // Trassia: 340 px statt 22 % — siehe defaultWidthPct().
      widthPct: defaultWidthPct(),
      order: [...DEFAULT_ORDER],
@@ -162,7 +145,7 @@ index 1250980..3188abf 100644
    } catch (error) {
      console.warn('[sidebar] ignoring malformed persisted layout:', error);
      return fallback;
-@@ -212,7 +235,8 @@ function loadPersisted(): SidebarLayoutSnapshot {
+@@ -224,7 +247,8 @@ function loadPersisted(): SidebarLayoutSnapshot {
  function persist(snap: SidebarLayoutSnapshot): void {
    if (typeof window === 'undefined') return;
    try {
@@ -172,7 +155,7 @@ index 1250980..3188abf 100644
    } catch (error) {
      // Quota / private mode — the layout just won't persist this session.
      console.warn('[sidebar] failed to persist layout:', error);
-@@ -348,7 +372,8 @@ export const createSidebarSlice: StateCreator<SidebarSlice, [], [], SidebarSlice
+@@ -360,7 +384,8 @@ export const createSidebarSlice: StateCreator<SidebarSlice, [], [], SidebarSlice
          // Trassia: „Layout zuruecksetzen" gibt die neue Vorgabe, nicht die alte.
          widthPct: defaultWidthPct(),
          order: [...DEFAULT_ORDER],

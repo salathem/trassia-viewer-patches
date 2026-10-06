@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
-index df65d40..72d9b46 100644
+index df65d4090a815f32d5f80563b014edea31c9d1b6..72d9b463135c27969aeecd0cafa4920565a76e73 100644
 --- a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
 @@ -22,6 +22,10 @@ import { useViewerStore } from '@/store';

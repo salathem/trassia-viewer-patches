@@ -2,479 +2,186 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/**
- * Global keyboard shortcuts for the viewer
- */
-
-import { useEffect, useCallback, useRef } from 'react';
+/** Live global and tool actions for the canonical keyboard table (#5841). */
+import { useEffect } from 'react';
 import { replayWorkspaceHistory } from '@/lib/model-placement/history';
+import { registerKeyboardCommand, type CommandRun } from '@/lib/commands/dispatcher';
+import type { KeyCommandId } from '@/lib/commands/keyboard-commands';
 import { useViewerStore } from '@/store';
-import { resetVisibilityForHomeFromStore } from '@/store/homeView';
+import { showAllFromStore } from '@/store/homeView';
+import { hideSelectionFromStore } from '@/store/hideSelection';
 import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
 import { bottomPanelFlags } from '@/lib/panels/bottom-panels';
 // Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
-// 2026-09-03), seit dem Reste-Paket: Alt+Ziffer oeffnet im Trassia-Modus nur
-// Panels, die in der Leiste stehen (nicht versteckt — der Nutzer kann sie im
-// Anpassen-Dialog einblenden); ?voll=1 wie Upstream. Siehe lib/ch/modus.ts.
+// 2026-09-03): Alt+Ziffer oeffnet im Trassia-Modus nur Panels, die die Leiste
+// anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
 import { chVollmodus } from '@/lib/ch/modus';
-// Trassia overlay (Paket U3-klein, Marco E21 2026-09-04): die Leertaste
-// schaltet die Sichtbarkeit der gewaehlten Struktur-Zeilen um — je Zeile nach
-// eigenem Zustand; ohne Zeilen-Auswahl je gewaehltem Element nach Zustand.
-import { chElementePlan, chPlanAusfuehren, chZeilenAuswahl, chZeilenAuswahlLeeren, chZeilenSichtbarkeitUmschalten } from '@/lib/ch/zeilen-auswahl';
+import { chElementePlan, chPlanAusfuehren, chZeilenAuswahlLeeren, chZeilenSichtbarkeitUmschalten } from '@/lib/ch/zeilen-auswahl';
 import { closeAllPanelWindows } from '@/services/panel-windows';
-import { eventKey, isTextEntryTarget, WALK_MOVEMENT_KEYS } from '@/lib/keyboard-event';
+import { WALK_MOVEMENT_KEYS, eventKey, isTextEditingElement } from '@/lib/keyboard-event';
+import { bindModelWorkspaceKeys } from '@/lib/commands/modeling/keys-workspace';
 import {
-  executeBasketIsolate,
-  executeBasketSet,
-  executeBasketAdd,
-  executeBasketRemove,
-  executeBasketSaveView,
+  executeBasketIsolate, executeBasketAdd,
+  executeBasketRemove, executeBasketSaveView,
 } from '@/store/basket/basketCommands';
 
-interface KeyboardShortcutsOptions {
-  enabled?: boolean;
-}
+interface KeyboardShortcutsOptions { enabled?: boolean }
 
-/** Get all selected global IDs — multi-select if available, else single selectedEntityId */
-function getAllSelectedGlobalIds(): number[] {
+function escapeGlobal(closeAll: boolean, event?: KeyboardEvent): boolean | void {
+  const target = event?.target as HTMLElement | null;
+  if (target?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return false;
+  chZeilenAuswahlLeeren();
   const state = useViewerStore.getState();
-  if (state.selectedEntityIds.size > 0) {
-    return Array.from(state.selectedEntityIds);
+  if (closeAll) {
+    state.showWorkspacePanel('properties');
+    state.resetDockLayout();
+    closeAllPanelWindows();
+    useViewerStore.setState(bottomPanelFlags(null));
+    state.setOverridesPanelVisible(false);
+    state.setChatPanelVisible(false);
+    state.setSheetPanelVisible(false);
+    state.setLeftPanelCollapsed(false);
+    state.setRightPanelCollapsed(false);
   }
-  if (state.selectedEntityId !== null) {
-    return [state.selectedEntityId];
-  }
-  return [];
+  if (state.activeTool !== 'select') state.setActiveTool('select', 'esc');
+  else state.clearEntitySelection();
 }
 
-/** Double-escape threshold in milliseconds */
-const DOUBLE_ESCAPE_MS = 500;
+function rotateSelected(event: KeyboardEvent): boolean {
+  const state = useViewerStore.getState();
+  if (!state.editEnabled || !state.selectedEntity) return false;
+  const result = state.rotateEntity(
+    state.selectedEntity.modelId,
+    state.selectedEntity.expressId,
+    ((event.shiftKey ? -15 : 15) * Math.PI) / 180,
+  );
+  if (!result.ok) {
+    void import('@/components/ui/toast').then(({ toast }) => toast.error(`Couldn't rotate: ${result.reason}`));
+  }
+  return true;
+}
 
-export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
-  const { enabled = true } = options;
-
-  const lastEscapeRef = useRef<number>(0);
-
-  const selectedEntityId = useViewerStore((s) => s.selectedEntityId);
-  const activeTool = useViewerStore((s) => s.activeTool);
-  const setActiveTool = useViewerStore((s) => s.setActiveTool);
-  const hideEntities = useViewerStore((s) => s.hideEntities);
-  const toggleTheme = useViewerStore((s) => s.toggleTheme);
-  const toggleEditEnabled = useViewerStore((s) => s.toggleEditEnabled);
-
-  // Measure tool specific actions
-  const activeMeasurement = useViewerStore((s) => s.activeMeasurement);
-  const cancelMeasurement = useViewerStore((s) => s.cancelMeasurement);
-  const toggleSnap = useViewerStore((s) => s.toggleSnap);
-  // Polyline (multi-click) mode (#2199).
-  const activePolyline = useViewerStore((s) => s.activePolyline);
-  const cancelPolyline = useViewerStore((s) => s.cancelPolyline);
-  // Angle (fixed-count multi-click) mode (#2735).
-  const activeAngle = useViewerStore((s) => s.activeAngle);
-  const cancelAngle = useViewerStore((s) => s.cancelAngle);
-  const finishPolyline = useViewerStore((s) => s.finishPolyline);
-  // Radius (unbounded multi-click) mode (#2737 item 2).
-  const activeRadius = useViewerStore((s) => s.activeRadius);
-  const cancelRadius = useViewerStore((s) => s.cancelRadius);
-  const finishRadius = useViewerStore((s) => s.finishRadius);
-
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    // Ignore keys an input-like target consumes (inputs, <select>, ARIA widgets).
-    if (isTextEntryTarget(e)) return;
-    // A key another layer already handled is not a shortcut: a Radix popover
-    // (the Section bar's Cap, #5499) dismisses itself on Escape and marks the
-    // event handled from a document-capture listener, which runs before this
-    // window listener — without this, the same Escape also closed the tool.
-    if (e.defaultPrevented) return;
-
-    // Get modifier keys
-    const ctrl = e.ctrlKey || e.metaKey;
-    const shift = e.shiftKey;
-    // Browsers may dispatch a key event with no `key` (autofill, synthetic
-    // events) — see lib/keyboard-event.ts. No shortcut below could match one.
-    const key = eventKey(e);
-    if (key === null) return;
-    // Walk owns W/A/S/D + arrows (any modifier): A must not Show all, D not toggle the dock.
-    if (activeTool === 'walk' && WALK_MOVEMENT_KEYS.has(key)) return;
-
-    // Workspace moves interleave with active-model authoring history.
-    if (key === 'z' && ctrl) {
-      e.preventDefault();
-      replayWorkspaceHistory(useViewerStore.getState(), shift ? 'redo' : 'undo');
-      return;
+function finishMeasurement(): boolean {
+  const state = useViewerStore.getState();
+  if (state.activePolyline) {
+    if (!state.finishPolyline(false)) {
+      void import('@/components/ui/toast').then(({ toast }) => toast.error('Polyline needs at least 2 points'));
     }
+    return true;
+  }
+  if (state.activeRadius) {
+    if (!state.finishRadius()) {
+      void import('@/components/ui/toast').then(({ toast }) => toast.error('Radius needs at least 3 points'));
+    }
+    return true;
+  }
+  return false;
+}
 
-    // Navigation tools
-    if (key === 'v' && !ctrl && !shift) {
-      e.preventDefault();
-      setActiveTool('select');
-    }
-    if (key === 'c' && !ctrl && !shift) {
-      e.preventDefault();
-      setActiveTool('walk');
-    }
-    if (key === 'm' && !ctrl && !shift) {
-      e.preventDefault();
-      setActiveTool('measure');
-    }
-    if (key === 'x' && !ctrl && !shift) {
-      e.preventDefault();
-      setActiveTool('section');
-    }
-    if (key === 'p' && !ctrl && !shift) {
-      e.preventDefault();
-      setActiveTool('annotate');
-    }
+function cancelMeasurement(): boolean {
+  const state = useViewerStore.getState();
+  if (state.activeMeasurement) { state.cancelMeasurement(); return true; }
+  if (state.activePolyline) { state.cancelPolyline(); return true; }
+  if (state.activeAngle) { state.cancelAngle(); return true; }
+  if (state.activeRadius) { state.cancelRadius(); return true; }
+  return false;
+}
 
-    // Alt+1..9 / Alt+0 — jump to a workspace panel in its home region (#1200/#1208).
-    // Uses e.code so it works regardless of the Alt character a layout produces
-    // (Alt+1 = ¡ on macOS). 1-9 map to the first nine; 0 maps to the tenth.
-    if (e.altKey && !ctrl) {
-      const shortcutPanel = workspacePanelForShortcutCode(e.code);
-      // Trassia (TODO #36): ein nicht angebotenes Panel bleibt zu; die Taste
-      // faellt durch wie eine unbelegte (kein preventDefault).
-      if (shortcutPanel && (chVollmodus() || !useViewerStore.getState().sidebarHiddenIds.includes(shortcutPanel))) {
-        e.preventDefault();
-        useViewerStore.getState().openPanelInHome(shortcutPanel);
-        return;
-      }
-      // Alt+\\ — toggle the sidebar (expand ⇄ collapse to icons; the rail stays).
-      if (e.code === 'Backslash') {
-        e.preventDefault();
-        useViewerStore.getState().cycleSidebarMode();
-        return;
-      }
+function splitSelected(): void {
+  const state = useViewerStore.getState();
+  if (state.session?.activeCommandId === 'element.split') {
+    state.endCommand('cancel');
+    return;
+  }
+  if (state.selectedEntityId === null) return;
+  state.startCommand('element.split');
+}
+
+function hideSelected(event: KeyboardEvent): boolean {
+  if (event.key === ' ') {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'BUTTON' || tag === 'SELECT' || tag === 'A') return false;
+  }
+  if (event.key === ' ') {
+    const s = useViewerStore.getState();
+    const actions = { hideEntities: s.hideEntities, showEntities: s.showEntities, setModelVisibility: s.setModelVisibility };
+    let steps = chZeilenSichtbarkeitUmschalten({ versteckt: s.hiddenEntities, modellSichtbar: (id) => s.models.get(id)?.visible }, actions);
+    if (steps === 0) {
+      const ids = s.selectedEntityIds.size > 0 ? [...s.selectedEntityIds] : s.selectedEntityId === null ? [] : [s.selectedEntityId];
+      const plan = chElementePlan(ids, s.hiddenEntities);
+      chPlanAusfuehren(plan, actions);
+      steps = plan.length;
     }
+    return steps > 0;
+  }
+  return hideSelectionFromStore();
+}
 
-    // Global edit-mode pill — unlocks inline property/attribute
-    // editors, add-element draw tools, georeference placement, and
-    // future geometry manipulators. Toggle from anywhere outside an
-    // input field.
-    if (key === 'e' && !ctrl && !shift) {
-      e.preventDefault();
-      toggleEditEnabled();
-    }
+function walkOwns(event: KeyboardEvent): boolean {
+  const key = eventKey(event);
+  return useViewerStore.getState().activeTool === 'walk' && key !== null && WALK_MOVEMENT_KEYS.has(key);
+}
 
-    // K = knife / Split. Operates only on the currently selected
-    // entity — there's no free-roam "hover anything and split" mode
-    // any more. If there's no selection, the keypress is a no-op
-    // (a toast would be noisy; the user can see no entity is
-    // selected). The action also pre-arms the splitTarget so the
-    // overlay knows what to draw the moment Split engages.
-    if (key === 'k' && !ctrl && !shift) {
-      e.preventDefault();
-      const state = useViewerStore.getState();
-      if (state.activeTool === 'split') {
-        state.clearSplitHover();
-        state.setActiveTool('select');
-        return;
-      }
-      const sel = state.selectedEntity;
-      if (!sel) return;
-      state.setSplitTarget(sel.modelId, sel.expressId);
-      state.setActiveTool('split');
-    }
+/** Each command id below gets its chord and context from KEY_COMMANDS. */
+const RUNNERS: readonly [KeyCommandId, CommandRun][] = [
+  ['edit.undo', () => { replayWorkspaceHistory(useViewerStore.getState(), 'undo'); }],
+  ['edit.redo', () => { replayWorkspaceHistory(useViewerStore.getState(), 'redo'); }],
+  ['tool.select', () => { useViewerStore.getState().setActiveTool('select'); }],
+  ['tool.walk', () => { useViewerStore.getState().setActiveTool('walk'); }],
+  ['tool.measure', () => { useViewerStore.getState().setActiveTool('measure'); }],
+  ['tool.section', () => { useViewerStore.getState().setActiveTool('section'); }],
+  ['tool.annotate', () => { useViewerStore.getState().setActiveTool('annotate'); }],
+  ['ui.openPanel', (event) => {
+    const panel = workspacePanelForShortcutCode(event.code);
+    if (!panel || (!chVollmodus() && useViewerStore.getState().sidebarHiddenIds.includes(panel))) return false;
+    useViewerStore.getState().openPanelInHome(panel, 'shortcut');
+  }],
+  ['ui.toggleSidebar', () => { useViewerStore.getState().cycleSidebarMode(); }],
+  ['edit.toggleEditMode', () => { useViewerStore.getState().toggleEditEnabled(); }],
+  ['tool.split', () => { splitSelected(); }],
+  ['edit.rotate', rotateSelected],
+  ['basket.isolate', () => { executeBasketIsolate(); }],
+  ['basket.add', () => { executeBasketAdd(); }],
+  ['basket.remove', () => { executeBasketRemove(); }],
+  ['basket.toggleDock', (event) => {
+    if (walkOwns(event)) return false;
+    useViewerStore.getState().toggleBottomPanel('presentation', 'shortcut');
+  }],
+  ['basket.saveView', () => {
+    if (useViewerStore.getState().pinboardEntities.size === 0) return false;
+    void executeBasketSaveView().catch((error: unknown) => console.error('[keyboard] Could not save basket view:', error));
+  }],
+  ['visibility.hideSelection', hideSelected],
+  ['visibility.toggleSelection', hideSelected],
+  ['visibility.showAll', (event) => {
+    if (walkOwns(event)) return false;
+    showAllFromStore('a');
+  }],
+  ['measure.cancel', cancelMeasurement],
+  ['measure.finish', finishMeasurement],
+  ['measure.toggleSnap', () => { useViewerStore.getState().toggleSnap(); }],
+  ['selection.escape', (event) => escapeGlobal(false, event)],
+  ['ui.closeAllPanels', (event) => escapeGlobal(true, event)],
+  ['ui.toggleTheme', () => { useViewerStore.getState().toggleTheme(); }],
+];
 
-    // R / Shift+R = rotate selected entity ±15° about the storey-up
-    // Z axis. Only fires while edit mode is on and a single entity
-    // is selected. The rotateEntity action handles the placement
-    // chain walk + undo registration.
-    if (key === 'r' && !ctrl) {
-      const state = useViewerStore.getState();
-      if (state.editEnabled && state.selectedEntity) {
-        e.preventDefault();
-        const deltaDeg = shift ? -15 : 15;
-        const result = state.rotateEntity(
-          state.selectedEntity.modelId,
-          state.selectedEntity.expressId,
-          (deltaDeg * Math.PI) / 180,
-        );
-        if (!result.ok) {
-          // Surface the reason via the existing toast helper rather
-          // than a console warning — the user just pressed a key and
-          // deserves immediate feedback.
-          void import('@/components/ui/toast').then((m) => {
-            m.toast.error(`Couldn't rotate: ${result.reason}`);
-          });
-        }
-      }
-    }
+const TOOL_CONTEXT: Partial<Record<KeyCommandId, string>> = {
+  'measure.cancel': 'measure',
+  'measure.finish': 'measure',
+  'measure.toggleSnap': 'measure',
+};
 
-    // Basket controls (automatic context source)
-    // I = Isolate from current context
-    if (key === 'i' && !ctrl && !shift) {
-      e.preventDefault();
-      executeBasketIsolate();
-    }
+/** Undo / redo also run from a focused combobox or menu button; only real text editing keeps its own. */
+const HISTORY_COMMANDS: ReadonlySet<KeyCommandId> = new Set(['edit.undo', 'edit.redo']);
 
-    // = Set basket from active context
-    if (e.key === '=' && !ctrl && !shift) {
-      e.preventDefault();
-      executeBasketSet();
-    }
-
-    // + Add active context to basket
-    if ((e.key === '+' || (e.key === '=' && shift)) && !ctrl) {
-      e.preventDefault();
-      executeBasketAdd();
-    }
-
-    // - Remove active context from basket
-    if ((e.key === '-' || e.key === '_') && !ctrl) {
-      e.preventDefault();
-      executeBasketRemove();
-    }
-
-    // D Toggle the Presentation bottom panel (#5508: bottom-panel table, so
-    // it stays mutually exclusive with Script/Schedule/Lists/etc.)
-    if (key === 'd' && !ctrl && !shift) {
-      e.preventDefault();
-      useViewerStore.getState().toggleBottomPanel('presentation');
-    }
-
-    // B Save current basket as presentation view with thumbnail
-    if (key === 'b' && !ctrl && !shift) {
-      const state = useViewerStore.getState();
-      if (state.pinboardEntities.size > 0) {
-        e.preventDefault();
-        executeBasketSaveView().catch((err) => {
-          console.error('[useKeyboardShortcuts] Failed to save basket view:', err);
-        });
-      }
-    }
-
-    if ((key === 'delete' || key === 'backspace') && !ctrl && !shift && selectedEntityId) {
-      e.preventDefault();
-      const ids = getAllSelectedGlobalIds();
-      hideEntities(ids);
-    }
-    // Space toggles visibility — skip when focused on buttons/selects/links where Space has native behavior
-    // Trassia (U3-klein, Marco E21): nicht mehr nur verstecken, sondern je
-    // Zeile/Element nach eigenem Zustand umschalten; gewaehlte Struktur-Zeilen
-    // (Modell, Gruppe, Typ, Element gemischt) vor der Store-Auswahl. Derselbe
-    // Riegel wie bei Escape: nie in Menues und Dialogen.
-    if (key === ' ' && !ctrl && !shift) {
-      const tag = document.activeElement?.tagName;
-      const ziel = e.target as HTMLElement | null;
-      const imMenue = !!ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]');
-      // Tester U3 B-1/B-2: steht eine Zeilen-Auswahl, gehoert die Leertaste
-      // ihr — auch wenn zuletzt ein Reiter oder Aufklapp-Pfeil fokussiert war
-      // (der Knopf bekommt dann keinen Klick). Ohne Zeilen-Auswahl wie Upstream.
-      const zeilenGewaehlt = chZeilenAuswahl().size > 0;
-      if ((zeilenGewaehlt || (tag !== 'BUTTON' && tag !== 'SELECT' && tag !== 'A')) && !imMenue) {
-        const s = useViewerStore.getState();
-        const aktionen = { hideEntities: s.hideEntities, showEntities: s.showEntities, setModelVisibility: s.setModelVisibility };
-        let schritte = chZeilenSichtbarkeitUmschalten(
-          { versteckt: s.hiddenEntities, modellSichtbar: (id) => s.models.get(id)?.visible },
-          aktionen,
-        );
-        if (schritte === 0) {
-          const plan = chElementePlan(getAllSelectedGlobalIds(), s.hiddenEntities);
-          chPlanAusfuehren(plan, aktionen);
-          schritte = plan.length;
-        }
-        if (schritte > 0) e.preventDefault();
-      }
-    }
-    if (key === 'a' && !ctrl && !shift) {
-      e.preventDefault();
-      resetVisibilityForHomeFromStore();
-    }
-
-    // Split tool — Esc exits Split and returns to Select. We catch
-    // it here before the global Esc handler so the hover is cleared
-    // along with the tool swap.
-    if (activeTool === 'split' && key === 'escape') {
-      e.preventDefault();
-      const state = useViewerStore.getState();
-      state.clearSplitHover();
-      state.setActiveTool('select');
-      return;
-    }
-
-    // Add-element tool shortcuts — Enter commits an in-progress slab
-    // polygon; Esc clears any pending points before falling through to
-    // the global Esc handler (which exits the tool).
-    if (activeTool === 'addElement') {
-      const state = useViewerStore.getState();
-      const polygonable = ['slab', 'roof', 'plate', 'space'].includes(state.addElementType);
-      if (key === 'enter' && polygonable && state.addElementSlabMode === 'polygon') {
-        e.preventDefault();
-        // Lazy import keeps this module out of the keyboard hook's
-        // synchronous bundle (the close handler pulls in toast).
-        import('@/components/viewer/selectionHandlers').then((mod) => mod.commitAddElementSlabPolygon());
-        return;
-      }
-      if (key === 'escape' && state.addElementPendingPoints.length > 0) {
-        e.preventDefault();
-        state.clearAddElementPending();
-        return;
-      }
-    }
-
-    // Measure tool shortcuts
-    if (activeTool === 'measure') {
-      // Cancel active drag measurement with ESC
-      if (key === 'escape' && activeMeasurement) {
-        e.preventDefault();
-        cancelMeasurement();
-        return;
-      }
-      // Cancel an in-progress polyline sequence with ESC (#2199) — discards
-      // it entirely, same as Escape already does for a drag in progress.
-      // Checked as its own branch (not merged with the one above) because
-      // the two are mutually exclusive: exactly one of activeMeasurement /
-      // activePolyline can be non-null at a time.
-      if (key === 'escape' && activePolyline) {
-        e.preventDefault();
-        cancelPolyline();
-        return;
-      }
-      // Same for a part-finished angle sequence (#2735). Its own branch for
-      // the same reason: at most one of activeMeasurement / activePolyline /
-      // activeAngle is non-null at a time, and merging them would hide that.
-      // No Enter counterpart - an angle finishes itself on its last pick, so
-      // there is no "finish early" state to confirm.
-      if (key === 'escape' && activeAngle) {
-        e.preventDefault();
-        cancelAngle();
-        return;
-      }
-      // Same for a part-finished radius sequence (#2737 item 2) — the same
-      // "own branch, mutually exclusive with the others" reasoning as angle
-      // above applies.
-      if (key === 'escape' && activeRadius) {
-        e.preventDefault();
-        cancelRadius();
-        return;
-      }
-      // Finish an in-progress polyline as OPEN with Enter (#2199) — reports
-      // the sum-of-segments length, not a perimeter. Closing the loop is a
-      // click gesture, not a keyboard one (see handlePolylineClick).
-      //
-      // finishPolyline is a no-op below its point minimum (2 open / 3
-      // closed) — most reachable right after a single click, since Enter
-      // can't fire before startPolyline runs. Its return value says whether
-      // it actually recorded anything; when it didn't, surface a toast
-      // instead of leaving Enter a silent, indistinguishable-from-working
-      // dead keypress. The sequence itself is left in progress (not
-      // cancelled) — same "reject and let the user keep going" choice
-      // `commitAddElementSlabPolygon` above makes for the analogous
-      // too-few-points case.
-      if (key === 'enter' && activePolyline) {
-        e.preventDefault();
-        if (!finishPolyline(false)) {
-          // Lazy import keeps toast out of the keyboard hook's synchronous
-          // bundle, same as the addElement branch above.
-          import('@/components/ui/toast').then(({ toast }) => {
-            toast.error('Polyline needs at least 2 points');
-          });
-        }
-        return;
-      }
-      // Finish an in-progress radius sequence with Enter (#2737 item 2) —
-      // the same explicit-finish gesture polyline uses, for the same reason
-      // (see the ActiveRadius doc comment in store/types.ts): radius has no
-      // fixed pick count for the store to finish itself on.
-      if (key === 'enter' && activeRadius) {
-        e.preventDefault();
-        if (!finishRadius()) {
-          import('@/components/ui/toast').then(({ toast }) => {
-            toast.error('Radius needs at least 3 points');
-          });
-        }
-        return;
-      }
-      // No Ctrl+C or Delete/Backspace "clear measurements" here (#5598):
-      // Ctrl+C means copy everywhere else, and measurements are not part of
-      // workspace undo. Clearing is the panel's explicit, confirmed button.
-      // Toggle snapping with S
-      if (key === 's' && !ctrl && !shift) {
-        e.preventDefault();
-        toggleSnap();
-        return;
-      }
-    }
-
-    // Escape: one step per press — leave the tool, else clear the selection; double-press
-    // also closes all panels. Never resets visibility; only A / Home do (#5595).
-    if (key === 'escape') {
-      // Trassia (TODO #40, Tester 03.09.): Escape in einem offenen Menue oder
-      // Dialog gehoert dem Menue (Radix schliesst es selbst) — sonst schloss
-      // ein Escape im Export-Menue des 2D-Panels das ganze Schnittwerkzeug.
-      const ziel = e.target as HTMLElement | null;
-      // Tester M-4 (04.09., TODO #47): eine Ueberlagerung, die sich selbst per
-      // Escape schliesst, meldet das mit `preventDefault` (DrawingSettingsPanel,
-      // Radix-Schichten) — die Taste ist dann verbraucht, unabhaengig davon, wo
-      // der Fokus stand.
-      if (e.defaultPrevented) return;
-      // Tester M-3 (04.09.): auch der Anpassen-Dialog der Leiste (schliesst
-      // sich selbst per Escape) gehoert dazu.
-      if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return;
-      e.preventDefault();
-      // Trassia (U3-klein): Escape leert auch die Zeilen-Auswahl der Struktur-Ansicht.
-      chZeilenAuswahlLeeren();
-      const now = Date.now();
-      const timeSinceLastEscape = now - lastEscapeRef.current;
-      lastEscapeRef.current = now;
-
-      if (timeSinceLastEscape < DOUBLE_ESCAPE_MS) {
-        // Double-escape: close all panels, return to starting view.
-        const state = useViewerStore.getState();
-        // Clears every sidebar panel through the choke point (bcf/ids/lens/
-        // clash/compare/extensions → Information). Every bottom-strip panel
-        // closes from the table (#5493); the remaining overlays explicitly.
-        state.showWorkspacePanel('properties');
-        // Floats + popped-out OS windows are their own channel; the choke point
-        // above only re-docks `properties`, so drop every float and close every
-        // torn-off window so "close all" truly closes all (#1208).
-        state.resetDockLayout();
-        closeAllPanelWindows();
-        useViewerStore.setState(bottomPanelFlags(null));
-        state.setOverridesPanelVisible(false);
-        state.setChatPanelVisible(false);
-        state.setSheetPanelVisible(false);
-        state.setLeftPanelCollapsed(false);
-        state.setRightPanelCollapsed(false);
-      }
-
-      if (activeTool !== 'select') {
-        setActiveTool('select');
-      } else {
-        useViewerStore.getState().clearEntitySelection();
-      }
-    }
-
-    // Theme toggle
-    if (key === 't' && !ctrl && !shift) {
-      e.preventDefault();
-      toggleTheme();
-    }
-
-    // Help - handled by KeyboardShortcutsDialog hook
-    // The dialog hook listens for '?' key globally
-  }, [
-    selectedEntityId,
-    activeTool,
-    setActiveTool,
-    hideEntities,
-    toggleTheme,
-    activeMeasurement,
-    cancelMeasurement,
-    toggleSnap,
-    toggleEditEnabled,
-    activePolyline, activeAngle, cancelAngle,
-    cancelPolyline,
-    finishPolyline,
-    activeRadius, cancelRadius, finishRadius,
-  ]);
-
+export function useKeyboardShortcuts({ enabled = true }: KeyboardShortcutsOptions = {}): void {
   useEffect(() => {
     if (!enabled) return;
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [enabled, handleKeyDown]);
+    const dispose = RUNNERS.map(([id, run]) => registerKeyboardCommand(id, run, {
+      active: TOOL_CONTEXT[id] ? () => useViewerStore.getState().activeTool === TOOL_CONTEXT[id] : undefined,
+      allowInTextEntry: HISTORY_COMMANDS.has(id) ? (event: KeyboardEvent) => !isTextEditingElement(event.target) : undefined,
+    }));
+    dispose.push(bindModelWorkspaceKeys());
+    return () => { for (const remove of dispose) remove(); };
+  }, [enabled]);
 }

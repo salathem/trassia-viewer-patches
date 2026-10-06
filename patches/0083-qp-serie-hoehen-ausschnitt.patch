@@ -1,50 +1,65 @@
---- a/apps/viewer/src/hooks/useDrawingGeneration.ts
-+++ b/apps/viewer/src/hooks/useDrawingGeneration.ts
-@@ -42,6 +42,8 @@
- // Trassia overlay (not upstream) — Querprofil-Ansicht, Paket V-QP.
- // Der Korridor begrenzt die ZEICHNUNG (siehe lib/ch/qp-corridor.ts), der
- // Vorfilter die Dreiecke, die ueberhaupt geschnitten werden.
-+import { useChDrawingRect } from '@/lib/ch/zeichnung-ausschnitt';
-+import { useChSeriesGenerationRequest } from '@/lib/ch/qp-serie-export';
- import { chQpShapeDrawing, useChQpView } from '@/lib/ch/qp-corridor';
- import { corridorPlanRect, narrowMeshesToCorridor } from '@/lib/ch/qp-prefilter';
- import { isTypeVisible, type TypeVisibilityGate } from '@/store/typeVisibilityFilter';
-@@ -162,6 +164,8 @@
-   // Trassia: Korridorbreite und Ueberhoehung. Als Abonnement, damit eine
-   // geaenderte Breite dieselbe Neuberechnung ausloest wie eine neue Station.
-   const chQp = useChQpView();
-+  const chRect = useChDrawingRect();
-+  const chSeriesGeneration = useChSeriesGenerationRequest();
+diff --git a/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx b/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
+index bb81e9822e607c1d470b2b157235b76c3784dc13..012ef8d545f8c479c04a5f92c750bac7f303b8b2 100644
+--- a/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
++++ b/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
+@@ -94,7 +94,7 @@ export function DrawingCanvasView({ vm, layers }: { vm: DrawingViewModel; layers
+           annotation2DCursorPos={vm.annotation2DCursorPos}
+           polygonAreaPoints={vm.polygonArea2DPoints}
+           polygonAreaResults={vm.polygonArea2DResults}
+-          textAnnotations={vm.textAnnotations2D}
++          textAnnotations={[...vm.textAnnotations2D, ...layers.heightAnnotations]}
+           textAnnotationEditing={vm.textAnnotation2DEditing}
+           cloudAnnotationPoints={vm.cloudAnnotation2DPoints}
+           cloudAnnotations={vm.cloudAnnotations2D}
+diff --git a/apps/viewer/src/components/viewer/drawing/DrawingPanel.tsx b/apps/viewer/src/components/viewer/drawing/DrawingPanel.tsx
+index bd501eb91e3c12b4f1545dabf97fa60a8052ec85..36627890b82b8255db22d6a260cc91bb2540c40f 100644
+--- a/apps/viewer/src/components/viewer/drawing/DrawingPanel.tsx
++++ b/apps/viewer/src/components/viewer/drawing/DrawingPanel.tsx
+@@ -34,6 +34,8 @@ import { DrawingToolbar, type DrawingWidthTier } from './DrawingToolbar';
+ import { DrawingExportMenu } from './DrawingExportMenu';
+ import { DrawingCanvasView } from './DrawingCanvasView';
+ import { DrawingStatusLine } from './DrawingStatusLine';
++import { ChZeichnungAusschnitt } from '../ChZeichnungAusschnitt';
++import { ChQpHoehen } from '../ChQpHoehen';
+ import { DrawingInspector } from './DrawingInspector';
+ import { DrawingSectionCutMenu } from './DrawingSectionCutMenu';
  
-   // The legacy primary path can publish only `loading: false` when it finishes
-   // without exact RTC metadata. Subscribe to all provenance publication
-@@ -897,7 +901,7 @@
-       }
-       // Trassia: shape both normal and hybrid output before publishing the
-       // same completed drawing to the store and generation bookkeeping.
--      completedDrawing = chQpShapeDrawing(completedDrawing, chQp, Boolean(sectionPlane.custom));
-+      completedDrawing = chQpShapeDrawing(completedDrawing, chQp, Boolean(sectionPlane.custom), chRect);
-       setDrawing(completedDrawing); markActiveDrawingGenerationCompleted(completedDrawing);
+@@ -171,6 +173,8 @@ export function DrawingPanel(): React.ReactElement {
+         </div>
+       )}
  
-       // Remember the SectionConfig that produced this view so the markup
-@@ -916,7 +920,7 @@
-       generator?.dispose();
-     }
-   }, [
--    chQp,
-+    chQp, chRect,
-     geometryResult,
-     ifcDataStore,
-     sectionPlane,
-@@ -1044,7 +1048,7 @@
-     // Korridorbreite laesst die Ebene unveraendert — ohne diesen Anteil wuerde
-     // das Panel die alte Zeichnung behalten und der Regler waere wirkungslos.
-     const plane = JSON.stringify([sectionPlane.axis, sectionPlane.position, sectionPlane.flipped,
--      sectionPlane.custom, chQp.key]);
-+      sectionPlane.custom, chQp.key, chRect, chSeriesGeneration]);
-     const inputs = [geometryResult, geometryResult?.meshes.length, ifcDataStore,
-       displayOptions, typeVisibility, combinedHiddenIds, combinedIsolatedIds,
-       computedIsolatedIds, models, drawingRtcContextKey];
++      <ChZeichnungAusschnitt />
++      <ChQpHoehen />
+       <DrawingToolbar
+         tier={tier}
+         activeTool={vm.annotation2DActiveTool} onSelectTool={vm.selectTool}
+diff --git a/apps/viewer/src/components/viewer/drawing/useDrawingLayers.ts b/apps/viewer/src/components/viewer/drawing/useDrawingLayers.ts
+index 65be986d4fec8453d0db1808c54f07ca90c476b4..3eac06f276cc467aaaf2168437c1fbbe38129356 100644
+--- a/apps/viewer/src/components/viewer/drawing/useDrawingLayers.ts
++++ b/apps/viewer/src/components/viewer/drawing/useDrawingLayers.ts
+@@ -19,10 +19,12 @@ import { drawingModelCenter } from '@/hooks/dxfDrawingBounds';
+ import { dxfPlaneDrawingMapper, dxfDrawingDeltaToPlacement } from '@/hooks/dxfReferencePlane';
+ import { useScanSectionLayer } from '@/hooks/useScanSectionLayer';
+ import { useDrawingExport } from '@/hooks/useDrawingExport';
++import { useChQpHeightAnnotations } from '@/hooks/useChQpHeightAnnotations';
+ import type { DrawingViewModel } from './useDrawingViewModel';
+ 
+ export function useDrawingLayers(vm: DrawingViewModel) {
+   const { t } = useTranslation();
++  const heightAnnotations = useChQpHeightAnnotations(vm.drawing, true);
+   const { ifcDataStore } = useIfc();
+   const updateDxfUnderlayPlacement = useViewerStore((s) => s.updateDxfUnderlayPlacement);
+   const {
+@@ -125,6 +127,7 @@ export function useDrawingLayers(vm: DrawingViewModel) {
+   });
+ 
+   return {
++    heightAnnotations,
+     ifcAnnotationData, dxfUnderlayData, dxfGeoreferenceAvailable, handleCenterDxfUnderlay,
+     scanSectionLayer,
+     handleExportSVG, handleExportDXF, handleExportPDF, handlePrint,
+diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
+index b628b6f73abdeaab7a23976b2bbadbcbf565f969..a22d9d71c8c4944c5e2f6dd7bbbe437cb0a8c5ce 100644
 --- a/apps/viewer/src/hooks/useDrawingExport.ts
 +++ b/apps/viewer/src/hooks/useDrawingExport.ts
 @@ -2,7 +2,9 @@
@@ -52,21 +67,21 @@
   * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
  
 -import { useCallback } from 'react';
-+import { useCallback, useEffect } from 'react';
 +import { registerChSeriesExport } from '@/lib/ch/qp-serie-export';
 +import { useChQpHeightAnnotations } from '@/hooks/useChQpHeightAnnotations';
++import { useCallback, useEffect } from 'react';
+ import { buildDxfUnderlaySvg, drawDxfUnderlaysPdf, mappedDxfUnderlayOptions } from '@/lib/export/drawing-vector-underlays';
+ import { drawingReferenceSvg, snapshotDrawingReferences, rasterizeReferenceLayer } from '@/lib/export/drawing-raster-references';
  import type React from 'react';
- import { posthog } from '@/lib/analytics';
- import { downloadFile, sanitizeFilename } from '@/lib/export/download';
-@@ -14,6 +16,7 @@
- import { toast } from '@/components/ui/toast';
+@@ -17,6 +19,7 @@ import { toast } from '@/components/ui/toast';
+ import { useTranslation } from '@/i18n';
  import { pdfLineStyleFor } from '@/lib/export/pdf-line-style';
  import {
 +  encodeDxfCp1252,
    GraphicOverrideEngine,
    renderFrame,
    renderTitleBlock,
-@@ -372,6 +375,8 @@
+@@ -302,6 +305,8 @@ function useDrawingExport({
    // Plan soll enthalten, was er auf dem Schirm hatte. Ohne Ueberhoehung ist das
    // dasselbe Objekt, der Export also bitgleich mit dem Upstream.
    const drawing = chQpUndistorted(drawingFromStore);
@@ -75,7 +90,7 @@
    // Georef inputs for the DXF export (PR #1871 review, P1): placement edits
    // applied in CesiumPlacementEditor live in `georefMutations` (per model
    // id), not in `ifcDataStore`, and in a federation the georef frame is the
-@@ -659,9 +664,9 @@
+@@ -589,9 +594,9 @@ function useDrawingExport({
      }
  
      // 6. DRAW TEXT ANNOTATIONS
@@ -87,7 +102,7 @@
          if (!annotation.text.trim()) continue;
          const pt = { x: flipX ? -annotation.position.x : annotation.position.x, y: flipY ? -annotation.position.y : annotation.position.y };
          const fontSize = mmToModel(2.5);
-@@ -719,7 +724,7 @@
+@@ -649,7 +654,7 @@ function useDrawingExport({
  
      svg += '</svg>';
      return svg;
@@ -96,7 +111,7 @@
  
    // Generate SVG with drawing sheet (frame, title block, scale bar)
    // This generates coordinates directly in paper mm space (like the canvas rendering)
-@@ -935,6 +940,10 @@
+@@ -863,6 +868,10 @@ function useDrawingExport({
      svg += '    </g>\n';
  
      // POINT-CLOUD SCAN OVERLAY (issue #1805) — on top, inside the clipped
@@ -107,16 +122,16 @@
      // drawing-content group like everything else. `modelToPaper` already
      // applies the same flip + scale/translate the rest of the sheet uses.
      if (displayOptions.showScanSection && displayOptions.scanSectionIncludeInExport) {
-@@ -981,7 +990,7 @@
+@@ -909,7 +918,7 @@ function useDrawingExport({
      // identity when the axis changes, and the canvas rewrote the cache on
      // every fresh draw — neither of which this callback controls.
      // `cachedSheetTransformRef` is a ref: stable identity, read at call time.
 -  }, [drawing, activeSheet, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, dxfUnderlays, scanSection, sectionPlane.axis, isPinned, ifcDataStore, storeModels]);
 +  }, [drawing, activeSheet, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, dxfUnderlays, scanSection, sectionPlane.axis, isPinned, ifcDataStore, storeModels, heightAnnotations]);
- 
    // Export SVG
    const handleExportSVG = useCallback(() => {
-@@ -1004,7 +1013,7 @@
+     // Use sheet export if enabled, otherwise raw drawing export
+@@ -931,7 +940,7 @@ function useDrawingExport({
    // The point-cloud scan overlay (issue #1805) is likewise deliberately
    // excluded: it is a raster-like screen aid (tens of thousands of circles),
    // not vector content — SVG export carries it (opt-in) instead.
@@ -125,7 +140,7 @@
      if (!drawing) return;
      const isCustomPlane = sectionPlane.custom !== undefined;
      // Anchor-model effective georef, INCLUDING user placement edits
-@@ -1038,6 +1047,7 @@
+@@ -965,6 +974,7 @@ function useDrawingExport({
        : 'ifc-lite section export - units: metres';
      const metadataComment = [chUnitLine, ...chQpKopfzeilen()].join('\n');
      const dxf = exportToDXF(drawing, {
@@ -133,27 +148,28 @@
        showHiddenLines: displayOptions.showHiddenLines,
        coordinateTransform,
        metadataComment,
-@@ -1048,6 +1058,7 @@
+@@ -976,6 +986,7 @@ function useDrawingExport({
      // name is kept for every other section, where it is the honest one.
      const stem = chSectionExportStem(sectionPlane.custom)
        ?? `section-${sectionPlane.axis}-${sectionPlane.position}`;
 +    if (!download) return encodeDxfCp1252(dxf).bytes;
      downloadDxf(dxf, `${stem}.dxf`);
+     trackExportCompleted({ format: 'dxf', surface: 'drawing_panel' });
      posthog.capture('drawing_exported', {
-       format: 'dxf',
-@@ -1056,7 +1067,7 @@
+@@ -985,7 +996,7 @@ function useDrawingExport({
      });
    }, [
-     drawing, displayOptions.showHiddenLines, sectionPlane, ifcDataStore, coordinateInfo,
+     drawing, dxfUnderlays, displayOptions.showHiddenLines, sectionPlane, ifcDataStore, coordinateInfo,
 -    storeModels, anchorModelIdOverride, georefMutations, mutationVersion,
 +    storeModels, anchorModelIdOverride, georefMutations, mutationVersion, heightAnnotations,
    ]);
- 
    // Export scaled PDF (issue #2042): a true-vector PDF sized so the
-@@ -1269,6 +1280,12 @@
+   // requested scale ("1:N") is EXACT — the page itself is sized to the
+@@ -1207,6 +1218,13 @@ function useDrawingExport({
+           doc.line(p0.x, p0.y, p1.x, p1.y);
          }
          doc.setLineDashPattern([], 0);
- 
++
 +        doc.setFontSize(7);
 +        for (const annotation of heightAnnotations) {
 +          const p = mapPoint(annotation.position.x, annotation.position.y);
@@ -163,18 +179,18 @@
          // v1 has no title block, so this filename is the SOLE record of the
          // sheet's scale — round-tripping through Math.round() here would
          // file a 1:99.5 export as "…-1-100", silently misreporting it (same
-@@ -1293,7 +1310,7 @@
-         alert(err instanceof Error ? `Could not export PDF: ${err.message}` : 'Could not export PDF.');
-       }
+@@ -1227,7 +1245,7 @@ function useDrawingExport({
+         toast.error(err instanceof Error ? t('section2d.export.pdfFailed', { error: err.message }) : t('section2d.export.pdfFailedGeneric'));
+       } finally { referenceSnapshot.release(); }
      })();
--  }, [drawing, displayOptions.scale, displayOptions.showHiddenLines, sectionPlane, sheetEnabled, activeSheet, generateSheetSVG]);
-+  }, [drawing, displayOptions.scale, displayOptions.showHiddenLines, sectionPlane, sheetEnabled, activeSheet, generateSheetSVG, heightAnnotations]);
+-  }, [drawing, dxfUnderlays, displayOptions.scale, displayOptions.showHiddenLines, sectionPlane, sheetEnabled, activeSheet, generateSheetSVG, t]);
++  }, [drawing, dxfUnderlays, displayOptions.scale, displayOptions.showHiddenLines, sectionPlane, sheetEnabled, activeSheet, generateSheetSVG, heightAnnotations, t]);
  
    // Print handler
    const handlePrint = useCallback(() => {
-@@ -1363,6 +1380,20 @@
+@@ -1297,6 +1315,20 @@ function useDrawingExport({
      printWindow.document.close();
-   }, [generateExportSVG, generateSheetSVG, sheetEnabled, activeSheet, sectionPlane]);
+   }, [generateExportSVG, generateSheetSVG, sheetEnabled, activeSheet, sectionPlane, t]);
  
 +  useEffect(() => {
 +    if (!drawingFromStore) return;
@@ -193,63 +209,60 @@
    return {
      formatDistance,
      handleExportSVG,
---- a/apps/viewer/src/components/viewer/drawing/DrawingPanel.tsx
-+++ b/apps/viewer/src/components/viewer/drawing/DrawingPanel.tsx
-@@ -33,6 +33,8 @@
- import { DrawingExportMenu } from './DrawingExportMenu';
- import { DrawingCanvasView } from './DrawingCanvasView';
- import { DrawingStatusLine } from './DrawingStatusLine';
-+import { ChZeichnungAusschnitt } from '../ChZeichnungAusschnitt';
-+import { ChQpHoehen } from '../ChQpHoehen';
- import { DrawingInspector } from './DrawingInspector';
+diff --git a/apps/viewer/src/hooks/useDrawingGeneration.ts b/apps/viewer/src/hooks/useDrawingGeneration.ts
+index 314ddbcbca12892607399be660c586973ff50388..488ae6fc018fb91431b1305a1cc0c639dcf96998 100644
+--- a/apps/viewer/src/hooks/useDrawingGeneration.ts
++++ b/apps/viewer/src/hooks/useDrawingGeneration.ts
+@@ -42,6 +42,8 @@ import { buildModelViewIdFilter, selectModelMeshes } from '@/lib/type-view-visib
+ // Trassia overlay (not upstream) — Querprofil-Ansicht, Paket V-QP.
+ // Der Korridor begrenzt die ZEICHNUNG (siehe lib/ch/qp-corridor.ts), der
+ // Vorfilter die Dreiecke, die ueberhaupt geschnitten werden.
++import { useChDrawingRect } from '@/lib/ch/zeichnung-ausschnitt';
++import { useChSeriesGenerationRequest } from '@/lib/ch/qp-serie-export';
+ import { chQpShapeDrawing, useChQpView } from '@/lib/ch/qp-corridor';
+ import { corridorPlanRect, narrowMeshesToCorridor } from '@/lib/ch/qp-prefilter';
+ import { isTypeVisible, type TypeVisibilityGate } from '@/store/typeVisibilityFilter';
+@@ -162,6 +164,8 @@ export function useDrawingGeneration({
+   // Trassia: Korridorbreite und Ueberhoehung. Als Abonnement, damit eine
+   // geaenderte Breite dieselbe Neuberechnung ausloest wie eine neue Station.
+   const chQp = useChQpView();
++  const chRect = useChDrawingRect();
++  const chSeriesGeneration = useChSeriesGenerationRequest();
  
- /** Labels need ~1180px for one row; icons alone fit from ~640px; below that
-@@ -166,6 +168,8 @@
-         </div>
-       )}
+   // The legacy primary path can publish only `loading: false` when it finishes
+   // without exact RTC metadata. Subscribe to all provenance publication
+@@ -897,7 +901,7 @@ export function useDrawingGeneration({
+       }
+       // Trassia: shape both normal and hybrid output before publishing the
+       // same completed drawing to the store and generation bookkeeping.
+-      completedDrawing = chQpShapeDrawing(completedDrawing, chQp, Boolean(sectionPlane.custom));
++      completedDrawing = chQpShapeDrawing(completedDrawing, chQp, Boolean(sectionPlane.custom), chRect);
+       setDrawing(completedDrawing); markActiveDrawingGenerationCompleted(completedDrawing);
  
-+      <ChZeichnungAusschnitt />
-+      <ChQpHoehen />
-       <DrawingToolbar
-         tier={tier}
-         activeTool={vm.annotation2DActiveTool} onSelectTool={vm.selectTool}
---- a/apps/viewer/src/components/viewer/drawing/useDrawingLayers.ts
-+++ b/apps/viewer/src/components/viewer/drawing/useDrawingLayers.ts
-@@ -17,10 +17,12 @@
- import { useDxfUnderlaysForDrawing, useDxfMapToWorldTransform, dxfWorldShift, dxfUnderlayDrawingBounds } from '@/hooks/useDxfUnderlay';
- import { useScanSectionLayer } from '@/hooks/useScanSectionLayer';
- import { useDrawingExport } from '@/hooks/useDrawingExport';
-+import { useChQpHeightAnnotations } from '@/hooks/useChQpHeightAnnotations';
- import type { DrawingViewModel } from './useDrawingViewModel';
- 
- export function useDrawingLayers(vm: DrawingViewModel) {
-   const { t } = useTranslation();
-+  const heightAnnotations = useChQpHeightAnnotations(vm.drawing, true);
-   const { ifcDataStore } = useIfc();
-   const updateDxfUnderlayPlacement = useViewerStore((s) => s.updateDxfUnderlayPlacement);
-   const {
-@@ -127,6 +129,7 @@
-   });
- 
-   return {
-+    heightAnnotations,
-     ifcAnnotationData, dxfUnderlayData, dxfGeoreferenceAvailable, handleCenterDxfUnderlay,
-     scanSectionLayer,
-     handleExportSVG, handleExportDXF, handleExportPDF, handlePrint,
---- a/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
-+++ b/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
-@@ -92,7 +92,7 @@
-           annotation2DCursorPos={vm.annotation2DCursorPos}
-           polygonAreaPoints={vm.polygonArea2DPoints}
-           polygonAreaResults={vm.polygonArea2DResults}
--          textAnnotations={vm.textAnnotations2D}
-+          textAnnotations={[...vm.textAnnotations2D, ...layers.heightAnnotations]}
-           textAnnotationEditing={vm.textAnnotation2DEditing}
-           cloudAnnotationPoints={vm.cloudAnnotation2DPoints}
-           cloudAnnotations={vm.cloudAnnotations2D}
+       // Remember the SectionConfig that produced this view so the markup
+@@ -916,7 +920,7 @@ export function useDrawingGeneration({
+       generator?.dispose();
+     }
+   }, [
+-    chQp,
++    chQp, chRect,
+     geometryResult,
+     ifcDataStore,
+     sectionPlane,
+@@ -1044,7 +1048,7 @@ export function useDrawingGeneration({
+     // Korridorbreite laesst die Ebene unveraendert — ohne diesen Anteil wuerde
+     // das Panel die alte Zeichnung behalten und der Regler waere wirkungslos.
+     const plane = JSON.stringify([sectionPlane.axis, sectionPlane.position, sectionPlane.flipped,
+-      sectionPlane.custom, chQp.key]);
++      sectionPlane.custom, chQp.key, chRect, chSeriesGeneration]);
+     const inputs = [geometryResult, geometryResult?.meshes.length, ifcDataStore,
+       displayOptions, typeVisibility, combinedHiddenIds, combinedIsolatedIds,
+       computedIsolatedIds, models, drawingRtcContextKey];
+diff --git a/packages/drawing-2d/src/dxf-exporter.ts b/packages/drawing-2d/src/dxf-exporter.ts
+index 8c46c9b58a19fd226e4a26e13a9cc253c3add99d..5ae36ab6f67849659bb0495b263a5fc68792b6df 100644
 --- a/packages/drawing-2d/src/dxf-exporter.ts
 +++ b/packages/drawing-2d/src/dxf-exporter.ts
-@@ -36,6 +36,8 @@
+@@ -36,6 +36,8 @@ import { DEFAULT_DXF_PLACEMENT, type DxfPlacement, type DxfUnderlay } from './dx
  import { DxfWriter, type DxfLinetype } from './dxf/writer.js';
  
  export interface DXFExportOptions {
@@ -258,14 +271,14 @@
    /** Include lines whose `visibility === 'hidden'` (default true, matching SVG). */
    showHiddenLines?: boolean;
    /** Include cut-polygon boundaries (hatch regions, represented as closed POLYLINE boundaries — see module docs). Default true. */
-@@ -118,6 +120,10 @@
-     for (const line of drawing.lines) {
-       if (!showHiddenLines && line.visibility === 'hidden') continue;
+@@ -120,6 +122,10 @@ export class DXFExporter {
        this.writeLine(writer, line, categoryLayers, map);
-+    }
-+
-+    for (const text of options.textAnnotations ?? []) {
-+      writer.addText(map(text.position), text.text, text.height, categoryLayers.get('annotation')!);
      }
  
++    for (const text of options.textAnnotations ?? []) {
++      writer.addText(map(text.position), text.text, text.height, categoryLayers.get('annotation')!);
++    }
++
      return writer.toString();
+   }
+ 

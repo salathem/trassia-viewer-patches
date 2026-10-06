@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
-index cb6f170..f814074 100644
+index cb6f1703f87f68612ff7d2f128db86e1fdc65688..f81407472e783be59c830e21beba833b0020aa08 100644
 --- a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
 +++ b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
 @@ -343,8 +343,15 @@ export function Drawing2DCanvas({
@@ -21,14 +21,32 @@ index cb6f170..f814074 100644
      canvas.height = canvasSize.height * dpr;
      ctx.scale(dpr, dpr);
 diff --git a/apps/viewer/src/hooks/useAnnotation2D.ts b/apps/viewer/src/hooks/useAnnotation2D.ts
-index 689524f..4902089 100644
+index 1e112361249b817c618c23ef560f69830dd05531..47013cb348cc4ba75ee87cfaac6e2ea6c06118ad 100644
 --- a/apps/viewer/src/hooks/useAnnotation2D.ts
 +++ b/apps/viewer/src/hooks/useAnnotation2D.ts
-@@ -277,7 +277,13 @@ export function useAnnotation2D({
-         if (storeRef.current.selectedAnnotation2D) setSelectedAnnotation2D(null);
-       }
-       if ((e.key === 'Delete' || e.key === 'Backspace') && storeRef.current.selectedAnnotation2D) {
--        if (isTextEntryElement(document.activeElement)) return;
+@@ -261,6 +261,54 @@ export function useAnnotation2D({
+   // ── Keyboard shortcuts ────────────────────────────────────────────────
+ 
+   useEffect(() => {
++    // Keep Upstream command dispatch in the main document; child windows own their tool keys.
++    if ((containerRef.current?.ownerDocument.defaultView ?? window) !== window) {
++    const handleKeyDown = (e: KeyboardEvent) => {
++      if (e.key === 'Shift') {
++        shiftHeldRef.current = true;
++      }
++      if (e.key === 'Escape') {
++        // 1. Cancel in-progress work
++        if (activeTool === 'polygon-area') cancelPolygonArea2D();
++        else if (activeTool === 'cloud') cancelCloudAnnotation2D();
++        else if (activeTool === 'text') setTextAnnotation2DEditing(null);
++        // 2. Exit any creation tool back to select/pan
++        if (activeTool !== 'none') {
++          setActiveTool('none');
++        }
++        // 3. Deselect
++        if (storeRef.current.selectedAnnotation2D) setSelectedAnnotation2D(null);
++      }
++      if ((e.key === 'Delete' || e.key === 'Backspace') && storeRef.current.selectedAnnotation2D) {
 +        // Trassia (Paket QP-AUSDOCK): das Dokument fragen, in dem das Panel
 +        // steht. Im ausgedockten Fenster sitzt der Schreibcursor in einem
 +        // Eingabefeld des KINDdokuments — `document.activeElement` des
@@ -36,26 +54,42 @@ index 689524f..4902089 100644
 +        // Beschriftung loeschen, waehrend der Benutzer Text tippt.
 +        const doc = containerRef.current?.ownerDocument ?? document;
 +        if (isTextEntryElement(doc.activeElement)) return;
-         e.preventDefault();
-         deleteSelectedAnnotation2D();
-       }
-@@ -287,14 +293,18 @@ export function useAnnotation2D({
-       if (e.key === 'Shift') shiftHeldRef.current = false;
-     };
- 
--    window.addEventListener('keydown', handleKeyDown);
--    window.addEventListener('keyup', handleKeyUp);
++        e.preventDefault();
++        deleteSelectedAnnotation2D();
++      }
++    };
++
++    const handleKeyUp = (e: KeyboardEvent) => {
++      if (e.key === 'Shift') shiftHeldRef.current = false;
++    };
++
 +    // Trassia (Paket QP-AUSDOCK): an dem Fenster horchen, in dem das Panel
 +    // WIRKLICH steht — sonst sind Entf, Esc und Umschalt im ausgedockten
 +    // Fenster wirkungslos. Ohne Ausdocken ist das buchstaeblich `window`.
 +    const ziel = containerRef.current?.ownerDocument.defaultView ?? window;
 +    ziel.addEventListener('keydown', handleKeyDown);
 +    ziel.addEventListener('keyup', handleKeyUp);
-     return () => {
--      window.removeEventListener('keydown', handleKeyDown);
--      window.removeEventListener('keyup', handleKeyUp);
++    return () => {
 +      ziel.removeEventListener('keydown', handleKeyDown);
 +      ziel.removeEventListener('keyup', handleKeyUp);
++    };
++  
++    }
++
+     const removeShift = registerKeyboardCommand('drawing2d.orthogonal', () => {
+       shiftHeldRef.current = true;
+       return false; // Measurement observes the same modifier.
+@@ -274,7 +322,7 @@ export function useAnnotation2D({
+     }, { active: () => activeTool !== 'none' || Boolean(storeRef.current.selectedAnnotation2D),
+       allowInTextEntry: true, ignoreModifiers: true });
+     const removeDelete = registerKeyboardCommand('drawing2d.delete', () => {
+-      if (!storeRef.current.selectedAnnotation2D || isTextEntryElement(document.activeElement)) return false;
++      if (!storeRef.current.selectedAnnotation2D || isTextEntryElement((containerRef.current?.ownerDocument ?? document).activeElement)) return false;
+       deleteSelectedAnnotation2D();
+     }, { active: () => Boolean(storeRef.current.selectedAnnotation2D) });
+     const removeKeyUp = registerKeyboardKeyUp((event) => {
+@@ -284,7 +332,7 @@ export function useAnnotation2D({
+       removeShift(); removeCancel(); removeDelete(); removeKeyUp();
      };
    }, [activeTool, setActiveTool, cancelPolygonArea2D, cancelCloudAnnotation2D,
 -    setTextAnnotation2DEditing, setSelectedAnnotation2D, deleteSelectedAnnotation2D]);
@@ -64,15 +98,36 @@ index 689524f..4902089 100644
    // ── Mouse handlers ────────────────────────────────────────────────────
  
 diff --git a/apps/viewer/src/hooks/useMeasure2D.ts b/apps/viewer/src/hooks/useMeasure2D.ts
-index e6a2739..81d3d24 100644
+index caa1bd5860e240f4730210e4c441d326850c6c8a..42edf19f0d4828e83458f9120316d126c5606c80 100644
 --- a/apps/viewer/src/hooks/useMeasure2D.ts
 +++ b/apps/viewer/src/hooks/useMeasure2D.ts
-@@ -227,14 +227,22 @@ export function useMeasure2D({
-       }
-     };
+@@ -208,6 +208,47 @@ export function useMeasure2D({
  
--    window.addEventListener('keydown', handleKeyDown);
--    window.addEventListener('keyup', handleKeyUp);
+   // Keyboard handlers for shift key (orthogonal constraint)
+   useEffect(() => {
++    // Keep Upstream command dispatch in the main document; child windows own their tool keys.
++    if ((containerRef.current?.ownerDocument.defaultView ?? window) !== window) {
++    if (!measure2DMode) return;
++
++    const handleKeyDown = (e: KeyboardEvent) => {
++      if (e.key === 'Shift' && measure2DStart && measure2DCurrent && !measure2DShiftLocked) {
++        // Determine axis based on dominant direction
++        const dx = Math.abs(measure2DCurrent.x - measure2DStart.x);
++        const dy = Math.abs(measure2DCurrent.y - measure2DStart.y);
++        const axis = dx > dy ? 'x' : 'y';
++        setMeasure2DShiftLocked(true, axis);
++      }
++      if (e.key === 'Escape') {
++        cancelMeasure2D();
++      }
++    };
++
++    const handleKeyUp = (e: KeyboardEvent) => {
++      if (e.key === 'Shift') {
++        setMeasure2DShiftLocked(false);
++      }
++    };
++
 +    // Trassia (Paket QP-AUSDOCK): an dem Fenster horchen, in dem das Panel
 +    // WIRKLICH steht. `containerRef` zeigt auf den Zeichenbereich; ist der seit
 +    // dem Ausdocken in ein Kinddokument gewandert, liegt die Tastatur dort —
@@ -83,19 +138,27 @@ index e6a2739..81d3d24 100644
 +    const ziel = containerRef.current?.ownerDocument.defaultView ?? window;
 +    ziel.addEventListener('keydown', handleKeyDown);
 +    ziel.addEventListener('keyup', handleKeyUp);
- 
-     return () => {
--      window.removeEventListener('keydown', handleKeyDown);
--      window.removeEventListener('keyup', handleKeyUp);
++
++    return () => {
 +      ziel.removeEventListener('keydown', handleKeyDown);
 +      ziel.removeEventListener('keyup', handleKeyUp);
++    };
++  
++    }
++
+     if (!measure2DMode) return;
+     const removeOrthogonal = registerKeyboardCommand('drawing2d.orthogonal', () => {
+       if (measure2DStart && measure2DCurrent && !measure2DShiftLocked) {
+@@ -231,7 +272,7 @@ export function useMeasure2D({
+     return () => {
+       removeOrthogonal(); removeCancel(); removeKeyUp();
      };
 -  }, [measure2DMode, measure2DStart, measure2DCurrent, measure2DShiftLocked, setMeasure2DShiftLocked, cancelMeasure2D]);
 +  }, [measure2DMode, measure2DStart, measure2DCurrent, measure2DShiftLocked, setMeasure2DShiftLocked, cancelMeasure2D, containerRef]);
  
    // Global mouseup handler to cancel measurement if released outside panel
    useEffect(() => {
-@@ -248,11 +256,14 @@ export function useMeasure2D({
+@@ -245,11 +286,14 @@ export function useMeasure2D({
        isMouseButtonDown.current = false;
      };
  
@@ -114,10 +177,10 @@ index e6a2739..81d3d24 100644
    // ═══════════════════════════════════════════════════════════════════════
    // PAN / MEASURE HANDLERS
 diff --git a/apps/viewer/src/hooks/useViewControls.ts b/apps/viewer/src/hooks/useViewControls.ts
-index b704dfd..aa172f8 100644
+index e938f2369b1e628031876b1a5586ca5a881fb775..894397137de832f5db38df6f2ec5dee1b4281b68 100644
 --- a/apps/viewer/src/hooks/useViewControls.ts
 +++ b/apps/viewer/src/hooks/useViewControls.ts
-@@ -23,6 +23,22 @@ interface UseViewControlsParams {
+@@ -24,6 +24,22 @@ interface UseViewControlsParams {
    activeSheet: DrawingSheet | null;
    isPinned: boolean;
    cachedSheetTransformRef: React.MutableRefObject<CachedSheetTransform | null>;
@@ -140,7 +203,7 @@ index b704dfd..aa172f8 100644
  }
  
  interface UseViewControlsResult {
-@@ -67,6 +83,7 @@ function useViewControls({
+@@ -68,6 +84,7 @@ function useViewControls({
    activeSheet,
    isPinned,
    cachedSheetTransformRef,
@@ -148,14 +211,3 @@ index b704dfd..aa172f8 100644
  }: UseViewControlsParams): UseViewControlsResult {
    const [viewTransform, setViewTransform] = useState({ x: 0, y: 0, scale: 1 });
    const [needsFit, setNeedsFit] = useState(true); // Force fit on first open and on a new plane
-@@ -112,7 +129,9 @@ function useViewControls({
-     return () => {
-       container.removeEventListener('wheel', wheelHandler);
-     };
--  }, [panelVisible, status]); // Re-run when panel visibility or status changes to ensure container is ready
-+    // Trassia (Paket QP-AUSDOCK): `reattachToken` steht mit in der Liste, damit
-+    // der Horcher nach einem Ortswechsel auf den NEUEN Zeichenbereich umzieht.
-+  }, [panelVisible, status, reattachToken]); // Re-run when panel visibility or status changes to ensure container is ready
- 
-   // Zoom controls - unlimited zoom
-   const zoomIn = useCallback(() => {

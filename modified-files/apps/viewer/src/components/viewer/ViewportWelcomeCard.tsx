@@ -13,7 +13,8 @@
  */
 
 import { useState } from 'react';
-import { Upload, Clock3, Sparkles, ArrowUpRight, PackagePlus, Cloud, ShieldCheck, Building2, GitMerge, Loader2 } from 'lucide-react';
+import { Upload, Clock3, Sparkles, ArrowUpRight, PackagePlus, Cloud, ShieldCheck, Building2, GitMerge } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { useTranslation } from '@/i18n';
 import { toast } from '@/components/ui/toast';
 import { fetchDemoProjectFile } from '@/lib/tours/demo-kit';
@@ -51,7 +52,7 @@ export interface ViewportWelcomeCardProps {
   webgpu: Pick<WebGPUStatus, 'supported' | 'checking'>;
   /** Open the file picker (File System Access API or the hidden input). */
   onOpenClick: () => void;
-  /** Create an empty IFC and drop the user into the add-element tool. */
+  /** Create an empty IFC and drop the user into the Model workspace's wall tool. */
   onStartBlank: () => void;
   recentFiles: RecentFileEntry[];
   /** The canonical load path (`useIfcLoader.loadFile`) for a cached recent file. */
@@ -136,18 +137,18 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
         type="button"
         onClick={() => { void loadDemo(); }}
         disabled={actionsDisabled || demoLoading}
-        className={`group w-full flex items-center justify-center gap-3 px-6 py-3 font-mono text-sm font-bold border transition-all ${
+        className={`group w-full flex items-center justify-center gap-3 px-6 py-3 font-mono text-sm font-bold border transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
           actionsDisabled
             ? 'border-zinc-200 dark:border-[#3b4261]/50 text-zinc-300 dark:text-[#565f89]/50 cursor-not-allowed'
             : 'border-primary bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer'
         }`}
       >
         {demoLoading
-          ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ? <Spinner size="md" />
           : <Building2 className="h-4 w-4" aria-hidden="true" />}
         <span>{t('viewportLighting.container.emptyState.loadDemo.button')}</span>
       </button>
-      <p className="mt-1.5 mb-3 text-[11px] font-mono text-center text-zinc-400 dark:text-[#565f89]">
+      <p className="mt-1.5 mb-3 text-2xs font-mono text-center text-zinc-400 dark:text-[#565f89]">
         {webgpu.supported ? t('viewportLighting.container.emptyState.loadDemo.caption') : <WebGpuDisabledCaption />}
       </p>
 
@@ -155,7 +156,7 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
         type="button"
         onClick={onOpenClick}
         disabled={actionsDisabled}
-        className={`group w-full flex items-center justify-center gap-3 px-6 py-3 font-mono text-sm border transition-all ${
+        className={`group w-full flex items-center justify-center gap-3 px-6 py-3 font-mono text-sm border transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
           actionsDisabled
             ? 'border-zinc-200 dark:border-[#3b4261]/50 text-zinc-300 dark:text-[#565f89]/50 cursor-not-allowed'
             : 'border-zinc-300 dark:border-[#3b4261] text-zinc-600 dark:text-[#a9b1d6] hover:border-primary hover:text-primary cursor-pointer'
@@ -172,14 +173,14 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
       </button>
 
       {webgpu.supported && (
-        <p className="mt-2.5 text-[11px] font-mono text-center text-zinc-400 dark:text-[#565f89]">
+        <p className="mt-2.5 text-2xs font-mono text-center text-zinc-400 dark:text-[#565f89]">
           <span>{t('viewportLighting.container.emptyState.dragDropHint')}</span>
-          <span className="block mt-0.5 text-[10px] opacity-80">{MODEL_FORMATS_LABEL}</span>
+          <span className="block mt-0.5 text-2xs opacity-80">{MODEL_FORMATS_LABEL}</span>
         </p>
       )}
 
       {/* Subtle "or" rule — anchors the symmetry between the two tracks */}
-      <div className="mt-5 mb-5 w-full flex items-center gap-3 text-[10px] font-mono uppercase tracking-[0.22em] text-zinc-400 dark:text-[#565f89]">
+      <div className="mt-5 mb-5 w-full flex items-center gap-3 text-2xs font-mono uppercase tracking-[0.22em] text-zinc-400 dark:text-[#565f89]">
         <span className="h-px flex-1 bg-zinc-200 dark:bg-[#3b4261]" />
         <span>{t('viewportLighting.container.emptyState.orDivider')}</span>
         <span className="h-px flex-1 bg-zinc-200 dark:bg-[#3b4261]" />
@@ -195,7 +196,7 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
           type="button"
           onClick={onStartBlank}
           disabled={actionsDisabled}
-          className={`group inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-[11px] border border-dashed transition-all ${
+          className={`group inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-2xs border border-dashed transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
             actionsDisabled
               ? 'border-zinc-200 dark:border-[#3b4261]/50 text-zinc-300 dark:text-[#565f89]/50 cursor-not-allowed'
               : 'border-zinc-300 dark:border-[#3b4261] text-zinc-500 dark:text-[#7a82a5] hover:border-primary hover:text-primary cursor-pointer'
@@ -208,7 +209,7 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
           type="button"
           onClick={() => useViewerStore.getState().openPanelInHome('sources')}
           disabled={actionsDisabled}
-          className={`group inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-[11px] border border-dashed transition-all ${
+          className={`group inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-2xs border border-dashed transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
             actionsDisabled
               ? 'border-zinc-200 dark:border-[#3b4261]/50 text-zinc-300 dark:text-[#565f89]/50 cursor-not-allowed'
               : 'border-zinc-300 dark:border-[#3b4261] text-zinc-500 dark:text-[#7a82a5] hover:border-primary hover:text-primary cursor-pointer'
@@ -222,7 +223,7 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
         </button>
         <a
           href="/mcp"
-          className="group inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-[11px] border border-dashed border-zinc-300 dark:border-[#3b4261] text-zinc-500 dark:text-[#7a82a5] hover:border-primary hover:text-primary transition-all cursor-pointer"
+          className="group inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-2xs border border-dashed border-zinc-300 dark:border-[#3b4261] text-zinc-500 dark:text-[#7a82a5] hover:border-primary hover:text-primary transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
           <Sparkles className="h-3 w-3 transition-transform group-hover:-translate-y-0.5" />
           <span>{t('viewportLighting.container.emptyState.driveWithLlm')}</span>
@@ -235,7 +236,7 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
           type="button"
           onClick={loadLayersDemo}
           disabled={actionsDisabled}
-          className={`group hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-[11px] border border-dashed transition-all ${
+          className={`group hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-2xs border border-dashed transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
             actionsDisabled
               ? 'border-zinc-200 dark:border-[#3b4261]/50 text-zinc-300 dark:text-[#565f89]/50 cursor-not-allowed'
               : 'border-zinc-300 dark:border-[#3b4261] text-zinc-500 dark:text-[#7a82a5] hover:border-primary hover:text-primary cursor-pointer'
@@ -246,7 +247,7 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
         </button>
       </div>
 
-      <p className="mt-1.5 text-[10px] font-mono text-center text-zinc-400 dark:text-[#565f89]">
+      <p className="mt-1.5 text-2xs font-mono text-center text-zinc-400 dark:text-[#565f89]">
         {t('viewportLighting.container.emptyState.footerCaption')}
       </p>
 
@@ -281,10 +282,10 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
                   }
                   onOpenClick();
                 }}
-                className="flex items-center justify-between gap-3 border border-zinc-200 bg-zinc-50 px-3 py-2 text-left transition-colors hover:border-primary hover:text-primary dark:border-[#3b4261] dark:bg-[#1f2335] dark:hover:border-primary"
+                className="flex items-center justify-between gap-3 border border-zinc-200 bg-zinc-50 px-3 py-2 text-left transition-colors hover:border-primary hover:text-primary dark:border-[#3b4261] dark:bg-[#1f2335] dark:hover:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <span className="min-w-0 truncate font-mono text-xs">{file.name}</span>
-                <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-zinc-400 dark:text-[#565f89]">
+                <span className="shrink-0 font-mono text-2xs uppercase tracking-wide text-zinc-400 dark:text-[#565f89]">
                   {formatFileSize(file.size)}
                 </span>
               </button>
@@ -306,7 +307,7 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
         type="button"
         onClick={() => window.dispatchEvent(new CustomEvent(EVENT_SHOW_SHORTCUTS, { detail: { tab: 'about' } }))}
         title={t('viewportLighting.container.emptyState.privacyDetailsHint')}
-        className="group mt-6 w-full border-t border-zinc-200 dark:border-[#3b4261] pt-3 flex items-center justify-center gap-1.5 text-[10px] font-mono text-zinc-400 dark:text-[#565f89] hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer"
+        className="group mt-6 w-full border-t border-zinc-200 dark:border-[#3b4261] pt-3 flex items-center justify-center gap-1.5 text-2xs font-mono text-zinc-400 dark:text-[#565f89] hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
         <ShieldCheck className="h-3 w-3 shrink-0 text-emerald-500" />
         <span>{t('keyboardShortcuts.privacy.banner')}</span>

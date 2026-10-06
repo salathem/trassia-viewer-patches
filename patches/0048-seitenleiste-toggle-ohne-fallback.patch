@@ -1,9 +1,9 @@
 diff --git a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
-index 5da18e2..f29d0ed 100644
+index 57c3ef553e24fc0fc6f7cd1c4f9db030c4ec4da8..61db4988f60665c41d8ebd96e914222fe7ba841b 100644
 --- a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
-@@ -128,7 +128,12 @@ export function ActivityBar() {
-           if (!def) return null;
+@@ -116,7 +116,12 @@ export function ActivityBar() {
+           const title = t(def.titleKey);
            const Icon = def.Icon;
            const loc = panelLocation(id);
 -          const active = loc === 'docked';
@@ -14,13 +14,13 @@ index 5da18e2..f29d0ed 100644
 +          // einem leeren Bereich. Links-/Bodenpanels haben eigene Slots.
 +          const active = loc === 'docked' && (def.region !== 'side' || mode === 'expanded');
            const open = isOpen(id);
-           const showDivider = prevGroup !== null && def.group !== prevGroup;
+           const showGroupLabel = def.group !== prevGroup;
            prevGroup = def.group;
 diff --git a/apps/viewer/src/hooks/usePanelControls.ts b/apps/viewer/src/hooks/usePanelControls.ts
-index 3fd6010..79a10b9 100644
+index 310401f8f5ae956ebdae9510cacdd0cbd5fff2f1..e7bf8ce5123aea7aaf68e688a0a209108c03902d 100644
 --- a/apps/viewer/src/hooks/usePanelControls.ts
 +++ b/apps/viewer/src/hooks/usePanelControls.ts
-@@ -181,6 +181,17 @@ export function usePanelControls(): PanelControls {
+@@ -182,6 +182,17 @@ export function usePanelControls(): PanelControls {
      useViewerStore.getState().closeFloatingPanel(id);
      closePanelWindow(id);
      if (isAnalysisPanel(id)) setDockedVisible(id, false);
@@ -38,28 +38,19 @@ index 3fd6010..79a10b9 100644
    }, []);
  
    const dockPanel = useCallback((id: WorkspacePanelId) => openInHome(id), [openInHome]);
-diff --git a/apps/viewer/src/store/index.ts b/apps/viewer/src/store/index.ts
-index 7a2b112..df4fbe8 100644
---- a/apps/viewer/src/store/index.ts
-+++ b/apps/viewer/src/store/index.ts
-@@ -440,8 +440,18 @@ const createViewerStore = () => create<ViewerState>()(withVisibilityOwnershipInv
+diff --git a/apps/viewer/src/store/createViewerActions.ts b/apps/viewer/src/store/createViewerActions.ts
+index bcd0b2a82d8e682a6c34512a0a45f4702c0ae747..f1222277ca490e8854b5a996f596df7a3ae13103 100644
+--- a/apps/viewer/src/store/createViewerActions.ts
++++ b/apps/viewer/src/store/createViewerActions.ts
+@@ -213,7 +213,10 @@ export const createViewerActions: StateCreator<ViewerState, [], [], ViewerAction
      const isActive = s.sidebarActivePanel === panel
        && !s.floatingPanels.some((p) => p.id === panel)
        && !s.poppedOutIds.includes(panel);
 -    if (isActive) get().showWorkspacePanel('properties');
--    else get().showWorkspacePanel(panel);
-+    // Trassia (Paket SEITENLEISTE, Marco-Befund 2026-09-02): ein zweiter Klick
-+    // auf das aktive Symbol schliesst das Panel und laesst NICHTS erscheinen —
-+    // die Leiste klappt auf ihre Symbolspalte zusammen. Vorher sprang der
-+    // Upstream still auf den Information-Fallback (bei Information selbst war
-+    // der Klick ein No-op). showWorkspacePanel('properties') raeumt weiterhin
-+    // alle Flags; das Zusammenklappen danach ist die einzige Ergaenzung.
 +    if (isActive) {
 +      get().showWorkspacePanel('properties');
 +      get().setSidebarMode('collapsed');
-+    } else {
-+      get().showWorkspacePanel(panel);
 +    }
+     else get().showWorkspacePanel(panel, surface);
    },
  
-   toggleBottomPanel: (panel) => {

@@ -10,24 +10,19 @@
  * dispatches to this component for `model-header` nodes.
  */
 
-import { Move3D, ChevronRight, Eye, EyeOff, FileBox, RefreshCw, X } from 'lucide-react';
+import { Move3D, ChevronRight, Eye, EyeOff, FileBox, X } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { openRepositionModels } from '@/lib/model-placement/commands';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
 import type { TreeNode } from './types';
+import type { HierarchyNodeAriaProps } from './HierarchyNode';
 import { ModelRowTags } from './ModelRowTags';
-// Trassia overlay (Paket U3-klein): Zeilen-Auswahl fuer die Leertaste — Hervorhebung
-// gewaehlter Zeilen und Ctrl-Klick auf der Modellzeile. Siehe lib/ch/zeilen-auswahl.ts.
 import { chZeilenKlick, useChZeileGewaehlt } from '@/lib/ch/zeilen-auswahl';
 import { chZahlExakt } from '@/lib/ch/gesamt-statistik';
+import { SourceSyncIcon, useModelSyncProgress } from '@/components/sources/SourceDownloadStatus';
 
-// Trassia (Paket V-UX, P6 / Befund R-9): Zeilenschalter dauerhaft sichtbar und
-// mindestens 24x24 px; upstream 18x18 px und erst beim Hovern eingeblendet — auf
-// einem Zeigegeraet ohne Hover gab es sie gar nicht.
-const CH_SCHALTER = 'inline-flex h-6 w-6 items-center justify-center rounded p-0.5 opacity-70 transition-opacity hover:bg-muted hover:opacity-100 group-hover:opacity-100';
-
-export interface ModelHeaderRowProps {
+export interface ModelHeaderRowProps extends HierarchyNodeAriaProps {
   node: TreeNode;
   virtualRow: { size: number; start: number };
   modelsCount: number;
@@ -51,11 +46,17 @@ export function ModelHeaderRow({
   onModelHeaderClick,
   sourceBacked = false,
   sourceSyncing = false,
+  ariaLevel = 1,
+  ariaSetSize = 1,
+  ariaPosInSet = 1,
+  tabIndex = -1,
+  rowRef,
+  onRowFocus,
 }: ModelHeaderRowProps) {
   const { t } = useTranslation();
-  const modelId = node.modelIds[0];
-  // Trassia (U3-klein): steht die Zeile in der Zeilen-Auswahl (Leertaste)?
   const chGewaehlt = useChZeileGewaehlt(node.id);
+  const modelId = node.modelIds[0];
+  const syncState = useModelSyncProgress(modelId);
 
   return (
     <div
@@ -68,10 +69,22 @@ export function ModelHeaderRow({
         transform: `translateY(${virtualRow.start}px)`,
       }}
     >
+      {/* The parent role=tree handles Enter/Space for this row via useTreeKeyboard. */}
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events */}
       <div
+        ref={rowRef}
+        role="treeitem"
+        aria-level={ariaLevel}
+        aria-setsize={ariaSetSize}
+        aria-posinset={ariaPosInSet}
+        aria-expanded={node.hasChildren ? node.isExpanded : undefined}
+        data-node-id={node.id}
+        tabIndex={tabIndex}
+        onFocus={onRowFocus}
         className={cn(
           'flex items-center gap-1 px-2 py-1.5 border-l-4 transition-all group ch-zeile',
           'hover:bg-zinc-50 dark:hover:bg-zinc-900',
+          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2',
           'border-transparent',
           !modelVisible && 'opacity-50',
           node.hasChildren && 'cursor-pointer',
@@ -79,7 +92,7 @@ export function ModelHeaderRow({
         )}
         style={{ paddingLeft: '8px' }}
         onClick={(e) => {
-          // Trassia (U3-klein): Ctrl-Klick = Zeile in die Auswahl, sonst Upstream.
+          if ((e.target as HTMLElement).closest('button,[data-model-row-tags]')) return;
           if (!chZeilenKlick(node, e)) return;
           onModelHeaderClick(modelId, node.id, node.hasChildren);
         }}
@@ -107,18 +120,18 @@ export function ModelHeaderRow({
         </Tooltip>
 
         {node.elementCount !== undefined && (
-          // Trassia (U3-klein, TODO #29): klein und grau; die Zahl der Modellzeile
-          // sind ALLE IFC-Entitaeten. Faellt weg, wenn die ZEILE schmal ist
-          // (Container-Query in ch-dichte.css Regel 10), statt den Namen zu kuerzen.
-          <span className="ch-zeilenzahl text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500 px-1 shrink-0">
-            {/* Trassia: Schweizer Tausendertrennung wie Fusszeile und Koordinaten. */}
+          <span className="ch-zeilenzahl text-2xs tabular-nums text-zinc-400 dark:text-zinc-500 px-1 shrink-0">
             {chZahlExakt(node.elementCount)}
           </span>
         )}
         <ModelRowTags modelId={modelId} modelName={node.name} />
 
         <button
-          className="p-0.5"
+          // 14px icon, `p-[5px]` a side: 14 + 2*5 = 24, the WCAG 2.2 2.5.8
+          // minimum with no headroom to spare — these buttons sit `gap-1`
+          // (4px) apart, so a bigger hit area (via padding or slop) would
+          // overlap the next one (#5826 review round).
+          className="p-[5px] relative focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           aria-label={t('hierarchy.node.repositionAriaLabel', { name: node.name })}
           title={t('hierarchy.node.repositionTooltip')}
           onClick={(event) => { event.stopPropagation(); openRepositionModels([modelId]); }}
@@ -137,7 +150,7 @@ export function ModelHeaderRow({
                   ? t('hierarchy.node.hideModelAriaLabel', { name: node.name })
                   : t('hierarchy.node.showModelAriaLabel', { name: node.name })
               }
-              className={CH_SCHALTER}
+              className="inline-flex h-6 w-6 items-center justify-center rounded p-0.5 opacity-70 hover:bg-muted hover:opacity-100 group-hover:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
             >
               {modelVisible ? (
                 <Eye className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100" />
@@ -161,16 +174,16 @@ export function ModelHeaderRow({
                 }}
                 aria-label={t('hierarchy.node.syncModelAriaLabel', { name: node.name })}
                 className={cn(
-                  CH_SCHALTER,
+                  'inline-flex h-6 w-6 items-center justify-center rounded p-0.5 opacity-70 hover:bg-muted hover:opacity-100 group-hover:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100',
                   sourceSyncing && 'opacity-100',
                 )}
                 disabled={sourceSyncing}
               >
-                <RefreshCw
-                  className={cn(
-                    'h-3.5 w-3.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100',
-                    sourceSyncing && 'animate-spin',
-                  )}
+                <SourceSyncIcon
+                  name={node.name}
+                  syncing={sourceSyncing}
+                  state={syncState}
+                  className="text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
                 />
               </button>
             </TooltipTrigger>
@@ -191,7 +204,7 @@ export function ModelHeaderRow({
                   onRemoveModel(modelId, e);
                 }}
                 aria-label={t('hierarchy.node.removeModelAriaLabel', { name: node.name })}
-                className={CH_SCHALTER}
+                className="inline-flex h-6 w-6 items-center justify-center rounded p-0.5 opacity-70 hover:bg-muted hover:opacity-100 group-hover:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
               >
                 <X className="h-3.5 w-3.5 text-zinc-400 hover:text-red-500" />
               </button>

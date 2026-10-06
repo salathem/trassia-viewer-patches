@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/hooks/dxfExportGeoref.test.ts b/apps/viewer/src/hooks/dxfExportGeoref.test.ts
-index 659c3eb..4a0e8b6 100644
+index 659c3ebdbf5eaca72a3bd7618e886ce9fd027c2f..4a0e8b61ba3974687c541f36a81b5fd2962d8db5 100644
 --- a/apps/viewer/src/hooks/dxfExportGeoref.test.ts
 +++ b/apps/viewer/src/hooks/dxfExportGeoref.test.ts
 @@ -377,8 +377,8 @@ describe('DXF export georeference round trip (through the real writer + parser)'
@@ -14,7 +14,7 @@ index 659c3eb..4a0e8b6 100644
      const doc = parseDxf(dxf);
      const line = doc.entities.find((e) => e.kind === 'line');
 diff --git a/packages/drawing-2d/src/dxf-exporter.test.ts b/packages/drawing-2d/src/dxf-exporter.test.ts
-index 9bc9ca5..ff5c250 100644
+index 9bc9ca5582b0f396d19912c427395bb809355eff..ff5c2509ed9724aa4b229802a414ec24eb3fcace 100644
 --- a/packages/drawing-2d/src/dxf-exporter.test.ts
 +++ b/packages/drawing-2d/src/dxf-exporter.test.ts
 @@ -85,10 +85,12 @@ const underlay = (): DxfUnderlay => ({
@@ -32,7 +32,7 @@ index 9bc9ca5..ff5c250 100644
      expect(doc.entities).toHaveLength(0);
    });
 diff --git a/packages/drawing-2d/src/dxf-exporter.ts b/packages/drawing-2d/src/dxf-exporter.ts
-index 2454bd5..8c46c9b 100644
+index 2454bd55bbe58738205c36b11270a50f8b574ef3..8c46c9b58a19fd226e4a26e13a9cc253c3add99d 100644
 --- a/packages/drawing-2d/src/dxf-exporter.ts
 +++ b/packages/drawing-2d/src/dxf-exporter.ts
 @@ -21,10 +21,12 @@
@@ -53,7 +53,7 @@ index 2454bd5..8c46c9b 100644
  
  import type { Drawing2D, DrawingLine, DrawingPolygon, LineCategory, Point2D } from './types.js';
 diff --git a/packages/drawing-2d/src/dxf/writer.test.ts b/packages/drawing-2d/src/dxf/writer.test.ts
-index 5eef0a4..09d8ccf 100644
+index 5eef0a43c78083b95d27d49920db23a49482bf58..09d8ccf372440d9396b448d50fcb251b1795af1a 100644
 --- a/packages/drawing-2d/src/dxf/writer.test.ts
 +++ b/packages/drawing-2d/src/dxf/writer.test.ts
 @@ -24,16 +24,18 @@ import { parseDxf } from './parser.js';
@@ -93,7 +93,7 @@ index 5eef0a4..09d8ccf 100644
      const line = doc.entities[0] as DxfLineEntity;
      expect(line.kind).toBe('line');
 diff --git a/packages/drawing-2d/src/dxf/writer.ts b/packages/drawing-2d/src/dxf/writer.ts
-index e7e6225..c01ffd7 100644
+index e7e62255ad1b416605e9c75352e27e43c6761388..c01ffd7d158856568cfd319751a718438c0cb09c 100644
 --- a/packages/drawing-2d/src/dxf/writer.ts
 +++ b/packages/drawing-2d/src/dxf/writer.ts
 @@ -22,9 +22,17 @@

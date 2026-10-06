@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx b/apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx
-index 62bba08..312ded3 100644
+index 6dba7b99465a7b80d4aae8876f9c4aac2a5a6c9b..df790b503b278819856806cada1ead685a06c80c 100644
 --- a/apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx
-@@ -25,6 +25,9 @@ import { WebGpuDisabledCaption } from './WebGpuTroubleshooting';
+@@ -26,6 +26,9 @@ import { WebGpuDisabledCaption } from './WebGpuTroubleshooting';
  import { TourInvite } from '@/components/tours/TourInvite';
  import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
  import { EVENT_SHOW_SHORTCUTS } from '@/lib/tours/events';
@@ -12,7 +12,7 @@ index 62bba08..312ded3 100644
  
  /** Plain CSS text, not UI copy — kept as a module-level constant (rather than
   *  an inline `<style>{`…`}</style>` template literal) so the i18n literal
-@@ -87,6 +90,11 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
+@@ -88,6 +91,11 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
    return (
      <div {...tourAnchor(TOUR_ANCHORS.emptyStateCard)} className="max-w-md w-full bg-white dark:bg-[#16161e] border border-zinc-300 dark:border-[#3b4261] p-8 flex flex-col items-center transition-transform hover:-translate-y-1 duration-200 shadow-lg">
  
@@ -24,7 +24,7 @@ index 62bba08..312ded3 100644
        <style>{FLOAT_SLOW_KEYFRAMES}</style>
  
        {/* Logo Section */}
-@@ -245,6 +253,14 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
+@@ -246,6 +254,14 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
        {/* First-run tour invite — needs loadFile, so it shares the
            WebGPU gate of every other action on this card. */}
        {webgpu.supported && !webgpu.checking && <TourInvite />}

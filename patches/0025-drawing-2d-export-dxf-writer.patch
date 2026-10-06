@@ -1,5 +1,5 @@
 diff --git a/packages/drawing-2d/src/index.ts b/packages/drawing-2d/src/index.ts
-index 7b75c7a..83bb19c 100644
+index 7b75c7aed8a8b29677b9a668103c92540c243ab4..83bb19c933185909e5e9f6f10c9c8785ef0bc6f7 100644
 --- a/packages/drawing-2d/src/index.ts
 +++ b/packages/drawing-2d/src/index.ts
 @@ -225,12 +225,26 @@ export type { ColorRaster, ColorRasterOptions, RasterFit } from './color-raster.

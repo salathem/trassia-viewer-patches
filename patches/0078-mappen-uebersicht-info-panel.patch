@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/PropertiesPanel.tsx b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-index 6a51624..072075e 100644
+index c397e7f7a843604bf20d41fbc8078f02894267cc..30af2ae316292bc8be5a3b24f808ea1b4f328586 100644
 --- a/apps/viewer/src/components/viewer/PropertiesPanel.tsx
 +++ b/apps/viewer/src/components/viewer/PropertiesPanel.tsx
-@@ -30,6 +30,8 @@ import { withInheritedTypeQuantities } from '@/lib/zones/inherited-quantities';
+@@ -34,6 +34,8 @@ import { withInheritedTypeQuantities } from '@/lib/zones/inherited-quantities';
  import { CoordRow } from './properties/CoordinateDisplay';
  // Trassia overlay — projected coordinates with their actual reference frame.
  import { ChWorldSummary, ChWorldRows } from './properties/ChWorldPosition';
@@ -11,12 +11,11 @@ index 6a51624..072075e 100644
  import { renderToWorldViewer } from './tools/measure-modes/coordinates';
  import { viewerToIfcAxes } from '@/lib/geo/coordinate-frame';
  import { getEffectiveGeoreference } from '@/lib/geo/effective-georef';
-@@ -1284,6 +1286,8 @@ export function PropertiesPanel() {
-           <p className="text-xs font-mono text-zinc-500 dark:text-zinc-400 max-w-[150px]">
-             {models.size > 1 ? t('properties.panel.emptyHintMultiModel') : t('properties.panel.emptyHintSingleModel')}
-           </p>
-+          {/* Trassia (TODO 29): Mappen-Uebersicht statt nur «No Selection». */}
-+          <ChMappenUebersicht />
-         </div>
-       </div>
-     );
+@@ -1257,6 +1259,7 @@ export function PropertiesPanel() {
+         <EmptyState
+           className="flex-1 bg-white dark:bg-black"
+           icon={<MousePointer2 className="size-8" />}
++          action={<ChMappenUebersicht />}
+           title={t('properties.panel.emptyTitle')}
+           description={models.size > 1 ? t('properties.panel.emptyHintMultiModel') : t('properties.panel.emptyHintSingleModel')}
+         />

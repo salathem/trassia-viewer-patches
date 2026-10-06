@@ -1,8 +1,26 @@
 diff --git a/apps/viewer/src/components/viewer/HierarchyPanel.tsx b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
-index 67930ba..6a33e28 100644
+index e7f35fb2f7c2e7a8ac0a9a9dea0ffee4ade8c4e6..59dd6247239bcbd881fa2819ff17e98a8c0b699b 100644
 --- a/apps/viewer/src/components/viewer/HierarchyPanel.tsx
 +++ b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
-@@ -34,6 +34,12 @@ import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
+@@ -2,7 +2,7 @@
+  * License, v. 2.0. If a copy of the MPL was not distributed with this
+  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ 
+-import { useState, useCallback, useRef, useMemo } from 'react';
++import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+ import { useTranslation } from '@/i18n';
+ import { useVirtualizer } from '@tanstack/react-virtual';
+ import { Search, Building2, Layers, LayoutTemplate, FileBox, GripHorizontal, Palette, Network } from 'lucide-react';
+@@ -20,7 +20,7 @@ import { EmptyState } from '@/components/ui/empty-state';
+ import { useSourceHost } from '@/services/sources/SourceHostProvider';
+ import { syncSourceModel } from '@/lib/sources/syncSourceModel';
+ 
+-import type { TreeNode } from './hierarchy/types';
++import { isSpatialContainer, type TreeNode } from './hierarchy/types';
+ import { useHierarchyTree } from './hierarchy/useHierarchyTree';
+ import { useRevealSelection } from './hierarchy/useRevealSelection';
+ import { useHierarchySplit } from './hierarchy/useHierarchySplit';
+@@ -48,6 +48,12 @@ import { useStreamingThrottled } from '@/hooks/useStreamingThrottled';
  // Trassia overlay (Paket V-TILES) — die Kachelsaetze der Projektmappe stehen
  // ueber der Modellliste. Ohne Kachelsatz rendert die Komponente nichts.
  import { ChTileLayers } from './ChTileLayers';
@@ -15,7 +33,15 @@ index 67930ba..6a33e28 100644
  
  export function HierarchyPanel() {
    const { t } = useTranslation();
-@@ -271,6 +277,33 @@ export function HierarchyPanel() {
+@@ -67,6 +73,7 @@ export function HierarchyPanel() {
+   const setModelVisibility = useViewerStore((s) => s.setModelVisibility);
+   const { addModel, removeModel } = useIfcFederation(useIfcLoader().loadFile);
+   const sourceHost = useSourceHost();
++  const toGlobalId = useViewerStore((s) => s.toGlobalId);
+   const selectedEntityId = useViewerStore((s) => s.selectedEntityId);
+   const selectedEntityIds = useViewerStore((s) => s.selectedEntityIds);
+   const setSelectedEntities = useViewerStore((s) => s.setSelectedEntities);
+@@ -215,6 +222,33 @@ export function HierarchyPanel() {
      }
    }, [getNodeElements, hiddenEntities, hideEntities, showEntities, selectedEntityId, clearSelection]);
  
@@ -49,92 +75,66 @@ index 67930ba..6a33e28 100644
    // Handle model visibility toggle
    const handleModelVisibilityToggle = useCallback((modelId: string, e: React.MouseEvent) => {
      e.stopPropagation();
-@@ -350,6 +383,11 @@ export function HierarchyPanel() {
+@@ -296,6 +330,7 @@ export function HierarchyPanel() {
+     section: SelectionSection,
+     index: number,
+   ) => {
++    if (!chZeilenKlick(node, event)) return;
+     const rows = selectionRows[section][index];
+     if (!rows?.length) return;
+     try {
+@@ -671,13 +706,13 @@ export function HierarchyPanel() {
+         </div>}
  
-   // Handle node click - for selection/isolation or expand/collapse
-   const handleNodeClick = useCallback((node: TreeNode, e: React.MouseEvent) => {
-+    // Trassia (U3-klein): Ctrl-Klick nimmt JEDE Zeile in die Zeilen-Auswahl
-+    // (Leertaste); bei Nicht-Element-Zeilen ersetzt das den Upstream-Klick,
-+    // der sonst isolieren oder solo schalten wuerde. Einfacher Klick: Auswahl
-+    // = diese Zeile, Upstream unveraendert.
-+    if (!chZeilenKlick(node, e)) return;
-     if (node.type === 'model-header' && node.id !== 'models-header') {
-       // Model header click handled by its own onClick (expand/collapse)
-       return;
-@@ -1043,9 +1081,10 @@ export function HierarchyPanel() {
-             </div>
-           </div>
-         ) : (
--          <div className="p-2 border-t-2 border-zinc-200 dark:border-zinc-800 text-[10px] uppercase tracking-wide text-zinc-500 dark:text-zinc-500 text-center bg-zinc-50 dark:bg-black font-mono">
--            {t('hierarchy.panel.modelsFooterHint', { count: models.size })}
--          </div>
-+          // Trassia (U3-klein, Marco E21): kein Fussbalken «n models · Drag
-+          // divider to resize» — die Modellzahl steht im Abschnittskopf, der
-+          // Ziehgriff erklaert sich selbst.
-+          null
-         )}
+         {/* Footer status */}
+-        <HierarchyFooterStatus
++        {hasActiveFilters && <HierarchyFooterStatus
+           hasActiveFilters={hasActiveFilters} selectedStoreys={selectedStoreys} classFilter={classFilter}
+           isolatedEntities={isolatedEntities} typeIsolationLabel={typeIsolationLabel}
+           clearStoreySelection={clearStoreySelection} clearClassFilter={clearClassFilter}
+           clearIsolation={clearIsolation} clearAllFilters={clearAllFilters}
+           idleHint={t('hierarchy.panel.modelsFooterHint', { count: models.size })} idleHintLightShade="500"
+-        />
++        />}
        </div>
      );
+   }
 diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-index 34ac55c..ab73211 100644
+index 0f6156a803fb9d80e2494957db7edad3f7784517..a950ab9c8f05bd5b6ab699cffc2dc31edd7c596b 100644
 --- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
 +++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-@@ -17,6 +17,10 @@ import { bottomPanelFlags } from '@/lib/panels/bottom-panels';
- // Panels, die in der Leiste stehen (nicht versteckt — der Nutzer kann sie im
- // Anpassen-Dialog einblenden); ?voll=1 wie Upstream. Siehe lib/ch/modus.ts.
+@@ -16,6 +16,7 @@ import { bottomPanelFlags } from '@/lib/panels/bottom-panels';
+ // 2026-09-03): Alt+Ziffer oeffnet im Trassia-Modus nur Panels, die die Leiste
+ // anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
  import { chVollmodus } from '@/lib/ch/modus';
-+// Trassia overlay (Paket U3-klein, Marco E21 2026-09-04): die Leertaste
-+// schaltet die Sichtbarkeit der gewaehlten Struktur-Zeilen um — je Zeile nach
-+// eigenem Zustand; ohne Zeilen-Auswahl je gewaehltem Element nach Zustand.
-+import { chElementePlan, chPlanAusfuehren, chZeilenAuswahl, chZeilenAuswahlLeeren, chZeilenSichtbarkeitUmschalten } from '@/lib/ch/zeilen-auswahl';
++import { chElementePlan, chPlanAusfuehren, chZeilenAuswahlLeeren, chZeilenSichtbarkeitUmschalten } from '@/lib/ch/zeilen-auswahl';
  import { closeAllPanelWindows } from '@/services/panel-windows';
- import { eventKey, isTextEntryTarget, WALK_MOVEMENT_KEYS } from '@/lib/keyboard-event';
- import {
-@@ -244,13 +248,32 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
-       const ids = getAllSelectedGlobalIds();
-       hideEntities(ids);
-     }
--    // Space to hide — skip when focused on buttons/selects/links where Space has native behavior
--    if (key === ' ' && !ctrl && !shift && selectedEntityId) {
-+    // Space toggles visibility — skip when focused on buttons/selects/links where Space has native behavior
-+    // Trassia (U3-klein, Marco E21): nicht mehr nur verstecken, sondern je
-+    // Zeile/Element nach eigenem Zustand umschalten; gewaehlte Struktur-Zeilen
-+    // (Modell, Gruppe, Typ, Element gemischt) vor der Store-Auswahl. Derselbe
-+    // Riegel wie bei Escape: nie in Menues und Dialogen.
-+    if (key === ' ' && !ctrl && !shift) {
-       const tag = document.activeElement?.tagName;
--      if (tag !== 'BUTTON' && tag !== 'SELECT' && tag !== 'A') {
--        e.preventDefault();
--        const ids = getAllSelectedGlobalIds();
--        hideEntities(ids);
-+      const ziel = e.target as HTMLElement | null;
-+      const imMenue = !!ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]');
-+      // Tester U3 B-1/B-2: steht eine Zeilen-Auswahl, gehoert die Leertaste
-+      // ihr — auch wenn zuletzt ein Reiter oder Aufklapp-Pfeil fokussiert war
-+      // (der Knopf bekommt dann keinen Klick). Ohne Zeilen-Auswahl wie Upstream.
-+      const zeilenGewaehlt = chZeilenAuswahl().size > 0;
-+      if ((zeilenGewaehlt || (tag !== 'BUTTON' && tag !== 'SELECT' && tag !== 'A')) && !imMenue) {
-+        const s = useViewerStore.getState();
-+        const aktionen = { hideEntities: s.hideEntities, showEntities: s.showEntities, setModelVisibility: s.setModelVisibility };
-+        let schritte = chZeilenSichtbarkeitUmschalten(
-+          { versteckt: s.hiddenEntities, modellSichtbar: (id) => s.models.get(id)?.visible },
-+          aktionen,
-+        );
-+        if (schritte === 0) {
-+          const plan = chElementePlan(getAllSelectedGlobalIds(), s.hiddenEntities);
-+          chPlanAusfuehren(plan, aktionen);
-+          schritte = plan.length;
-+        }
-+        if (schritte > 0) e.preventDefault();
-       }
-     }
-     if (key === 'a' && !ctrl && !shift) {
-@@ -384,6 +407,8 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
-       // sich selbst per Escape) gehoert dazu.
-       if (ziel?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return;
-       e.preventDefault();
-+      // Trassia (U3-klein): Escape leert auch die Zeilen-Auswahl der Struktur-Ansicht.
-+      chZeilenAuswahlLeeren();
-       const now = Date.now();
-       const timeSinceLastEscape = now - lastEscapeRef.current;
-       lastEscapeRef.current = now;
+ import { WALK_MOVEMENT_KEYS, eventKey, isTextEditingElement } from '@/lib/keyboard-event';
+ import { bindModelWorkspaceKeys } from '@/lib/commands/modeling/keys-workspace';
+@@ -29,6 +30,7 @@ interface KeyboardShortcutsOptions { enabled?: boolean }
+ function escapeGlobal(closeAll: boolean, event?: KeyboardEvent): boolean | void {
+   const target = event?.target as HTMLElement | null;
+   if (target?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return false;
++  chZeilenAuswahlLeeren();
+   const state = useViewerStore.getState();
+   if (closeAll) {
+     state.showWorkspacePanel('properties');
+@@ -100,6 +102,18 @@ function hideSelected(event: KeyboardEvent): boolean {
+     const tag = document.activeElement?.tagName;
+     if (tag === 'BUTTON' || tag === 'SELECT' || tag === 'A') return false;
+   }
++  if (event.key === ' ') {
++    const s = useViewerStore.getState();
++    const actions = { hideEntities: s.hideEntities, showEntities: s.showEntities, setModelVisibility: s.setModelVisibility };
++    let steps = chZeilenSichtbarkeitUmschalten({ versteckt: s.hiddenEntities, modellSichtbar: (id) => s.models.get(id)?.visible }, actions);
++    if (steps === 0) {
++      const ids = s.selectedEntityIds.size > 0 ? [...s.selectedEntityIds] : s.selectedEntityId === null ? [] : [s.selectedEntityId];
++      const plan = chElementePlan(ids, s.hiddenEntities);
++      chPlanAusfuehren(plan, actions);
++      steps = plan.length;
++    }
++    return steps > 0;
++  }
+   return hideSelectionFromStore();
+ }
+ 

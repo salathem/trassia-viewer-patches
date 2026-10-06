@@ -1,15 +1,17 @@
+diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
+index a22d9d71c8c4944c5e2f6dd7bbbe437cb0a8c5ce..8f01cf8c86029306dd39353eb4f6e4fd3a035004 100644
 --- a/apps/viewer/src/hooks/useDrawingExport.ts
 +++ b/apps/viewer/src/hooks/useDrawingExport.ts
-@@ -3,7 +3,7 @@
+@@ -2,7 +2,7 @@
+  * License, v. 2.0. If a copy of the MPL was not distributed with this
   * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
  
- import { useCallback, useEffect } from 'react';
 -import { registerChSeriesExport } from '@/lib/ch/qp-serie-export';
 +import { registerChSeriesExport, chSvgIncludeAnnotationBounds, chSvgPaperSize, chPdfAnnotationPaper } from '@/lib/ch/qp-serie-export';
  import { useChQpHeightAnnotations } from '@/hooks/useChQpHeightAnnotations';
- import type React from 'react';
- import { posthog } from '@/lib/analytics';
-@@ -723,7 +723,7 @@
+ import { useCallback, useEffect } from 'react';
+ import { buildDxfUnderlaySvg, drawDxfUnderlaysPdf, mappedDxfUnderlayOptions } from '@/lib/export/drawing-vector-underlays';
+@@ -653,7 +653,7 @@ function useDrawingExport({
      }
  
      svg += '</svg>';
@@ -18,7 +20,7 @@
    }, [drawing, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, measure2DResults, polygonArea2DResults, exportTextAnnotations, cloudAnnotations2D, sectionPlane.axis, dxfUnderlays, scanSection, ifcDataStore, storeModels]);
  
    // Generate SVG with drawing sheet (frame, title block, scale bar)
-@@ -940,10 +940,6 @@
+@@ -868,10 +868,6 @@ function useDrawingExport({
      svg += '    </g>\n';
  
      // POINT-CLOUD SCAN OVERLAY (issue #1805) — on top, inside the clipped
@@ -29,20 +31,20 @@
      // drawing-content group like everything else. `modelToPaper` already
      // applies the same flip + scale/translate the rest of the sheet uses.
      if (displayOptions.showScanSection && displayOptions.scanSectionIncludeInExport) {
-@@ -956,6 +952,12 @@
-     }
+@@ -885,6 +881,12 @@ function useDrawingExport({
  
      svg += '  </g>\n\n';
-+
+ 
 +    // Height labels are paper annotations: geometric cropping must not cut glyphs.
 +    for (const annotation of heightAnnotations) {
 +      const p = modelToPaper(annotation.position.x, annotation.position.y);
 +      svg += `<text x="${p.x.toFixed(4)}" y="${p.y.toFixed(4)}" font-size="2.5" fill="#174a68">${escapeXml(annotation.text)}</text>\n`;
 +    }
- 
++
      // Render frame (on top of drawing content)
      const frameResult = renderFrame(activeSheet.paper, activeSheet.frame);
-@@ -983,7 +985,7 @@
+     svg += frameResult.svgElements;
+@@ -911,7 +913,7 @@ function useDrawingExport({
      svg += '\n';
  
      svg += '</svg>';
@@ -51,9 +53,9 @@
      // `sectionPlane.axis` and `isPinned` are read INSIDE this callback (via
      // `resolveSheetTransform`) and so must be here. Both were previously
      // held up only by invariants elsewhere — `drawing` happens to change
-@@ -1147,7 +1149,8 @@
+@@ -1076,7 +1078,8 @@ function useDrawingExport({
      if (sheetEnabled && activeSheet) {
-       const svg = generateSheetSVG();
+       const svg = tryDrawingSvg(generateSheetSVG);
        if (!svg) return;
 -      const { widthMm, heightMm } = activeSheet.paper;
 +      const paper = chSvgPaperSize(svg);
@@ -61,13 +63,16 @@
        void (async () => {
          try {
            const { jsPDF } = await import('jspdf');
-@@ -1213,12 +1216,33 @@
-       alert(err instanceof Error ? err.message : 'Could not export PDF: invalid scale.');
+@@ -1141,7 +1144,7 @@ function useDrawingExport({
+       toast.error(err instanceof Error ? t('section2d.export.invalidScaleDetail', { error: err.message }) : t('section2d.export.invalidScale'));
        return;
      }
 -    const mapPoint = makeSectionMapPoint(currentAxis, layout);
 +    const baseMapPoint = makeSectionMapPoint(currentAxis, layout);
  
+     let referenceSnapshot: ReturnType<typeof snapshotDrawingReferences>;
+     try { referenceSnapshot = snapshotDrawingReferences(useViewerStore.getState(), drawing.config.plane); }
+@@ -1153,7 +1156,28 @@ function useDrawingExport({
      void (async () => {
        try {
          const { jsPDF } = await import('jspdf');

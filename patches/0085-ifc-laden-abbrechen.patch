@@ -1,16 +1,79 @@
+diff --git a/apps/viewer/src/components/viewer/StatusBar.tsx b/apps/viewer/src/components/viewer/StatusBar.tsx
+index 1ceb1d992a183edc68b4917ed17288b428b10dd1..97dc770643f26dd79cffbccc7f254a2486821860 100644
+--- a/apps/viewer/src/components/viewer/StatusBar.tsx
++++ b/apps/viewer/src/components/viewer/StatusBar.tsx
+@@ -252,7 +252,7 @@ export function StatusBar() {
+         {activeStreamCanceller && (
+           <button
+             type="button"
+-            onClick={() => activeStreamCanceller()}
++            onClick={() => selectLoadCanceller(useViewerStore.getState())?.()}
+             className="px-2 py-0.5 rounded border border-destructive/40 text-destructive text-2xs uppercase tracking-wider hover:bg-destructive hover:text-destructive-foreground transition-colors"
+             title={t('shellChrome.statusBar.cancelStreamTitle')}
+           >
+diff --git a/apps/viewer/src/components/viewer/ViewportLoadingCard.tsx b/apps/viewer/src/components/viewer/ViewportLoadingCard.tsx
+index dd2fada573d6f5203535c83f6f18b1956ecfff9e..0d1f359b2e1822947f192cfd80e49d7547e47730 100644
+--- a/apps/viewer/src/components/viewer/ViewportLoadingCard.tsx
++++ b/apps/viewer/src/components/viewer/ViewportLoadingCard.tsx
+@@ -55,7 +55,7 @@ export function ViewportLoadingCard() {
+         {cancel && (
+           <button
+             type="button"
+-            onClick={() => cancel()}
++            onClick={() => selectLoadCanceller(useViewerStore.getState())?.()}
+             className="mt-3 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs hover:bg-muted"
+           >
+             <X className="h-3.5 w-3.5" aria-hidden="true" />
+diff --git a/apps/viewer/src/hooks/modelLoadOptions.ts b/apps/viewer/src/hooks/modelLoadOptions.ts
+index b06d55a40249240235e28efd04efe425cf308ff2..586bd092985707aa908921189cab71c956c825c6 100644
+--- a/apps/viewer/src/hooks/modelLoadOptions.ts
++++ b/apps/viewer/src/hooks/modelLoadOptions.ts
+@@ -5,6 +5,10 @@
+ import type { TessellationQuality } from '@ifc-lite/geometry';
+ 
+ export interface ModelLoadOptions {
++  signal?: AbortSignal;
++  /** Notify the owning workflow when the active UI Cancel is used. */
++  onUserCancel?: () => void;
++  stagingPrimary?: boolean;
+   sourceHandle?: FileSystemFileHandle;
+   workflowOwner?: string;
+   // Auto-retry-at-lower-detail (resource-retry.ts): when a resource-limit
+@@ -19,7 +23,7 @@ export interface ModelLoadOptions {
+ }
+ 
+ /** Federation placement/display options share loader ownership and source handles. */
+-export interface FederationAddModelOptions extends Pick<ModelLoadOptions, 'sourceHandle' | 'workflowOwner'> {
++export interface FederationAddModelOptions extends Pick<ModelLoadOptions, 'sourceHandle' | 'workflowOwner' | 'signal' | 'onUserCancel'> {
+   name?: string;
+   modelId?: string;
+   loadedAt?: number;
+diff --git a/apps/viewer/src/hooks/useIfcFederation.ts b/apps/viewer/src/hooks/useIfcFederation.ts
+index 5385c910014acb1f75ed020008523f8247f623b7..31f74d2617990af0af5f52b9649da5711b4dc9ec 100644
+--- a/apps/viewer/src/hooks/useIfcFederation.ts
++++ b/apps/viewer/src/hooks/useIfcFederation.ts
+@@ -154,7 +154,7 @@ export function useIfcFederation(
+         collapsed: options?.collapsed,
+         loadedAt,
+         sharedRtcOffset,
+-      }, { sourceHandle: options?.sourceHandle, workflowOwner: options?.workflowOwner });
++      }, { sourceHandle: options?.sourceHandle, workflowOwner: options?.workflowOwner, signal: options?.signal, onUserCancel: options?.onUserCancel });
+ 
+       // Before the session check: a superseded load still settled a model (#4897, `federationRtcRebase.ts`).
+       if (useViewerStore.getState().models.has(modelId)) convergeFederationRtcFrame();
 diff --git a/apps/viewer/src/hooks/useIfcLoader.ts b/apps/viewer/src/hooks/useIfcLoader.ts
-index e311b5c..7c73393 100644
+index aea0950642bad26eb12db33e0cb033ef541c4b07..93dba2cf2f45348a2aa33c2a902f9b96876f74cd 100644
 --- a/apps/viewer/src/hooks/useIfcLoader.ts
 +++ b/apps/viewer/src/hooks/useIfcLoader.ts
-@@ -23,6 +23,7 @@ import { IfcParser, detectFormat, unwrapIfcZipWithResources, type IfcDataStore }
+@@ -26,6 +26,7 @@ import { IfcParser, detectFormat, unwrapIfcZipWithResources, type IfcDataStore }
  import { attachTextureBitmaps, type TextureBitmapStore } from '../utils/textureResources.js';
  import { modelAppearanceAssets } from '../lib/appearance/model-assets.js';
  import { WorkerParser } from '@ifc-lite/parser/browser';
-+import { awaitLoad, isLoadAbort, parserWithFallback, commitIfcReplacement, installLoadCanceller } from '../lib/ifc-load-cancellation.js';
++import { awaitLoad, isLoadAbort, parserWithFallback, commitIfcReplacement } from '../lib/ifc-load-cancellation.js';
  import { memoryAccounting } from '../lib/perf/memoryAccounting.js';
  import {
    GeometryProcessor,
-@@ -176,6 +177,7 @@ export function useIfcLoader() {
+@@ -177,6 +178,7 @@ export function useIfcLoader() {
    // Guard against stale async writes when user loads a new file before previous completes.
    // Incremented on each loadFile call; deferred callbacks check their captured session.
    const loadSessionRef = useRef(0);
@@ -18,28 +81,10 @@ index e311b5c..7c73393 100644
  
    const {
      setLoading,
-@@ -230,6 +232,8 @@ export function useIfcLoader() {
-         target?: LoadTarget,
-         options?: {
-           sourceHandle?: FileSystemFileHandle;
-+          signal?: AbortSignal;
-+          stagingPrimary?: boolean;
-           tierOverride?: TessellationQuality;
-           isResourceRetry?: boolean;
-           assumedLinearUnit?: string;
-@@ -280,6 +284,8 @@ export function useIfcLoader() {
-     target: LoadTarget = { kind: 'primary' },
-     options?: {
-       sourceHandle?: FileSystemFileHandle;
-+      signal?: AbortSignal;
-+      stagingPrimary?: boolean;
-       // Auto-retry-at-lower-detail (resource-retry.ts): when a resource-limit
-       // failure re-invokes loadFile, it forces this tier and marks the attempt
-       // so a second failure surfaces instead of looping.
-@@ -291,6 +297,37 @@ export function useIfcLoader() {
-       assumedLinearUnit?: string;
-     },
+@@ -278,6 +280,28 @@ export function useIfcLoader() {
    ) => {
+     assertWorkflowOwner(options?.workflowOwner);
+     const draping = drapeIfGeoRaster(file, setLoading); if (draping) return draping; // #5942: imagery, never a model
 +    // Keep the existing federation alive until a replacement IFC is complete.
 +    // The staged path already buffers meshes and registers them atomically.
 +    if (target.kind === 'primary' && /\.(ifc|ifczip)$/i.test(file.name) && !options?.stagingPrimary && useViewerStore.getState().models.size > 0) {
@@ -61,32 +106,50 @@ index e311b5c..7c73393 100644
 +    else options?.signal?.addEventListener('abort', externalAbort, { once: true });
 +    const cancellableIfc = /\.(ifc|ifczip)$/i.test(file.name);
 +    if (target.kind === 'primary') for (const pending of pendingLoads.current) pending.abort();
-+    const previousCanceller = useViewerStore.getState().activeStreamCanceller;
-+    const cancelLoad = () => {
-+      for (const pending of pendingLoads.current) pending.abort();
-+      previousCanceller?.();
-+    };
-+    let clearCancelOwner: (() => void) | undefined;
-+    if (cancellableIfc) {
-+      pendingLoads.current.add(loadAbort);
-+      clearCancelOwner = installLoadCanceller(useViewerStore.getState(), cancelLoad, () => useViewerStore.getState().activeStreamCanceller);
-+    }
++    if (cancellableIfc) pendingLoads.current.add(loadAbort);
      const { resetViewerState, clearAllModels } = useViewerStore.getState();
      // Only a primary (destructive, replace-everything) load bumps the session.
      // Federated adds are independent and run concurrently — they capture the
-@@ -567,9 +604,9 @@ export function useIfcLoader() {
-             spatialReference: patch?.spatialReference, landXmlDocument: patch?.landXmlDocument,
-             postAlignmentReframe: patch?.postAlignmentReframe,
+@@ -289,12 +313,14 @@ export function useIfcLoader() {
+     // Federated adds carry a pre-allocated id; primary loads mint a fresh one.
+     const modelId = target.kind === 'federated' ? target.modelId : crypto.randomUUID();
+     let cancelled = false;
+-    const isCurrent = () => !cancelled && loadSessionRef.current === currentSession;
++    const isCurrent = () => !cancelled && !signal.aborted && loadSessionRef.current === currentSession;
+     const isStale = () => !isCurrent();
+     let abortGeometry: (() => void) | null = null; // set once the geometry pool starts
+     let cancelOwnedStream: (() => void) | null = null;
+     const releaseCanceller = installModelLoadCanceller(target.kind, () => {
++      options?.onUserCancel?.();
+       cancelled = true;
++      loadAbort.abort();
+       if (target.kind === 'primary') loadSessionRef.current += 1;
+       abortGeometry?.();
+     }, () => cancelOwnedStream); // #5849: federated cancellation preserves loaded models
+@@ -324,7 +350,12 @@ export function useIfcLoader() {
+         if (target.kind === 'federated') {
+           await scene.drainColdTier().catch((err) =>
+             console.warn('[useIfc] cold-tier drain before federated add failed:', err));
+-          if (isStale()) { releaseCanceller(); return; }
++          if (isStale()) {
++            options?.signal?.removeEventListener('abort', externalAbort);
++            pendingLoads.current.delete(loadAbort);
++            releaseCanceller();
++            return;
++          }
+         }
+         scene.setColdGeometryProvider(null);
+       }
+@@ -573,7 +604,7 @@ export function useIfcLoader() {
              federatedLandXmlStreamingPlan: patch?.federatedLandXmlStreamingPlan,
--            isCurrent: () => loadSessionRef.current === currentSession, setProgress,
-+            isCurrent: () => (!signal.aborted && loadSessionRef.current === currentSession), setProgress,
+             isCurrent: () => isCurrent(), setProgress,
            });
 -          if (!spatialFinalize) return;
 +          if (!spatialFinalize || signal.aborted || loadSessionRef.current !== currentSession) return;
            const { preAlignment, federationAlignmentStatus } = spatialFinalize;
  
            // Federation registry: transform expressIds to globally-unique ids.
-@@ -636,7 +673,8 @@ export function useIfcLoader() {
+@@ -640,7 +671,8 @@ export function useIfcLoader() {
              federationAlignmentStatus,
              ...buildModelLoadReportPatch(loadDiagnostics, format, patch),
            };
@@ -96,7 +159,7 @@ index e311b5c..7c73393 100644
            // The registry also holds scans that arrived before any compatible
            // anchor. Once this model is visible to `findReferenceSpatialModel`,
            // recompute all scan matrices atomically against the live anchor.
-@@ -644,7 +682,7 @@ export function useIfcLoader() {
+@@ -648,7 +680,7 @@ export function useIfcLoader() {
            // transaction restores every prior GPU transform, while this valid
            // IFC model remains loaded and the user gets an actionable warning.
            try {
@@ -105,30 +168,7 @@ index e311b5c..7c73393 100644
              useViewerStore.getState().setPointCloudAlignmentAvailable(hasRegisteredPointCloudAlignment());
            } catch (error) {
              console.error('[useIfc] point-cloud anchor realignment failed:', error);
-@@ -697,18 +735,18 @@ export function useIfcLoader() {
-         // long XML prologs from forcing a whole-file detection read.
-         const sourceKeyFingerprint = await computeSourceFingerprintFromBlob(file);
-         modelSourceIdentity = `${file.name}:${sourceKeyFingerprint.hex}`;
--        placementIdentity = await placementSourceIdentity(file, () => loadSessionRef.current !== currentSession);
--        if (loadSessionRef.current !== currentSession) return;
-+        placementIdentity = await placementSourceIdentity(file, () => (signal.aborted || loadSessionRef.current !== currentSession));
-+        if ((signal.aborted || loadSessionRef.current !== currentSession)) return;
-         if (target.kind === 'primary') updateModel(modelId, {
-           sourceFingerprint: modelSourceIdentity,
-           sourceContentHash: placementIdentity,
-         });
-         await loadLandXmlModel({ file, fileSizeMB, targetKind: target.kind, totalStartTime, wasHidden: wasHidden(),
-           assumedLinearUnit: options?.assumedLinearUnit,
--          isCurrent: () => loadSessionRef.current === currentSession, setProgress, setGeometryStreamingActive, setLoading,
-+          isCurrent: () => (!signal.aborted && loadSessionRef.current === currentSession), setProgress, setGeometryStreamingActive, setLoading,
-           openProvisional: target.kind === 'primary' ? (preflight) => openPrimaryLandXmlProvisional(modelId, preflight) : undefined,
-           openFederatedStreamingPlan: target.kind === 'federated'
--            ? (preflight, sourceCoordinateInfo, spatialReference) => openFederatedLandXmlStreamingPlan(modelId, preflight, sourceCoordinateInfo, spatialReference, () => loadSessionRef.current === currentSession)
-+            ? (preflight, sourceCoordinateInfo, spatialReference) => openFederatedLandXmlStreamingPlan(modelId, preflight, sourceCoordinateInfo, spatialReference, () => (!signal.aborted && loadSessionRef.current === currentSession))
-             : undefined,
-           onPrimary: (r) => { setGeometryResult(r.geometryResult); setIfcDataStore(r.dataStore); }, finalize: finalizeModel,
-           onError: (message) => {
-@@ -726,7 +764,7 @@ export function useIfcLoader() {
+@@ -731,7 +763,7 @@ export function useIfcLoader() {
        const fileReadStart = performance.now();
        const acquired: AcquiredBuffer = pointCloudFormat
          ? { buffer: headBuf, view: new Uint8Array(headBuf), isShared: false }
@@ -137,148 +177,7 @@ index e311b5c..7c73393 100644
        // Legacy APIs below require ArrayBuffer.
        let buffer: ArrayBuffer | SharedArrayBuffer = acquired.buffer;
        const fileReadMs = performance.now() - fileReadStart;
-@@ -752,8 +790,8 @@ export function useIfcLoader() {
-       loadedBufferByteLength = buffer.byteLength;
-       const sourceKeyFingerprint = computeSourceFingerprint(new Uint8Array(buffer));
-       modelSourceIdentity = `${file.name}:${sourceKeyFingerprint.hex}`;
--      placementIdentity = pointCloudFormat ? undefined : await placementSourceIdentity(file, () => loadSessionRef.current !== currentSession);
--      if (loadSessionRef.current !== currentSession) return;
-+      placementIdentity = pointCloudFormat ? undefined : await placementSourceIdentity(file, () => (signal.aborted || loadSessionRef.current !== currentSession));
-+      if ((signal.aborted || loadSessionRef.current !== currentSession)) return;
-       if (target.kind === 'primary') updateModel(modelId, { sourceFingerprint: modelSourceIdentity, sourceContentHash: placementIdentity });
-       format = pointCloudFormat ?? detectFormat(buffer instanceof ArrayBuffer ? buffer : new Uint8Array(buffer).slice().buffer);
- 
-@@ -817,7 +855,7 @@ export function useIfcLoader() {
-           await renderer.whenReady();
-         } catch (err) {
-           console.warn('[useIfc] renderer was not usable while waiting for readiness:', err);
--          if (loadSessionRef.current !== currentSession) return;
-+          if ((signal.aborted || loadSessionRef.current !== currentSession)) return;
-           const deviceLost = err instanceof Error && err.name === 'RendererDeviceLostError';
-           setError(deviceLost
-             ? 'The graphics device was lost during the load — reload the page and drop the point cloud again.'
-@@ -853,11 +891,11 @@ export function useIfcLoader() {
-         // convention so metres is the documented assumption here too.
-         const sourceUnit: PointCloudSourceUnit = format === 'las' || format === 'laz' ? 'mapUnit' : 'metre';
-         let { sourceSpatialReference, alignment } = await preparePointCloudSpatialLoad(
--          file, format, sourceUnit, () => loadSessionRef.current === currentSession,
-+          file, format, sourceUnit, () => (!signal.aborted && loadSessionRef.current === currentSession),
-         );
-         // Never publish a decoded source reference, alignment availability, or
-         // metadata-refusal toast after its owning load has been superseded.
--        if (loadSessionRef.current !== currentSession) return;
-+        if ((signal.aborted || loadSessionRef.current !== currentSession)) return;
-         const setAlignmentAvailable = useViewerStore.getState().setPointCloudAlignmentAvailable;
-         const alignmentEnabled = useViewerStore.getState().pointCloudAlignmentEnabled;
-         const ingest = ingestPointCloud({
-@@ -879,7 +917,7 @@ export function useIfcLoader() {
-           // an unguarded write would repopulate phantom classes after
-           // a newer load reset the store.
-           onClassCounts: (handleId, counts) => {
--            if (loadSessionRef.current === currentSession) {
-+            if ((!signal.aborted && loadSessionRef.current === currentSession)) {
-               setClassCounts(handleId, counts);
-             }
-           },
-@@ -914,7 +952,7 @@ export function useIfcLoader() {
-           // session has already started — the more recent flow owns
-           // the spinner / model record now. Free the renderer handle
-           // so we don't leak the half-streamed asset.
--          if (loadSessionRef.current !== currentSession) {
-+          if ((signal.aborted || loadSessionRef.current !== currentSession)) {
-             console.warn(
-               `[useIfc] pointcloud ingest rejected on stale session (handle=${ingest.rendererHandle.id}):`,
-               err,
-@@ -954,7 +992,7 @@ export function useIfcLoader() {
-           return;
-         }
-         clearOwnedCanceller();
--        if (loadSessionRef.current !== currentSession) {
-+        if ((signal.aborted || loadSessionRef.current !== currentSession)) {
-           // A newer load already began. Drop our streamed asset and
-           // skip every store/UI mutation so we don't overwrite the
-           // newer model's state. The completed stream already published
-@@ -980,7 +1018,7 @@ export function useIfcLoader() {
-         // finalizeModel may await federated alignment. Its completion belongs
-         // to this session only; do not publish completion telemetry/UI state
-         // into a newer load after that await.
--        if (loadSessionRef.current !== currentSession) return;
-+        if ((signal.aborted || loadSessionRef.current !== currentSession)) return;
-         void identifyLoadedPlacementSource(modelId, file);
-         setProgress({ phase: 'Complete', percent: 100 });
-         // Snapshot: points, not meshes - the ingest GeometryResult's zero
-@@ -1007,7 +1045,7 @@ export function useIfcLoader() {
-           // this point, so there is nothing to unwind — write nothing,
-           // exactly like the cache branch's `if (cacheOutcome === 'stale')
-           // return;`.
--          if (loadSessionRef.current !== currentSession) {
-+          if ((signal.aborted || loadSessionRef.current !== currentSession)) {
-             console.warn(`[useIfc] IFCX finalize ABORTED: stale session (mine=${currentSession}, current=${loadSessionRef.current}) — result discarded`);
-             return;
-           }
-@@ -1025,7 +1063,7 @@ export function useIfcLoader() {
-           // Same guard on the error path (#stale-guard sweep): a superseded
-           // load's OWN parse failure must not clobber the newer load's model
-           // record with an `error` state it never had.
--          if (loadSessionRef.current !== currentSession) {
-+          if ((signal.aborted || loadSessionRef.current !== currentSession)) {
-             console.warn(`[useIfc] IFCX parse failed on an already-stale session (mine=${currentSession}, current=${loadSessionRef.current}) — error discarded:`, err);
-             return;
-           }
-@@ -1052,7 +1090,7 @@ export function useIfcLoader() {
-         setGeometryStreamingActive(false);
- 
-         try {
--          const result = await prepareGlbViewerModel(arrayBuffer, appearanceLoad!.decode, () => loadSessionRef.current !== currentSession);
-+          const result = await prepareGlbViewerModel(arrayBuffer, appearanceLoad!.decode, () => (signal.aborted || loadSessionRef.current !== currentSession));
-           if (!result) return;
-           if (target.kind === 'primary') {
-             setGeometryResult(result.geometryResult);
-@@ -1066,14 +1104,14 @@ export function useIfcLoader() {
-             result.geometryResult, result.schemaVersion, { loadPath: 'wasm' },
-           );
- 
--          if (loadSessionRef.current !== currentSession) return;
-+          if ((signal.aborted || loadSessionRef.current !== currentSession)) return;
-           appearanceLoad?.finish(useViewerStore.getState().models.has(modelId));
-           setProgress({ phase: 'Complete', percent: 100 });
-           captureModelLoaded({ format: 'glb', file_size_mb: Math.round(fileSizeMB * 100) / 100, load_target: target.kind, load_path: 'wasm', total_elapsed_ms: Math.round(performance.now() - totalStartTime), was_hidden: wasHidden() }, snapshotFromGeometry(fileSizeMB, result.geometryResult));
-           setLoading(false);
-           return;
-         } catch (err: unknown) {
--          if (loadSessionRef.current !== currentSession) return;
-+          if ((signal.aborted || loadSessionRef.current !== currentSession)) return;
-           console.error('[useIfc] GLB parsing failed:', err);
-           const message = err instanceof Error ? err.message : String(err);
-           updateModel(modelId, { loadState: 'error', loadError: message });
-@@ -1186,7 +1224,7 @@ export function useIfcLoader() {
-               modelId,
-               cacheKey,
-               buffer,
--              () => loadSessionRef.current !== currentSession,
-+              () => (signal.aborted || loadSessionRef.current !== currentSession),
-             );
-             // `loadFromCache` returns the SAME `{ success: false }` for a
-             // superseded load as for an ordinary miss, so branching on
-@@ -1197,7 +1235,7 @@ export function useIfcLoader() {
-             // name the three outcomes explicitly.
-             const cacheOutcome = decideCacheLoadOutcome({
-               loadSucceeded: cacheLoadResult.success,
--              isStale: loadSessionRef.current !== currentSession,
-+              isStale: (signal.aborted || loadSessionRef.current !== currentSession),
-             });
-             if (cacheOutcome === 'stale') {
-               // A newer load owns the active slot: write nothing, parse
-@@ -1227,7 +1265,7 @@ export function useIfcLoader() {
-               void reportRenderStats({
-                 fileName: file.name,
-                 fileSizeMB,
--                isStale: () => loadSessionRef.current !== currentSession,
-+                isStale: () => (signal.aborted || loadSessionRef.current !== currentSession),
-               });
-               setLoading(false);
-               // Belt-and-suspenders for BOTH tiers (#4269): revalidate the
-@@ -1274,13 +1312,19 @@ export function useIfcLoader() {
+@@ -1280,13 +1312,19 @@ export function useIfcLoader() {
        // EXCEPT texture-carrying containers (#1781): the server mesh wire format
        // doesn't transport UVs/texture refs yet, so the server fast-path would
        // silently render the model untextured — route those through local WASM.
@@ -286,7 +185,7 @@ index e311b5c..7c73393 100644
 +      if ((target.kind === 'primary' || options?.stagingPrimary) && format === 'ifc' && !mergeLayersAtLoad && !textureBitmaps && USE_SERVER && SERVER_URL && SERVER_URL !== '') {
          // Pass buffer directly - server uses File object for parsing, buffer is only for size checks
          loadStage = 'server-fetch';
--        const serverSuccess = await loadFromServer(file, arrayBuffer, () => loadSessionRef.current !== currentSession);
+-        const serverSuccess = await loadFromServer(file, arrayBuffer, () => isStale());
 +        const serverSuccess = await awaitLoad(loadFromServer(file, arrayBuffer, () => (signal.aborted || loadSessionRef.current !== currentSession), signal,
 +          options?.stagingPrimary ? async (dataStore, geometry) => {
 +            signal.throwIfAborted();
@@ -301,7 +200,7 @@ index e311b5c..7c73393 100644
            console.log(`[useIfc] TOTAL LOAD TIME (server): ${(performance.now() - totalStartTime).toFixed(0)}ms`);
            // Geometry attribution (#2388), server row: `is_resource_retry` and
            // ONLY that. The retry re-enters `loadFile`, so a first attempt that
-@@ -1354,7 +1398,9 @@ export function useIfcLoader() {
+@@ -1360,7 +1398,9 @@ export function useIfcLoader() {
        // `ifc-lite_bg.wasm` from `import.meta.url`), so this is the one stage a
        // first-visit user can fail in before a single IFC byte is touched.
        loadStage = 'engine-init';
@@ -312,7 +211,7 @@ index e311b5c..7c73393 100644
        loadStage = 'parse';
        // Issue #924: enable RTC-invariant per-entity geometry fingerprints so
        // the model-compare feature can detect geometry changes. The hash rides
-@@ -1369,6 +1415,7 @@ export function useIfcLoader() {
+@@ -1375,6 +1415,7 @@ export function useIfcLoader() {
        // `WorkerParser.isSupported()` checks COI, SAB and Worker availability.
        // The parser's UTF-8 reader handles SAB-backed views in Firefox too.
        const useParserWorker = WorkerParser.isSupported();
@@ -320,7 +219,7 @@ index e311b5c..7c73393 100644
        let sharedSource: SharedArrayBuffer | null = null;
        if (useParserWorker) {
          if (acquired.isShared && acquired.buffer instanceof SharedArrayBuffer) {
-@@ -1394,10 +1441,11 @@ export function useIfcLoader() {
+@@ -1400,6 +1441,7 @@ export function useIfcLoader() {
          resolveDataStore = resolve;
          rejectDataStore = reject;
        });
@@ -328,22 +227,15 @@ index e311b5c..7c73393 100644
        if (target.kind === 'primary') void appearanceLoad?.finishAfter(dataStorePromise, () => useViewerStore.getState().models.get(modelId));
  
        const onPartialDataStore = (partialStore: IfcDataStore) => {
--        if (loadSessionRef.current !== currentSession) return;
-+        if ((signal.aborted || loadSessionRef.current !== currentSession)) return;
-         if (spatialReadyMs === null) {
-           spatialReadyMs = performance.now() - totalStartTime;
-           console.log(`[useIfc] Spatial tree ready for ${file.name} at ${spatialReadyMs.toFixed(0)}ms`);
-@@ -1415,7 +1463,8 @@ export function useIfcLoader() {
+@@ -1421,6 +1463,7 @@ export function useIfcLoader() {
        };
  
        const onFullDataStore = (dataStore: IfcDataStore) => {
--        if (loadSessionRef.current !== currentSession) return;
 +        if (signal.aborted) { rejectDataStore(signal.reason); return; }
-+        if ((signal.aborted || loadSessionRef.current !== currentSession)) return;
+         if (isStale()) return;
          metadataCompleteMs = performance.now() - totalStartTime;
          if (dataStore.spatialHierarchy && dataStore.spatialHierarchy.storeyHeights.size === 0 && dataStore.spatialHierarchy.storeyElevations.size > 1) {
-           const calculatedHeights = calculateStoreyHeights(dataStore.spatialHierarchy.storeyElevations);
-@@ -1434,6 +1483,7 @@ export function useIfcLoader() {
+@@ -1440,6 +1483,7 @@ export function useIfcLoader() {
        };
  
        const runMainThreadParser = async (): Promise<IfcDataStore> => {
@@ -351,7 +243,7 @@ index e311b5c..7c73393 100644
          // Same `wasmApi` heuristic as before — desktop loads cannot share
          // the geometry processor's WASM instance with the parser without
          // risking corruption.
-@@ -1467,6 +1517,7 @@ export function useIfcLoader() {
+@@ -1473,6 +1517,7 @@ export function useIfcLoader() {
          && fileSizeMB >= ADAPTIVE_SYNC_THRESHOLD_MB;
  
        const startDataModelParsing = () => {
@@ -359,7 +251,7 @@ index e311b5c..7c73393 100644
          metadataStartMs = performance.now() - totalStartTime;
          console.log(`[useIfc] Data model parsing start for ${file.name}: ${metadataStartMs.toFixed(0)}ms (${useParserWorker ? 'worker' : 'main-thread'})`);
          memoryAccounting.beginPhase('parser-worker');
-@@ -1480,6 +1531,7 @@ export function useIfcLoader() {
+@@ -1486,6 +1531,7 @@ export function useIfcLoader() {
            const worker = new WorkerParser();
            workerParserInstance = worker;
            return worker.parseColumnar(sharedSource, {
@@ -367,7 +259,7 @@ index e311b5c..7c73393 100644
              sourceFingerprint,
              onSpatialReady: onPartialDataStore,
              // Hold the parser's WASM scan until the pre-pass hands over
-@@ -1498,14 +1550,10 @@ export function useIfcLoader() {
+@@ -1504,14 +1550,10 @@ export function useIfcLoader() {
            });
          };
  
@@ -384,22 +276,14 @@ index e311b5c..7c73393 100644
              metadataFailedMs = performance.now() - totalStartTime;
              console.error('[useIfc] Data model parsing failed:', err);
              console.log(`[useIfc] Data model parsing failed for ${file.name}: ${metadataFailedMs.toFixed(0)}ms`);
-@@ -1586,7 +1634,7 @@ export function useIfcLoader() {
-       const markFirstVisibleGeometry = () => {
-         if (firstVisibleGeometryMs !== null) return;
-         requestAnimationFrame(() => {
--          if (firstVisibleGeometryMs !== null || loadSessionRef.current !== currentSession) return;
-+          if (firstVisibleGeometryMs !== null || (signal.aborted || loadSessionRef.current !== currentSession)) return;
-           firstVisibleGeometryMs = performance.now() - totalStartTime;
-           console.log(`[useIfc] First visible geometry for ${file.name}: ${firstVisibleGeometryMs.toFixed(0)}ms`);
-         });
-@@ -1614,11 +1662,14 @@ export function useIfcLoader() {
+@@ -1620,12 +1662,14 @@ export function useIfcLoader() {
          const geometryView = sharedSource ? new Uint8Array(sharedSource) : new Uint8Array(buffer);
          // Closing aborts: return() can't stop a pool parked on a hung worker (#4884).
          const geometryAbort = new AbortController();
-+        const abortGeometry = () => geometryAbort.abort(signal.reason);
+-        abortGeometry = () => geometryAbort.abort(); // #5849: a user Cancel stops the pool, not just the session
++        abortGeometry = () => geometryAbort.abort(signal.reason);
 +        signal.addEventListener('abort', abortGeometry, { once: true });
-+        if (signal.aborted) abortGeometry();
++        if (signal.aborted) abortGeometry(); // #5849: a user Cancel stops the pool, not just the session
          const geometryEvents = geometryProcessor.processAdaptive(geometryView, {
                signal: geometryAbort.signal,
                hungJobTimeoutMs: DEFAULT_HUNG_JOB_TIMEOUT_MS, // reads skippedHungElements below
@@ -409,15 +293,15 @@ index e311b5c..7c73393 100644
                batchSize: dynamicBatchConfig, // Dynamic batches: small first, then large
                existingSab: sharedSource ?? undefined,
                // Federated adds share the anchor's RTC origin so all models sit in
-@@ -1639,6 +1690,7 @@ export function useIfcLoader() {
+@@ -1646,6 +1690,7 @@ export function useIfcLoader() {
          let geometryIteratorClosed = false;
          closeGeometryIterator = async () => {
            try { parserEntityIndexHandoff.release(); } finally {
-+            signal.removeEventListener('abort', abortGeometry);
++            if (abortGeometry) signal.removeEventListener('abort', abortGeometry);
              geometryAbort.abort();
              if (!geometryIteratorClosed && typeof geometryIterator.return === 'function') {
                geometryIteratorClosed = true;
-@@ -1657,8 +1709,9 @@ export function useIfcLoader() {
+@@ -1664,8 +1709,9 @@ export function useIfcLoader() {
              fileSizeMB,
            );
            let watchdogId: ReturnType<typeof globalThis.setTimeout> | null = null;
@@ -429,7 +313,7 @@ index e311b5c..7c73393 100644
              new Promise<never>((_, reject) => {
                watchdogId = globalThis.setTimeout(() => {
                  // Do NOT embed `file.name` here — this Error is captured by
-@@ -1671,9 +1724,8 @@ export function useIfcLoader() {
+@@ -1678,9 +1724,8 @@ export function useIfcLoader() {
                  ));
                }, watchdogMs);
              }),
@@ -441,43 +325,7 @@ index e311b5c..7c73393 100644
            }
  
            if (nextResult.done) {
-@@ -1702,7 +1754,7 @@ export function useIfcLoader() {
-           // Stop the loop and clean up the reader (closeGeometryIterator
-           // releases WASM; it is idempotent via geometryIteratorClosed, so the
-           // post-loop call is a no-op) so no more shared-state writes happen.
--          if (loadSessionRef.current !== currentSession) {
-+          if ((signal.aborted || loadSessionRef.current !== currentSession)) {
-             console.warn(`[useIfc] ${target.kind} stream ABORTED: stale session (mine=${currentSession}, current=${loadSessionRef.current}) - superseded by a newer load`);
-             await closeGeometryIterator();
-             // 'complete' never ran, so nothing is chained on dataStorePromise.
-@@ -1928,7 +1980,7 @@ export function useIfcLoader() {
-               if (target.kind === 'primary') {
-                 await nextFrameOrTimeout(COMPLETE_FRAME_WAIT_MS);
-               }
--              if (loadSessionRef.current === currentSession && target.kind === 'primary') {
-+              if ((!signal.aborted && loadSessionRef.current === currentSession) && target.kind === 'primary') {
-                 setGeometryStreamingActive(false);
-               }
-               console.log(`[useIfc] Geometry streaming complete: ${batchCount} batches, ${lastTotalMeshes} meshes`);
-@@ -1937,7 +1989,7 @@ export function useIfcLoader() {
-               // Finalize once the data model is ready (parses in parallel).
-               finalizePromise = dataStorePromise.then(async dataStore => {
-                 // Guard: skip if user loaded a new file since this load started
--                if (loadSessionRef.current !== currentSession) {
-+                if ((signal.aborted || loadSessionRef.current !== currentSession)) {
-                   console.warn(`[useIfc] finalize ABORTED: stale session (mine=${currentSession}, current=${loadSessionRef.current}) — model will blank`);
-                   return;
-                 }
-@@ -2041,7 +2093,7 @@ export function useIfcLoader() {
-                 // problem anymore: the old primary model record was cleared by
-                 // the new load (updateModel would no-op) and a stale federated
-                 // toast would misattribute an error to the CURRENT load.
--                if (loadSessionRef.current !== currentSession) {
-+                if ((signal.aborted || loadSessionRef.current !== currentSession)) {
-                   console.warn('[useIfc] finalize error ignored - superseded load (stale session):', err);
-                   return;
-                 }
-@@ -2071,6 +2123,8 @@ export function useIfcLoader() {
+@@ -2066,6 +2111,8 @@ export function useIfcLoader() {
          }
          await closeGeometryIterator?.();
        } catch (err) {
@@ -486,25 +334,7 @@ index e311b5c..7c73393 100644
          // Close the geometry iterator to release WASM resources on failure.
          if (closeGeometryIterator) {
            await closeGeometryIterator();
-@@ -2080,7 +2134,7 @@ export function useIfcLoader() {
-         // own watchdog. Swallow the now-orphaned dataStorePromise rejection so
-         // it doesn't surface as an unhandled rejection.
-         void dataStorePromise.catch(() => {});
--        if (loadSessionRef.current !== currentSession) return;
-+        if (cancelled || loadSessionRef.current !== currentSession) return;
-         console.error('[useIfc] Error in processing:', err);
-         // A WASM engine-load failure (e.g. the geometry binary 404'd) surfaces
-         // here as a cryptic `compile on 'WebAssembly'` TypeError — humanise it
-@@ -2109,7 +2163,7 @@ export function useIfcLoader() {
-         return;
-       }
- 
--      if (loadSessionRef.current !== currentSession) {
-+      if ((signal.aborted || loadSessionRef.current !== currentSession)) {
-         console.warn(`[useIfc] post-stream ABORTED: stale session (mine=${currentSession}, current=${loadSessionRef.current})`);
-         return;
-       }
-@@ -2119,14 +2173,15 @@ export function useIfcLoader() {
+@@ -2114,9 +2161,10 @@ export function useIfcLoader() {
        // only AFTER the model is in the map — loadFilesSequentially loads the
        // next file serially and relies on this ordering for id-offset assignment.
        loadStage = 'finalize';
@@ -517,22 +347,7 @@ index e311b5c..7c73393 100644
  
        if (firstVisibleGeometryMs === null && firstAppendGeometryBatchMs !== null) {
          await new Promise<void>((resolve) => {
-           const fallbackTimer = globalThis.setTimeout(() => {
--            if (firstVisibleGeometryMs === null && loadSessionRef.current === currentSession) {
-+            if (firstVisibleGeometryMs === null && (!signal.aborted && loadSessionRef.current === currentSession)) {
-               firstVisibleGeometryMs = firstAppendGeometryBatchMs;
-               console.log(`[useIfc] First visible geometry for ${file.name}: ${firstVisibleGeometryMs.toFixed(0)}ms`);
-             }
-@@ -2134,7 +2189,7 @@ export function useIfcLoader() {
-           }, 250);
-           requestAnimationFrame(() => {
-             globalThis.clearTimeout(fallbackTimer);
--            if (firstVisibleGeometryMs === null && loadSessionRef.current === currentSession) {
-+            if (firstVisibleGeometryMs === null && (!signal.aborted && loadSessionRef.current === currentSession)) {
-               firstVisibleGeometryMs = performance.now() - totalStartTime;
-               console.log(`[useIfc] First visible geometry for ${file.name}: ${firstVisibleGeometryMs.toFixed(0)}ms`);
-             }
-@@ -2143,6 +2198,7 @@ export function useIfcLoader() {
+@@ -2138,6 +2186,7 @@ export function useIfcLoader() {
          });
        }
  
@@ -540,27 +355,15 @@ index e311b5c..7c73393 100644
        const totalElapsedMs = performance.now() - totalStartTime;
        const totalVertices = allMeshes.reduce((sum, m) => sum + m.positions.length / 3, 0);
        console.log(
-@@ -2199,7 +2255,7 @@ export function useIfcLoader() {
-       void reportRenderStats({
-         fileName: file.name,
-         fileSizeMB,
--        isStale: () => loadSessionRef.current !== currentSession,
-+        isStale: () => (signal.aborted || loadSessionRef.current !== currentSession),
-       });
-       setLoading(false);
-       setGeometryStreamingActive(false);
-@@ -2211,8 +2267,9 @@ export function useIfcLoader() {
+@@ -2206,6 +2255,7 @@ export function useIfcLoader() {
        // disabling ALL element picking once a second model is loaded (#1570).
        setProgress({ phase: 'Complete', percent: 100 });
      } catch (err) {
 +      if (signal.aborted || isLoadAbort(err)) return;
        console.error(`[useIfc] loadFile THREW (session=${currentSession}, current=${loadSessionRef.current}):`, err);
--      if (loadSessionRef.current !== currentSession) return;
-+      if ((signal.aborted || loadSessionRef.current !== currentSession)) return;
+       if (isStale()) return;
        const kind = classifyLoadError(err, 'ifc_model_load');
- 
-       // Resource-limit recovery — see tryResourceRetry. A failure that reaches
-@@ -2239,6 +2296,19 @@ export function useIfcLoader() {
+@@ -2234,6 +2284,16 @@ export function useIfcLoader() {
        setLoading(false);
        setGeometryStreamingActive(false);
      } finally {
@@ -569,19 +372,16 @@ index e311b5c..7c73393 100644
 +      const state = useViewerStore.getState();
 +      if (signal.aborted) {
 +        // removeModel dispatches the renderer's scoped model teardown as well.
-+        state.removeModel(modelId);
++        // Cancel can arrive in the Complete-to-release window. Keep a fully
++        // committed complete model; only tear down this load's unfinished work.
++        if (state.models.get(modelId)?.loadState !== 'complete') state.removeModel(modelId);
 +        if (target.kind === 'primary' && state.models.size === 0) state.resetViewerState();
 +      }
-+      if (state.activeStreamCanceller === cancelLoad) {
-+        state.setLoading(false);
-+        state.setGeometryStreamingActive(false);
-+      }
-+      clearCancelOwner?.();
        // #1959: the one release point that no exit path can skip. Every early
        // `return` in this function — stale session, resource retry, the inner
        // geometry catch, the cache and server fast paths — runs through here,
 diff --git a/apps/viewer/src/hooks/useIfcServer.ts b/apps/viewer/src/hooks/useIfcServer.ts
-index e843129..431911c 100644
+index e84312921637c2b81083528472b41d67109f3e41..431911c9b639b8ae15d33802600890c76889ef2e 100644
 --- a/apps/viewer/src/hooks/useIfcServer.ts
 +++ b/apps/viewer/src/hooks/useIfcServer.ts
 @@ -12,7 +12,9 @@
@@ -661,7 +461,7 @@ index e843129..431911c 100644
      }
 diff --git a/apps/viewer/src/lib/ifc-load-cancellation.ts b/apps/viewer/src/lib/ifc-load-cancellation.ts
 new file mode 100644
-index 0000000..2286348
+index 0000000000000000000000000000000000000000..22863481877639e0b4412898e7e5f12648140286
 --- /dev/null
 +++ b/apps/viewer/src/lib/ifc-load-cancellation.ts
 @@ -0,0 +1,67 @@
@@ -733,7 +533,7 @@ index 0000000..2286348
 +  };
 +}
 diff --git a/apps/viewer/src/utils/acquireFileBuffer.ts b/apps/viewer/src/utils/acquireFileBuffer.ts
-index 7f9592f..ad619fb 100644
+index 7f9592fd888a0bb8d230f6f36256b0832765dd7b..ad619fb1d4718ced0f2deb539cb7d2f055c73700 100644
 --- a/apps/viewer/src/utils/acquireFileBuffer.ts
 +++ b/apps/viewer/src/utils/acquireFileBuffer.ts
 @@ -55,13 +55,15 @@ function sharedArrayBufferAvailable(): boolean {
@@ -807,10 +607,10 @@ index 7f9592f..ad619fb 100644
 +  return __acquireFileBufferWithThreshold(file, STREAM_SAB_THRESHOLD, signal);
  }
 diff --git a/packages/geometry/src/index.ts b/packages/geometry/src/index.ts
-index f03047e..25f1fd5 100644
+index c4363661ce353d4bae75373c17474baa0911f203..cb25130dddd563bbfc78528b6e1b6e9eda99a311 100644
 --- a/packages/geometry/src/index.ts
 +++ b/packages/geometry/src/index.ts
-@@ -913,7 +913,7 @@ export class GeometryProcessor {
+@@ -916,7 +916,7 @@ export class GeometryProcessor {
        const useParallel = typeof SharedArrayBuffer !== 'undefined'
          && typeof Worker !== 'undefined'
          && typeof navigator !== 'undefined'
@@ -820,10 +620,10 @@ index f03047e..25f1fd5 100644
        if (useParallel) {
          yield* this.processParallel(
 diff --git a/packages/server-client/src/client.ts b/packages/server-client/src/client.ts
-index 1cb4c78..30386bf 100644
+index b785ff048e8c625640ea2855d85242784eb53421..9ae3c02dd0548c9dc3b244599a454e3e7082a077 100644
 --- a/packages/server-client/src/client.ts
 +++ b/packages/server-client/src/client.ts
-@@ -133,6 +133,12 @@ export class IfcServerClient {
+@@ -107,6 +107,12 @@ export class IfcServerClient {
    private baseUrl: string;
    private readonly token?: string;
    private timeout: number;
@@ -836,7 +636,7 @@ index 1cb4c78..30386bf 100644
  
    /**
     * Create a new IFC server client.
-@@ -140,6 +146,7 @@ export class IfcServerClient {
+@@ -114,6 +120,7 @@ export class IfcServerClient {
     * @param config - Client configuration
     */
    constructor(config: ServerConfig) {
@@ -844,7 +644,7 @@ index 1cb4c78..30386bf 100644
      // Remove trailing slash from base URL
      this.baseUrl = config.baseUrl.replace(/\/$/, '');
      this.timeout = config.timeout ?? 300000; // 5 minutes default
-@@ -163,7 +170,7 @@ export class IfcServerClient {
+@@ -137,7 +144,7 @@ export class IfcServerClient {
     */
    async health(): Promise<HealthResponse> {
      const response = await fetch(`${this.baseUrl}/api/v1/health`, {
@@ -853,7 +653,7 @@ index 1cb4c78..30386bf 100644
      });
  
      if (!response.ok) {
-@@ -202,7 +209,7 @@ export class IfcServerClient {
+@@ -176,7 +183,7 @@ export class IfcServerClient {
        method: 'POST',
        headers: this.authHeaders(),
        body: formData,
@@ -862,7 +662,7 @@ index 1cb4c78..30386bf 100644
      });
  
      if (!response.ok) {
-@@ -258,7 +265,7 @@ export class IfcServerClient {
+@@ -232,7 +239,7 @@ export class IfcServerClient {
      const cacheCheck = await fetch(`${this.baseUrl}/api/v1/cache/check/${hash}${parseQuery(options, true)}`, {
        method: 'GET',
        headers: this.authHeaders(),
@@ -871,7 +671,7 @@ index 1cb4c78..30386bf 100644
      });
      const cacheCheckTime = performance.now() - cacheCheckStart;
  
-@@ -350,10 +357,11 @@ export class IfcServerClient {
+@@ -324,10 +331,11 @@ export class IfcServerClient {
            {
              method: 'POST',
              headers: this.authHeaders(),
@@ -884,7 +684,7 @@ index 1cb4c78..30386bf 100644
          // A probe that times out or fails to connect is not an answer about
          // the cache. Upload, which is what would have happened without it.
          console.warn('[client] Stream: hash probe failed; uploading instead:', error);
-@@ -390,7 +398,7 @@ export class IfcServerClient {
+@@ -364,7 +372,7 @@ export class IfcServerClient {
        method: 'POST',
        headers: this.authHeaders(),
        body: formData,
@@ -893,7 +693,7 @@ index 1cb4c78..30386bf 100644
      });
  
      if (!response.ok) {
-@@ -412,7 +420,7 @@ export class IfcServerClient {
+@@ -386,7 +394,7 @@ export class IfcServerClient {
      const response = await fetch(`${this.baseUrl}/api/v1/cache/geometry/${hash}${parseQuery(options, true)}`, {
        method: 'GET',
        headers: this.authHeaders(),
@@ -902,7 +702,7 @@ index 1cb4c78..30386bf 100644
      });
  
      if (!response.ok) {
-@@ -469,7 +477,7 @@ export class IfcServerClient {
+@@ -443,7 +451,7 @@ export class IfcServerClient {
        method: 'POST',
        headers: this.authHeaders(),
        body: formData,
@@ -911,12 +711,12 @@ index 1cb4c78..30386bf 100644
      });
      const uploadTime = performance.now() - uploadStart;
      console.log(`[client] Upload and processing completed in ${uploadTime.toFixed(0)}ms`);
-@@ -600,10 +608,11 @@ export class IfcServerClient {
+@@ -588,10 +596,11 @@ export class IfcServerClient {
  
      for (let attempt = 0; attempt < maxRetries; attempt++) {
        try {
 +        this.loadSignal?.throwIfAborted();
-         const response = await fetch(`${this.baseUrl}/api/v1/parse/data-model/${cacheKey}`, {
+         const response = await fetch(`${this.baseUrl}/api/v1/parse/data-model/${cacheKey}${query}`, {
            method: 'GET',
            headers: this.authHeaders(),
 -          signal: AbortSignal.timeout(30000),
@@ -924,7 +724,7 @@ index 1cb4c78..30386bf 100644
          });
  
          if (response.status === 200) {
-@@ -624,6 +633,7 @@ export class IfcServerClient {
+@@ -612,6 +621,7 @@ export class IfcServerClient {
            throw new Error(`Unexpected response status: ${response.status}`);
          }
        } catch (error) {
@@ -932,7 +732,7 @@ index 1cb4c78..30386bf 100644
          if (attempt === maxRetries - 1) {
            console.error('[client] Failed to fetch data model:', error);
            return null;
-@@ -677,9 +687,10 @@ export class IfcServerClient {
+@@ -665,9 +675,10 @@ export class IfcServerClient {
          response = await fetch(`${this.baseUrl}/api/v1/parse/symbolic/${cacheKey}`, {
            method: 'GET',
            headers: this.authHeaders(),
@@ -944,7 +744,7 @@ index 1cb4c78..30386bf 100644
          if (attempt === maxRetries - 1) throw error;
          console.warn('[client] Retrying symbolic data fetch after network error:', error);
          await new Promise(resolve => setTimeout(resolve, delay));
-@@ -762,7 +773,7 @@ export class IfcServerClient {
+@@ -750,7 +761,7 @@ export class IfcServerClient {
        method: 'POST',
        headers: this.authHeaders(),
        body: formData,
@@ -953,7 +753,7 @@ index 1cb4c78..30386bf 100644
      });
  
      if (!response.ok) {
-@@ -856,7 +867,7 @@ export class IfcServerClient {
+@@ -844,7 +855,7 @@ export class IfcServerClient {
        body: formData,
        // Don't set Content-Type header - browser will set it with boundary for FormData
        headers: this.authHeaders({ Accept: 'text/event-stream' }),
@@ -962,7 +762,7 @@ index 1cb4c78..30386bf 100644
      });
  
      if (!response.ok) {
-@@ -951,7 +962,7 @@ export class IfcServerClient {
+@@ -939,7 +950,7 @@ export class IfcServerClient {
        method: 'POST',
        headers: this.authHeaders(),
        body: formData,
@@ -971,7 +771,7 @@ index 1cb4c78..30386bf 100644
      });
  
      if (!response.ok) {
-@@ -983,7 +994,7 @@ export class IfcServerClient {
+@@ -974,7 +985,7 @@ export class IfcServerClient {
    async getCached(key: string): Promise<ParseResponse | null> {
      const response = await fetch(`${this.baseUrl}/api/v1/cache/${key}`, {
        headers: this.authHeaders(),
@@ -981,7 +781,7 @@ index 1cb4c78..30386bf 100644
  
      if (response.status === 404) {
 diff --git a/packages/server-client/src/types.ts b/packages/server-client/src/types.ts
-index f8506af..f5cac56 100644
+index 255545c274997d968ba0e2eeed75851f82e4e2d3..8101d262c3fef67ae36a3804189d787c10c7b434 100644
 --- a/packages/server-client/src/types.ts
 +++ b/packages/server-client/src/types.ts
 @@ -11,6 +11,8 @@ export { MESH_COORDINATE_SPACES, asMeshCoordinateSpace, withNarrowedCoordinateSp

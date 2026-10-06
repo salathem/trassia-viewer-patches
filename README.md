@@ -11,23 +11,26 @@ executable form served at https://viewer.trassia.com.
 
 - `patches/` — the exact patches (`0001`–`0092`, numbers no longer in use are listed below)
   applied, in numeric order, on top of upstream commit
-  `ca6fef8d72176bd83127e20a314e4fad9c0acf59` (tag `@ifc-lite/wasm@10.1.2`)
-- `modified-files/` — the 82 modified files in full source form
-  (base commit + all patches applied):
+  `e79f27342beb01a6f30d9b63c44795ecd118f4de` (tag `@ifc-lite/wasm@10.3.0`)
+- `modified-files/` — the 94 modified files in full source form
+  (exactly extracted from the bound 10.3.0 build image):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/ChatPanel.tsx`
   - `apps/viewer/src/components/viewer/Drawing2DCanvas.tsx`
   - `apps/viewer/src/components/viewer/EnvironmentPanel.tsx`
   - `apps/viewer/src/components/viewer/HierarchyPanel.tsx`
   - `apps/viewer/src/components/viewer/LensPanel.tsx`
-  - `apps/viewer/src/components/viewer/MainToolbar.tsx`
+  - `apps/viewer/src/components/viewer/MobilePanelLauncher.tsx`
   - `apps/viewer/src/components/viewer/MobileToolbar.tsx`
+  - `apps/viewer/src/components/viewer/PerformanceStats.tsx`
   - `apps/viewer/src/components/viewer/PropertiesPanel.tsx`
   - `apps/viewer/src/components/viewer/StatusBar.tsx`
   - `apps/viewer/src/components/viewer/ViewerLayout.tsx`
   - `apps/viewer/src/components/viewer/Viewport.tsx`
   - `apps/viewer/src/components/viewer/ViewportContainer.tsx`
+  - `apps/viewer/src/components/viewer/ViewportLoadingCard.tsx`
   - `apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx`
+  - `apps/viewer/src/components/viewer/WelcomeFooterChips.tsx`
   - `apps/viewer/src/components/viewer/cesium/addDataSourceLayer.ts`
   - `apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts`
   - `apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx`
@@ -35,9 +38,12 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx`
   - `apps/viewer/src/components/viewer/drawing/useDrawingLayers.ts`
   - `apps/viewer/src/components/viewer/hierarchy/HierarchyNode.tsx`
+  - `apps/viewer/src/components/viewer/hierarchy/HierarchyNodeBadges.tsx`
   - `apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx`
+  - `apps/viewer/src/components/viewer/properties/GeoreferencingPanel.a11y.test.tsx`
   - `apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx`
   - `apps/viewer/src/components/viewer/properties/PropertySetCard.tsx`
+  - `apps/viewer/src/components/viewer/properties/georef-terrain-height-button.tsx`
   - `apps/viewer/src/components/viewer/properties/modelMetadataStats.test.tsx`
   - `apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx`
   - `apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx`
@@ -55,24 +61,30 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/components/viewer/tools/formatDistance.ts`
   - `apps/viewer/src/components/viewer/tools/measure-modes/components.test.ts`
   - `apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx`
-  - `apps/viewer/src/components/viewer/tools/measure-parity.test.tsx`
+  - `apps/viewer/src/components/viewer/tools/measure-ribbon.test.tsx`
   - `apps/viewer/src/components/viewer/useRenderUpdates.ts`
   - `apps/viewer/src/hooks/dxfExportGeoref.test.ts`
   - `apps/viewer/src/hooks/ingest/dxfIngest.ts`
-  - `apps/viewer/src/hooks/keyboard-shortcuts-list.ts`
-  - `apps/viewer/src/hooks/pdfSectionLayout.ts`
+  - `apps/viewer/src/hooks/modelLoadOptions.ts`
   - `apps/viewer/src/hooks/useAnnotation2D.ts`
+  - `apps/viewer/src/hooks/useDrawingExport.pdfVectorPaths.test.tsx`
   - `apps/viewer/src/hooks/useDrawingExport.ts`
   - `apps/viewer/src/hooks/useDrawingGeneration.ts`
+  - `apps/viewer/src/hooks/useIfcFederation.ts`
   - `apps/viewer/src/hooks/useIfcLoader.ts`
   - `apps/viewer/src/hooks/useIfcServer.ts`
   - `apps/viewer/src/hooks/useKeyboardShortcuts.ts`
   - `apps/viewer/src/hooks/useMeasure2D.ts`
+  - `apps/viewer/src/hooks/useModelUrlAutoload.ts`
   - `apps/viewer/src/hooks/usePanelControls.ts`
+  - `apps/viewer/src/hooks/usePrivacyDisclosure.test.tsx`
   - `apps/viewer/src/hooks/usePrivacyDisclosure.ts`
   - `apps/viewer/src/hooks/useViewControls.ts`
   - `apps/viewer/src/i18n/catalogues/properties.en.ts`
   - `apps/viewer/src/i18n/catalogues/shell-chrome.en.ts`
+  - `apps/viewer/src/i18n/en.ts`
+  - `apps/viewer/src/lib/commands/keyboard-commands.test.ts`
+  - `apps/viewer/src/lib/commands/keyboard-commands.ts`
   - `apps/viewer/src/lib/geo/cesium-bridge.ts`
   - `apps/viewer/src/lib/geo/ifc-spatial-reference.test.ts`
   - `apps/viewer/src/lib/geo/ifc-spatial-reference.ts`
@@ -81,7 +93,7 @@ executable form served at https://viewer.trassia.com.
   - `apps/viewer/src/lib/panels/renderPanelBody.tsx`
   - `apps/viewer/src/main.tsx`
   - `apps/viewer/src/services/panel-windows.ts`
-  - `apps/viewer/src/store/index.ts`
+  - `apps/viewer/src/store/createViewerActions.ts`
   - `apps/viewer/src/store/slices/measurementSlice.ts`
   - `apps/viewer/src/store/slices/sidebarSlice.test.ts`
   - `apps/viewer/src/store/slices/sidebarSlice.ts`
@@ -105,7 +117,7 @@ All files in this repository are licensed under the **MPL-2.0**.
 Upstream 10.x rebuilt the measure, section, 2D drawing, environment and welcome
 screens (HUD regions, a docked `drawing` panel instead of `Section2DPanel`, a docked
 environment panel instead of Sun & Sky). With the move from `@ifc-lite/wasm@9.1.0`
-to `@ifc-lite/wasm@10.1.2` (2026-09-26) the patches `0006`, `0008`, `0014`, `0015`,
+to `@ifc-lite/wasm@10.3.0` (2026-09-26) the patches `0006`, `0008`, `0014`, `0015`,
 `0027`, `0028`, `0029`, `0032`, `0037`, `0040`, `0049`, `0057`, `0063` and `0067`
 are **no longer applied**: their function either moved to the port patches
 `0068`–`0075` below, or the upstream now provides it itself (docking, floating and the separate window of
@@ -394,3 +406,7 @@ source offer (MPL 2.0 is a file-level license; see §1.10 "Larger Work").
 
 This repository is updated whenever the deployed application changes MPL-covered files.
 Contact: kontakt@trassia.com
+
+## Port to 10.3.0 (2026-10-06)
+
+77 historical patch steps were ported; 76 patches remain active. Patch0091 is replaced by the purpose-equivalent upstream fix #6615 (PDF coordinate/bounds orientation), verified by the same nine numeric regression cases. No empty active0091 patch is shipped. New command/translation/loader APIs are adapted without enabling ion/cloud uploads. The candidate is not live.

@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/ChatPanel.tsx b/apps/viewer/src/components/viewer/ChatPanel.tsx
-index ce6b113..fe4abd9 100644
+index 456f759137ec4086f9a8d8eba42636c016e78456..a1ebc7c45c8a34abcb6bf120acdcfc568c8ebb91 100644
 --- a/apps/viewer/src/components/viewer/ChatPanel.tsx
 +++ b/apps/viewer/src/components/viewer/ChatPanel.tsx
-@@ -312,6 +312,10 @@ export function ChatPanel({ onClose }: ChatPanelProps) {
+@@ -304,6 +304,10 @@ export function ChatPanel({ onClose }: ChatPanelProps) {
  
    // Keep usage meter hydrated even before first prompt and refresh periodically.
    useEffect(() => {

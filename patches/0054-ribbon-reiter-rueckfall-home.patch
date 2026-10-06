@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx b/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
-index 4551eb1..64e1eca 100644
+index 4a50ffccdb818c931d7f3e4a01920089b6adc309..37b07646f4cc6abc9270a4035cae32ef11f46f27 100644
 --- a/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
 +++ b/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
-@@ -68,6 +68,14 @@ export function RibbonToolbar({ onShowShortcuts }: RibbonToolbarProps = {} as Ri
+@@ -64,6 +64,14 @@ export function RibbonToolbar({ onShowShortcuts }: RibbonToolbarProps = {} as Ri
  
    useRibbonContextualTab();
  

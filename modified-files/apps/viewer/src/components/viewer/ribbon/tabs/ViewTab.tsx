@@ -7,21 +7,20 @@
  * (Cesium / sun / SpaceMouse), and interface options.
  */
 
-import { Orthographic, Viewpoint, SpaceMouse, Lighting, World, Move, FollowWork, ClassicBar } from '@/icons';
+import { Orthographic, Viewpoint, SpaceMouse, Lighting, World, Move, FollowWork, Settings, Spatial } from '@/icons';
 import { useViewerStore } from '@/store';
 import { useEffectiveSkyEnabled } from '@/hooks/useEffectiveSkyEnabled';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
-import { EVENT_SHOW_SHORTCUTS } from '@/lib/tours/events';
 import { useTranslation } from '@/i18n';
 import { useCameraCommands } from '../../toolbar/CameraCommands';
 import { useWorkspacePanelControls } from '../../toolbar/useWorkspacePanelControls';
+import { CAMERA_RIBBON_COMMAND_IDS } from '../../surface-commands-view-ribbon';
 import {
   RibbonGroup,
   RibbonGroupDivider,
-  RibbonLargeButton,
-  RibbonSmallButton,
   RibbonSmallStack,
 } from '../primitives';
+import { RibbonCommandLargeButton, RibbonCommandSmallButton } from '../command-button';
 // Trassia overlay (Paket UX-KOPF, Marco-Befund 2026-09-02): die benannten
 // Ansichten als Ribbon-Gruppe (vorher eigene Kopfzeile ueber dem Bild) und
 // der eigene Umgebungs-Knopf (vorher steckten swisstopo-Umgebung und WFS im
@@ -31,25 +30,18 @@ import { ChUmgebungKnopf } from '../../ChUmgebungKnopf';
 
 export function ViewTab() {
   const { t } = useTranslation();
-  // Camera, preset views and the 90° rotations come from the shared
-  // command list the classic toolbar also renders, so the two styles
-  // cannot host different camera commands (see toolbar/CameraCommands).
+  // Camera, preset views and the 90° rotations use the shared
+  // command list (see toolbar/CameraCommands).
   const cameraCommands = useCameraCommands();
   const projectionMode = useViewerStore((state) => state.projectionMode);
-  const toggleProjectionMode = useViewerStore((state) => state.toggleProjectionMode);
-  const setToolbarStyle = useViewerStore((state) => state.setToolbarStyle);
   const ribbonContextualTabs = useViewerStore((state) => state.ribbonContextualTabs);
-  const setRibbonContextualTabs = useViewerStore((state) => state.setRibbonContextualTabs);
+  const centrelineOverlayEnabled = useViewerStore((state) => state.centrelineOverlayEnabled);
 
   // Cesium 3D overlay state
   const cesiumAvailable = useViewerStore((state) => state.cesiumAvailable);
   const cesiumEnabled = useViewerStore((state) => state.cesiumEnabled);
-  const toggleCesium = useViewerStore((state) => state.toggleCesium);
   const cesiumPlacementEditMode = useViewerStore((state) => state.cesiumPlacementEditMode);
-  const setCesiumPlacementEditMode = useViewerStore((state) => state.setCesiumPlacementEditMode);
-  const activeTool = useViewerStore((state) => state.activeTool);
-  const setActiveTool = useViewerStore((state) => state.setActiveTool);
-  const { activeWorkspacePanels, handleToggleBottomPanel } = useWorkspacePanelControls();
+  const { activeWorkspacePanels, handleToggleBottomPanel } = useWorkspacePanelControls('ribbon');
 
   // Environment panel state (sky, lighting presets, sun-path study, #5506)
   const solarEnabled = useViewerStore((state) => state.solarEnabled);
@@ -74,12 +66,10 @@ export function ViewTab() {
   return (
     <>
       <RibbonGroup label={t('ribbon.view.projectionGroup')}>
-        <RibbonLargeButton
+        <RibbonCommandLargeButton
+          commandId="view:projection"
           icon={Orthographic}
-          label={t('ribbon.view.orthographic')}
-          tooltip={t('ribbon.view.orthographicTooltip')}
           active={projectionMode === 'orthographic'}
-          onClick={() => toggleProjectionMode()}
         />
       </RibbonGroup>
 
@@ -89,13 +79,11 @@ export function ViewTab() {
         {cameraCommands
           .filter((command) => command.group === 'camera')
           .map((command) => (
-            <RibbonLargeButton
+            <RibbonCommandLargeButton
               key={command.id}
+              commandId={CAMERA_RIBBON_COMMAND_IDS[command.id]}
               icon={command.icon}
-              label={t(command.labelKey)}
               tooltip={t(command.tooltipKey)}
-              shortcut={command.shortcut}
-              onClick={command.run}
             />
           ))}
       </RibbonGroup>
@@ -111,12 +99,10 @@ export function ViewTab() {
               .filter((command) => command.group === 'preset')
               .filter((_, index) => index % 2 === column)
               .map((command) => (
-                <RibbonSmallButton
+                <RibbonCommandSmallButton
                   key={command.id}
+                  commandId={CAMERA_RIBBON_COMMAND_IDS[command.id]}
                   icon={command.icon}
-                  label={t(command.labelKey)}
-                  shortcut={command.shortcut}
-                  onClick={command.run}
                 />
               ))}
           </RibbonSmallStack>
@@ -126,13 +112,11 @@ export function ViewTab() {
         {cameraCommands
           .filter((command) => command.group !== 'camera' && command.group !== 'preset')
           .map((command) => (
-            <RibbonLargeButton
+            <RibbonCommandLargeButton
               key={command.id}
+              commandId={CAMERA_RIBBON_COMMAND_IDS[command.id]}
               icon={command.icon}
-              label={t(command.labelKey)}
               tooltip={t(command.tooltipKey)}
-              shortcut={command.shortcut}
-              onClick={command.run}
             />
           ))}
       </RibbonGroup>
@@ -144,59 +128,48 @@ export function ViewTab() {
       <RibbonGroupDivider />
 
       <RibbonGroup label={t('ribbon.view.contextGroup')}>
+        <RibbonCommandLargeButton
+          commandId="view:centreline"
+          icon={Spatial}
+          active={centrelineOverlayEnabled}
+        />
         {/* Cesium 3D World Context — the world-context affordance is one
             click away when a model has georeferencing. When active, the
             "Move georeference" sub-toggle appears beside it (its amber
             tint signals a modal pose whose exit affordance stays visible). */}
         {cesiumAvailable && (
-          <RibbonLargeButton
+          <RibbonCommandLargeButton
+            commandId="view:world"
             icon={World}
-            label={t('ribbon.view.world')}
             tooltip={cesiumEnabled ? t('ribbon.view.worldHideTooltip') : t('ribbon.view.worldShowTooltip')}
             active={cesiumEnabled}
             activeClassName="bg-teal-600/20 text-foreground ring-1 ring-inset ring-teal-600/50"
-            onClick={() => {
-              toggleCesium();
-              if (cesiumEnabled) {
-                setCesiumPlacementEditMode(false);
-                if (activeTool === 'cesium-placement') setActiveTool('select');
-              }
-            }}
           />
         )}
-        <RibbonLargeButton
+        <RibbonCommandLargeButton
+          commandId="view:lighting"
           icon={Lighting}
-          label={t('ribbon.view.lighting')}
-          tooltip={t('ribbon.view.lightingTooltip')}
           active={activeWorkspacePanels.has('environment') || solarEnabled || envSkyEnabled || envPreset !== 'default'}
           activeClassName="bg-amber-500/20 text-foreground ring-1 ring-inset ring-amber-500/50"
-          onClick={() => useViewerStore.getState().toggleWorkspacePanel('environment')}
         />
         {/* Trassia (UX-KOPF): Schweizer Umgebung (swisstopo + WFS) — eigener
             Knopf statt versteckt im Lighting-Panel; nur im Weltmodus. */}
         <ChUmgebungKnopf />
         <RibbonSmallStack>
           {cesiumAvailable && cesiumEnabled && (
-            <RibbonSmallButton
+            <RibbonCommandSmallButton
+              commandId="view:move-georef"
               icon={Move}
-              label={t('ribbon.view.moveGeoref')}
               tooltip={cesiumPlacementEditMode ? t('ribbon.view.moveGeorefStopTooltip') : t('ribbon.view.moveGeorefStartTooltip')}
               active={cesiumPlacementEditMode}
               activeClassName="bg-amber-500/20 text-foreground ring-1 ring-inset ring-amber-500/50"
-              onClick={() => {
-                const next = !cesiumPlacementEditMode;
-                setCesiumPlacementEditMode(next);
-                setActiveTool(next ? 'cesium-placement' : 'select');
-              }}
             />
           )}
-          <RibbonSmallButton
+          <RibbonCommandSmallButton
+            commandId="view:spacemouse"
             icon={SpaceMouse}
-            label={t('ribbon.view.spaceMouse')}
-            tooltip={t('ribbon.view.spaceMouseTooltip')}
             active={spaceMouseConnected}
             activeClassName="bg-primary/20 text-foreground ring-1 ring-inset ring-primary/50"
-            onClick={() => window.dispatchEvent(new CustomEvent(EVENT_SHOW_SHORTCUTS, { detail: { tab: 'preferences' } }))}
           />
         </RibbonSmallStack>
       </RibbonGroup>
@@ -204,34 +177,29 @@ export function ViewTab() {
       <RibbonGroupDivider />
 
       <RibbonGroup label={t('ribbon.view.interfaceGroup')}>
-        <RibbonLargeButton
+        <RibbonCommandLargeButton
+          commandId="vis:toggle-presentation"
           icon={Viewpoint}
-          label={t('ribbon.view.present')}
           tooltip={t('ribbon.view.presentTooltip', { views: basketViewCount, entities: pinboardEntities.size })}
           active={activeWorkspacePanels.has('presentation')}
           disabled={!hasModels}
-          onClick={() => handleToggleBottomPanel('presentation')}
+          commandContext={{ activateBottomPanel: handleToggleBottomPanel }}
           badge={(basketViewCount > 0 || pinboardEntities.size > 0) ? (
-            <span className="absolute -top-0.5 right-0.5 flex h-[14px] min-w-[14px] items-center justify-center rounded-full border border-background bg-primary px-0.5 text-[9px] font-bold text-primary-foreground">
+            <span className="absolute -top-0.5 right-0.5 flex h-[14px] min-w-[14px] items-center justify-center rounded-full border border-background bg-primary px-0.5 text-2xs font-bold text-primary-foreground">
               {basketViewCount > 0 ? `${basketViewCount}/${pinboardEntities.size}` : pinboardEntities.size}
             </span>
           ) : undefined}
         />
         <RibbonSmallStack>
-          <RibbonSmallButton
+          <RibbonCommandSmallButton
+            commandId="view:follow-work"
             icon={FollowWork}
-            label={t('ribbon.view.followWork')}
-            tooltip={t('ribbon.view.followWorkTooltip')}
             active={ribbonContextualTabs}
-            onClick={() => setRibbonContextualTabs(!ribbonContextualTabs)}
             {...tourAnchor(TOUR_ANCHORS.ribbonFollowWork)}
           />
-          <RibbonSmallButton
-            icon={ClassicBar}
-            label={t('ribbon.view.classicBar')}
-            tooltip={t('ribbon.view.classicBarTooltip')}
-            onClick={() => setToolbarStyle('classic')}
-            {...tourAnchor(TOUR_ANCHORS.ribbonClassicSwitch)}
+          <RibbonCommandSmallButton
+            commandId="pref:settings"
+            icon={Settings}
           />
         </RibbonSmallStack>
       </RibbonGroup>
