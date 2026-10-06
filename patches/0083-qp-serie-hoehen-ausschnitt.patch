@@ -1,0 +1,271 @@
+--- a/apps/viewer/src/hooks/useDrawingGeneration.ts
++++ b/apps/viewer/src/hooks/useDrawingGeneration.ts
+@@ -42,6 +42,8 @@
+ // Trassia overlay (not upstream) — Querprofil-Ansicht, Paket V-QP.
+ // Der Korridor begrenzt die ZEICHNUNG (siehe lib/ch/qp-corridor.ts), der
+ // Vorfilter die Dreiecke, die ueberhaupt geschnitten werden.
++import { useChDrawingRect } from '@/lib/ch/zeichnung-ausschnitt';
++import { useChSeriesGenerationRequest } from '@/lib/ch/qp-serie-export';
+ import { chQpShapeDrawing, useChQpView } from '@/lib/ch/qp-corridor';
+ import { corridorPlanRect, narrowMeshesToCorridor } from '@/lib/ch/qp-prefilter';
+ import { isTypeVisible, type TypeVisibilityGate } from '@/store/typeVisibilityFilter';
+@@ -162,6 +164,8 @@
+   // Trassia: Korridorbreite und Ueberhoehung. Als Abonnement, damit eine
+   // geaenderte Breite dieselbe Neuberechnung ausloest wie eine neue Station.
+   const chQp = useChQpView();
++  const chRect = useChDrawingRect();
++  const chSeriesGeneration = useChSeriesGenerationRequest();
+ 
+   // The legacy primary path can publish only `loading: false` when it finishes
+   // without exact RTC metadata. Subscribe to all provenance publication
+@@ -897,7 +901,7 @@
+       }
+       // Trassia: shape both normal and hybrid output before publishing the
+       // same completed drawing to the store and generation bookkeeping.
+-      completedDrawing = chQpShapeDrawing(completedDrawing, chQp, Boolean(sectionPlane.custom));
++      completedDrawing = chQpShapeDrawing(completedDrawing, chQp, Boolean(sectionPlane.custom), chRect);
+       setDrawing(completedDrawing); markActiveDrawingGenerationCompleted(completedDrawing);
+ 
+       // Remember the SectionConfig that produced this view so the markup
+@@ -916,7 +920,7 @@
+       generator?.dispose();
+     }
+   }, [
+-    chQp,
++    chQp, chRect,
+     geometryResult,
+     ifcDataStore,
+     sectionPlane,
+@@ -1044,7 +1048,7 @@
+     // Korridorbreite laesst die Ebene unveraendert — ohne diesen Anteil wuerde
+     // das Panel die alte Zeichnung behalten und der Regler waere wirkungslos.
+     const plane = JSON.stringify([sectionPlane.axis, sectionPlane.position, sectionPlane.flipped,
+-      sectionPlane.custom, chQp.key]);
++      sectionPlane.custom, chQp.key, chRect, chSeriesGeneration]);
+     const inputs = [geometryResult, geometryResult?.meshes.length, ifcDataStore,
+       displayOptions, typeVisibility, combinedHiddenIds, combinedIsolatedIds,
+       computedIsolatedIds, models, drawingRtcContextKey];
+--- a/apps/viewer/src/hooks/useDrawingExport.ts
++++ b/apps/viewer/src/hooks/useDrawingExport.ts
+@@ -2,7 +2,9 @@
+  * License, v. 2.0. If a copy of the MPL was not distributed with this
+  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ 
+-import { useCallback } from 'react';
++import { useCallback, useEffect } from 'react';
++import { registerChSeriesExport } from '@/lib/ch/qp-serie-export';
++import { useChQpHeightAnnotations } from '@/hooks/useChQpHeightAnnotations';
+ import type React from 'react';
+ import { posthog } from '@/lib/analytics';
+ import { downloadFile, sanitizeFilename } from '@/lib/export/download';
+@@ -14,6 +16,7 @@
+ import { toast } from '@/components/ui/toast';
+ import { pdfLineStyleFor } from '@/lib/export/pdf-line-style';
+ import {
++  encodeDxfCp1252,
+   GraphicOverrideEngine,
+   renderFrame,
+   renderTitleBlock,
+@@ -372,6 +375,8 @@
+   // Plan soll enthalten, was er auf dem Schirm hatte. Ohne Ueberhoehung ist das
+   // dasselbe Objekt, der Export also bitgleich mit dem Upstream.
+   const drawing = chQpUndistorted(drawingFromStore);
++  const heightAnnotations = useChQpHeightAnnotations(drawingFromStore);
++  const exportTextAnnotations = [...textAnnotations2D, ...heightAnnotations];
+   // Georef inputs for the DXF export (PR #1871 review, P1): placement edits
+   // applied in CesiumPlacementEditor live in `georefMutations` (per model
+   // id), not in `ifcDataStore`, and in a federation the georef frame is the
+@@ -659,9 +664,9 @@
+     }
+ 
+     // 6. DRAW TEXT ANNOTATIONS
+-    if (textAnnotations2D.length > 0) {
++    if (exportTextAnnotations.length > 0) {
+       svg += '  <g id="text-annotations">\n';
+-      for (const annotation of textAnnotations2D) {
++      for (const annotation of exportTextAnnotations) {
+         if (!annotation.text.trim()) continue;
+         const pt = { x: flipX ? -annotation.position.x : annotation.position.x, y: flipY ? -annotation.position.y : annotation.position.y };
+         const fontSize = mmToModel(2.5);
+@@ -719,7 +724,7 @@
+ 
+     svg += '</svg>';
+     return svg;
+-  }, [drawing, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, measure2DResults, polygonArea2DResults, textAnnotations2D, cloudAnnotations2D, sectionPlane.axis, dxfUnderlays, scanSection, ifcDataStore, storeModels]);
++  }, [drawing, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, measure2DResults, polygonArea2DResults, exportTextAnnotations, cloudAnnotations2D, sectionPlane.axis, dxfUnderlays, scanSection, ifcDataStore, storeModels]);
+ 
+   // Generate SVG with drawing sheet (frame, title block, scale bar)
+   // This generates coordinates directly in paper mm space (like the canvas rendering)
+@@ -935,6 +940,10 @@
+     svg += '    </g>\n';
+ 
+     // POINT-CLOUD SCAN OVERLAY (issue #1805) — on top, inside the clipped
++    for (const annotation of heightAnnotations) {
++      const p = modelToPaper(annotation.position.x, annotation.position.y);
++      svg += `<text x="${p.x.toFixed(4)}" y="${p.y.toFixed(4)}" font-size="2.5" fill="#174a68">${escapeXml(annotation.text)}</text>\n`;
++    }
+     // drawing-content group like everything else. `modelToPaper` already
+     // applies the same flip + scale/translate the rest of the sheet uses.
+     if (displayOptions.showScanSection && displayOptions.scanSectionIncludeInExport) {
+@@ -981,7 +990,7 @@
+     // identity when the axis changes, and the canvas rewrote the cache on
+     // every fresh draw — neither of which this callback controls.
+     // `cachedSheetTransformRef` is a ref: stable identity, read at call time.
+-  }, [drawing, activeSheet, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, dxfUnderlays, scanSection, sectionPlane.axis, isPinned, ifcDataStore, storeModels]);
++  }, [drawing, activeSheet, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, dxfUnderlays, scanSection, sectionPlane.axis, isPinned, ifcDataStore, storeModels, heightAnnotations]);
+ 
+   // Export SVG
+   const handleExportSVG = useCallback(() => {
+@@ -1004,7 +1013,7 @@
+   // The point-cloud scan overlay (issue #1805) is likewise deliberately
+   // excluded: it is a raster-like screen aid (tens of thousands of circles),
+   // not vector content — SVG export carries it (opt-in) instead.
+-  const handleExportDXF = useCallback(() => {
++  const handleExportDXF = useCallback((download = true) => {
+     if (!drawing) return;
+     const isCustomPlane = sectionPlane.custom !== undefined;
+     // Anchor-model effective georef, INCLUDING user placement edits
+@@ -1038,6 +1047,7 @@
+       : 'ifc-lite section export - units: metres';
+     const metadataComment = [chUnitLine, ...chQpKopfzeilen()].join('\n');
+     const dxf = exportToDXF(drawing, {
++      textAnnotations: heightAnnotations.map(a => ({ position: a.position, text: a.text, height: (displayOptions.scale || 100) * 2.5 / 1000 })),
+       showHiddenLines: displayOptions.showHiddenLines,
+       coordinateTransform,
+       metadataComment,
+@@ -1048,6 +1058,7 @@
+     // name is kept for every other section, where it is the honest one.
+     const stem = chSectionExportStem(sectionPlane.custom)
+       ?? `section-${sectionPlane.axis}-${sectionPlane.position}`;
++    if (!download) return encodeDxfCp1252(dxf).bytes;
+     downloadDxf(dxf, `${stem}.dxf`);
+     posthog.capture('drawing_exported', {
+       format: 'dxf',
+@@ -1056,7 +1067,7 @@
+     });
+   }, [
+     drawing, displayOptions.showHiddenLines, sectionPlane, ifcDataStore, coordinateInfo,
+-    storeModels, anchorModelIdOverride, georefMutations, mutationVersion,
++    storeModels, anchorModelIdOverride, georefMutations, mutationVersion, heightAnnotations,
+   ]);
+ 
+   // Export scaled PDF (issue #2042): a true-vector PDF sized so the
+@@ -1269,6 +1280,12 @@
+         }
+         doc.setLineDashPattern([], 0);
+ 
++        doc.setFontSize(7);
++        for (const annotation of heightAnnotations) {
++          const p = mapPoint(annotation.position.x, annotation.position.y);
++          doc.text(annotation.text, p.x, p.y);
++        }
++
+         // v1 has no title block, so this filename is the SOLE record of the
+         // sheet's scale — round-tripping through Math.round() here would
+         // file a 1:99.5 export as "…-1-100", silently misreporting it (same
+@@ -1293,7 +1310,7 @@
+         alert(err instanceof Error ? `Could not export PDF: ${err.message}` : 'Could not export PDF.');
+       }
+     })();
+-  }, [drawing, displayOptions.scale, displayOptions.showHiddenLines, sectionPlane, sheetEnabled, activeSheet, generateSheetSVG]);
++  }, [drawing, displayOptions.scale, displayOptions.showHiddenLines, sectionPlane, sheetEnabled, activeSheet, generateSheetSVG, heightAnnotations]);
+ 
+   // Print handler
+   const handlePrint = useCallback(() => {
+@@ -1363,6 +1380,20 @@
+     printWindow.document.close();
+   }, [generateExportSVG, generateSheetSVG, sheetEnabled, activeSheet, sectionPlane]);
+ 
++  useEffect(() => {
++    if (!drawingFromStore) return;
++    return registerChSeriesExport({
++      drawing: drawingFromStore,
++      svg: () => (sheetEnabled && activeSheet) ? generateSheetSVG() : generateExportSVG(),
++      dxf: () => {
++        const bytes = handleExportDXF(false);
++        if (!bytes) throw new Error('Aktuelle DXF-Zeichnung fehlt.');
++        return bytes;
++      },
++      rasterize: async (svg, width, height) => (await rasterizeSvgToPngDataUrl(svg, width, height)).dataUrl,
++    });
++  }, [drawingFromStore, sheetEnabled, activeSheet, generateSheetSVG, generateExportSVG, handleExportDXF]);
++
+   return {
+     formatDistance,
+     handleExportSVG,
+--- a/apps/viewer/src/components/viewer/drawing/DrawingPanel.tsx
++++ b/apps/viewer/src/components/viewer/drawing/DrawingPanel.tsx
+@@ -33,6 +33,8 @@
+ import { DrawingExportMenu } from './DrawingExportMenu';
+ import { DrawingCanvasView } from './DrawingCanvasView';
+ import { DrawingStatusLine } from './DrawingStatusLine';
++import { ChZeichnungAusschnitt } from '../ChZeichnungAusschnitt';
++import { ChQpHoehen } from '../ChQpHoehen';
+ import { DrawingInspector } from './DrawingInspector';
+ 
+ /** Labels need ~1180px for one row; icons alone fit from ~640px; below that
+@@ -166,6 +168,8 @@
+         </div>
+       )}
+ 
++      <ChZeichnungAusschnitt />
++      <ChQpHoehen />
+       <DrawingToolbar
+         tier={tier}
+         activeTool={vm.annotation2DActiveTool} onSelectTool={vm.selectTool}
+--- a/apps/viewer/src/components/viewer/drawing/useDrawingLayers.ts
++++ b/apps/viewer/src/components/viewer/drawing/useDrawingLayers.ts
+@@ -17,10 +17,12 @@
+ import { useDxfUnderlaysForDrawing, useDxfMapToWorldTransform, dxfWorldShift, dxfUnderlayDrawingBounds } from '@/hooks/useDxfUnderlay';
+ import { useScanSectionLayer } from '@/hooks/useScanSectionLayer';
+ import { useDrawingExport } from '@/hooks/useDrawingExport';
++import { useChQpHeightAnnotations } from '@/hooks/useChQpHeightAnnotations';
+ import type { DrawingViewModel } from './useDrawingViewModel';
+ 
+ export function useDrawingLayers(vm: DrawingViewModel) {
+   const { t } = useTranslation();
++  const heightAnnotations = useChQpHeightAnnotations(vm.drawing, true);
+   const { ifcDataStore } = useIfc();
+   const updateDxfUnderlayPlacement = useViewerStore((s) => s.updateDxfUnderlayPlacement);
+   const {
+@@ -127,6 +129,7 @@
+   });
+ 
+   return {
++    heightAnnotations,
+     ifcAnnotationData, dxfUnderlayData, dxfGeoreferenceAvailable, handleCenterDxfUnderlay,
+     scanSectionLayer,
+     handleExportSVG, handleExportDXF, handleExportPDF, handlePrint,
+--- a/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
++++ b/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
+@@ -92,7 +92,7 @@
+           annotation2DCursorPos={vm.annotation2DCursorPos}
+           polygonAreaPoints={vm.polygonArea2DPoints}
+           polygonAreaResults={vm.polygonArea2DResults}
+-          textAnnotations={vm.textAnnotations2D}
++          textAnnotations={[...vm.textAnnotations2D, ...layers.heightAnnotations]}
+           textAnnotationEditing={vm.textAnnotation2DEditing}
+           cloudAnnotationPoints={vm.cloudAnnotation2DPoints}
+           cloudAnnotations={vm.cloudAnnotations2D}
+--- a/packages/drawing-2d/src/dxf-exporter.ts
++++ b/packages/drawing-2d/src/dxf-exporter.ts
+@@ -36,6 +36,8 @@
+ import { DxfWriter, type DxfLinetype } from './dxf/writer.js';
+ 
+ export interface DXFExportOptions {
++  /** Derived labels in drawing metres, following the same coordinate transform. */
++  textAnnotations?: Array<{ position: Point2D; text: string; height: number }>;
+   /** Include lines whose `visibility === 'hidden'` (default true, matching SVG). */
+   showHiddenLines?: boolean;
+   /** Include cut-polygon boundaries (hatch regions, represented as closed POLYLINE boundaries — see module docs). Default true. */
+@@ -118,6 +120,10 @@
+     for (const line of drawing.lines) {
+       if (!showHiddenLines && line.visibility === 'hidden') continue;
+       this.writeLine(writer, line, categoryLayers, map);
++    }
++
++    for (const text of options.textAnnotations ?? []) {
++      writer.addText(map(text.position), text.text, text.height, categoryLayers.get('annotation')!);
+     }
+ 
+     return writer.toString();

@@ -5,6 +5,9 @@
 import { drawDxfUnderlaysScreenSpace } from './drawing-underlays';
 import { drawReferenceImages } from './drawing-reference-images';
 import { useReferenceImagesForDrawing } from '@/hooks/useReferenceImagesForDrawing';
+import { ChDrawingRectPointer } from './ChZeichnungAusschnitt';
+import { chDrawingYFactor, type ChDrawingProjection } from '@/lib/ch/zeichnung-ausschnitt';
+import { chQpUndistorted } from '@/lib/ch/qp-corridor';
 import React, { useRef, useState, useEffect } from 'react';
 import {
   GraphicOverrideEngine,
@@ -328,6 +331,25 @@ export function Drawing2DCanvas({
   const referenceImages = useReferenceImagesForDrawing(drawing.config.plane);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  // Exact inverse of the preview's raw/sheet mapping, including display-only Y stretch.
+  const rectProjection = (() : ChDrawingProjection | null => {
+    const factor = chDrawingYFactor(drawing.bounds, chQpUndistorted(drawing).bounds);
+    if (sheetEnabled && activeSheet) {
+      const resolved = resolveSheetTransform({ sheet: activeSheet,
+        drawingBounds: { minX: drawing.bounds.min.x, minY: drawing.bounds.min.y,
+          maxX: drawing.bounds.max.x, maxY: drawing.bounds.max.y },
+        axis: sectionAxis, isPinned: Boolean(isPinned), cached: cachedSheetTransformRef?.current });
+      const dt = resolved.transform;
+      return { x: dt.translateX * transform.scale + transform.x,
+        y: dt.translateY * transform.scale + transform.y,
+        scaleX: (resolved.flipX ? -1 : 1) * dt.scaleFactor * transform.scale,
+        scaleY: (resolved.flipY ? -1 : 1) * dt.scaleFactor * transform.scale * factor };
+    }
+    return { x: transform.x, y: transform.y,
+      scaleX: sectionAxis === 'side' ? -transform.scale : transform.scale,
+      scaleY: (sectionAxis === 'down' ? transform.scale : -transform.scale) * factor };
+  })();
+
   // Resolved once per (model set, polygon set) change, never per draw frame.
   const getElementProperties = useDrawingElementPropertiesLookup(drawing, overrideEngine, overridesEnabled);
   useEffect(() => canvasRef.current ? registerActiveDrawingCanvas(canvasRef.current, snapshotSourceDrawing) : undefined, [snapshotSourceDrawing]);
@@ -1804,10 +1826,9 @@ export function Drawing2DCanvas({
   }, [referenceImages, drawing, snapshotSourceDrawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, unitDisplayOverrides, paperTheme, chNpMarken, chNpBemassungen, chNpKlassenLabel, chNpHerkunft]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="w-full h-full"
-      style={CANVAS_STYLE}
-    />
+    <div className="relative w-full h-full">
+      <canvas ref={canvasRef} className="w-full h-full" style={CANVAS_STYLE} />
+      <ChDrawingRectPointer projection={rectProjection} drawingIdentity={drawing} />
+    </div>
   );
 }

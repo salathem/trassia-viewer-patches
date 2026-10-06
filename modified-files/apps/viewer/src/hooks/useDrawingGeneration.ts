@@ -42,6 +42,8 @@ import { buildModelViewIdFilter, selectModelMeshes } from '@/lib/type-view-visib
 // Trassia overlay (not upstream) — Querprofil-Ansicht, Paket V-QP.
 // Der Korridor begrenzt die ZEICHNUNG (siehe lib/ch/qp-corridor.ts), der
 // Vorfilter die Dreiecke, die ueberhaupt geschnitten werden.
+import { useChDrawingRect } from '@/lib/ch/zeichnung-ausschnitt';
+import { useChSeriesGenerationRequest } from '@/lib/ch/qp-serie-export';
 import { chQpShapeDrawing, useChQpView } from '@/lib/ch/qp-corridor';
 import { corridorPlanRect, narrowMeshesToCorridor } from '@/lib/ch/qp-prefilter';
 import { isTypeVisible, type TypeVisibilityGate } from '@/store/typeVisibilityFilter';
@@ -162,6 +164,8 @@ export function useDrawingGeneration({
   // Trassia: Korridorbreite und Ueberhoehung. Als Abonnement, damit eine
   // geaenderte Breite dieselbe Neuberechnung ausloest wie eine neue Station.
   const chQp = useChQpView();
+  const chRect = useChDrawingRect();
+  const chSeriesGeneration = useChSeriesGenerationRequest();
 
   // The legacy primary path can publish only `loading: false` when it finishes
   // without exact RTC metadata. Subscribe to all provenance publication
@@ -897,7 +901,7 @@ export function useDrawingGeneration({
       }
       // Trassia: shape both normal and hybrid output before publishing the
       // same completed drawing to the store and generation bookkeeping.
-      completedDrawing = chQpShapeDrawing(completedDrawing, chQp, Boolean(sectionPlane.custom));
+      completedDrawing = chQpShapeDrawing(completedDrawing, chQp, Boolean(sectionPlane.custom), chRect);
       setDrawing(completedDrawing); markActiveDrawingGenerationCompleted(completedDrawing);
 
       // Remember the SectionConfig that produced this view so the markup
@@ -916,7 +920,7 @@ export function useDrawingGeneration({
       generator?.dispose();
     }
   }, [
-    chQp,
+    chQp, chRect,
     geometryResult,
     ifcDataStore,
     sectionPlane,
@@ -1044,7 +1048,7 @@ export function useDrawingGeneration({
     // Korridorbreite laesst die Ebene unveraendert — ohne diesen Anteil wuerde
     // das Panel die alte Zeichnung behalten und der Regler waere wirkungslos.
     const plane = JSON.stringify([sectionPlane.axis, sectionPlane.position, sectionPlane.flipped,
-      sectionPlane.custom, chQp.key]);
+      sectionPlane.custom, chQp.key, chRect, chSeriesGeneration]);
     const inputs = [geometryResult, geometryResult?.meshes.length, ifcDataStore,
       displayOptions, typeVisibility, combinedHiddenIds, combinedIsolatedIds,
       computedIsolatedIds, models, drawingRtcContextKey];

@@ -1,0 +1,28 @@
+diff --git a/apps/viewer/src/components/viewer/selectionHandlers.ts b/apps/viewer/src/components/viewer/selectionHandlers.ts
+--- a/apps/viewer/src/components/viewer/selectionHandlers.ts
++++ b/apps/viewer/src/components/viewer/selectionHandlers.ts
+@@ -7,6 +7,7 @@
+  * Handles click/double-click selection and context menu interactions.
+  * Pure functions operating on a MouseHandlerContext — no React dependency.
+  */
++import { chLineCaptureActive, chAppendLineCapturePoint } from '@/lib/ch/section-line-capture';
+ import { isTouchSelectionClick, selectViewportTarget } from './referenceSelection.js';
+ import type { PickResult } from '@ifc-lite/renderer';
+ import type { MouseHandlerContext } from './mouseHandlerTypes.js';
+@@ -66,6 +67,16 @@
+       handleAngleClick(ctx, x, y);
+     } else if (mode === 'radius') {
+       handleRadiusClick(ctx, x, y);
++    }
++    return;
++  }
++
++  // Trassia: same magnetic measurement pick, transaction owned by Section.
++  if (tool === 'section' && chLineCaptureActive()) {
++    const picked = raycastForPolylinePoint(ctx, x, y);
++    if (picked) {
++      ctx.setSnapTarget(picked.snapTarget);
++      chAppendLineCapturePoint([picked.point.x, picked.point.y, picked.point.z]);
+     }
+     return;
+   }

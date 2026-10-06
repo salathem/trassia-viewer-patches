@@ -92,7 +92,7 @@ export function DrawingCanvasView({ vm, layers }: { vm: DrawingViewModel; layers
           annotation2DCursorPos={vm.annotation2DCursorPos}
           polygonAreaPoints={vm.polygonArea2DPoints}
           polygonAreaResults={vm.polygonArea2DResults}
-          textAnnotations={vm.textAnnotations2D}
+          textAnnotations={[...vm.textAnnotations2D, ...layers.heightAnnotations]}
           textAnnotationEditing={vm.textAnnotation2DEditing}
           cloudAnnotationPoints={vm.cloudAnnotation2DPoints}
           cloudAnnotations={vm.cloudAnnotations2D}

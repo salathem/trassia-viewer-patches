@@ -1,0 +1,18 @@
+--- a/apps/viewer/src/hooks/useDrawingExport.ts
++++ b/apps/viewer/src/hooks/useDrawingExport.ts
+@@ -1156,6 +1156,7 @@
+           const { jsPDF } = await import('jspdf');
+           const { dataUrl, fit } = await rasterizeSvgToPngDataUrl(svg, widthMm, heightMm);
+           const doc = new jsPDF({
++          compress: true,
+             unit: 'mm',
+             format: [widthMm, heightMm],
+             orientation: widthMm >= heightMm ? 'landscape' : 'portrait',
+@@ -1244,6 +1245,7 @@
+           return { x: p.x + offsetX, y: p.y + offsetY };
+         };
+         const doc = new jsPDF({
++          compress: true,
+           unit: 'mm',
+           format: [widthMm, heightMm],
+           orientation: widthMm >= heightMm ? 'landscape' : 'portrait',

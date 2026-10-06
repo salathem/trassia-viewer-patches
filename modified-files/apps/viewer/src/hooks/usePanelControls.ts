@@ -130,6 +130,7 @@ export function usePanelControls(): PanelControls {
       useViewerStore.getState().setLeftPanelCollapsed(false);
       return;
     }
+    closePanelWindow(id); // also cancel a PiP window still waiting for permission
     useViewerStore.getState().openPanelInHome(id);
   }, []);
 
@@ -170,6 +171,7 @@ export function usePanelControls(): PanelControls {
   }, []);
 
   const closePanel = useCallback((id: WorkspacePanelId) => {
+    closePanelWindow(id); // close intent includes an unfinished pop-out request
     if (useViewerStore.getState().closeDockedSidebarPanel(id)) return;
     if (isLeftPanel(id)) {
       useViewerStore.getState().setLeftPanelCollapsed(true);

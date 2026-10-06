@@ -36,6 +36,8 @@ import { DEFAULT_DXF_PLACEMENT, type DxfPlacement, type DxfUnderlay } from './dx
 import { DxfWriter, type DxfLinetype } from './dxf/writer.js';
 
 export interface DXFExportOptions {
+  /** Derived labels in drawing metres, following the same coordinate transform. */
+  textAnnotations?: Array<{ position: Point2D; text: string; height: number }>;
   /** Include lines whose `visibility === 'hidden'` (default true, matching SVG). */
   showHiddenLines?: boolean;
   /** Include cut-polygon boundaries (hatch regions, represented as closed POLYLINE boundaries — see module docs). Default true. */
@@ -118,6 +120,10 @@ export class DXFExporter {
     for (const line of drawing.lines) {
       if (!showHiddenLines && line.visibility === 'hidden') continue;
       this.writeLine(writer, line, categoryLayers, map);
+    }
+
+    for (const text of options.textAnnotations ?? []) {
+      writer.addText(map(text.position), text.text, text.height, categoryLayers.get('annotation')!);
     }
 
     return writer.toString();
