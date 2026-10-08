@@ -1,0 +1,70 @@
+diff --git a/apps/viewer/src/hooks/useIfcLoader.ts b/apps/viewer/src/hooks/useIfcLoader.ts
+--- a/apps/viewer/src/hooks/useIfcLoader.ts
++++ b/apps/viewer/src/hooks/useIfcLoader.ts
+@@ -26,6 +26,8 @@
+ import { attachTextureBitmaps, type TextureBitmapStore } from '../utils/textureResources.js';
+ import { modelAppearanceAssets } from '../lib/appearance/model-assets.js';
+ import { WorkerParser } from '@ifc-lite/parser/browser';
++import { ifcWorkerRequirement } from '../lib/browser-load-requirements.js';
++import { getLocale } from '@/i18n';
+ import { awaitLoad, isLoadAbort, parserWithFallback, commitIfcReplacement } from '../lib/ifc-load-cancellation.js';
+ import { memoryAccounting } from '../lib/perf/memoryAccounting.js';
+ import {
+@@ -1420,7 +1422,7 @@
+       // `WorkerParser.isSupported()` checks COI, SAB and Worker availability.
+       // The parser's UTF-8 reader handles SAB-backed views in Firefox too.
+       const useParserWorker = WorkerParser.isSupported();
+-      if (cancellableIfc && !useParserWorker) throw new Error('IFC loading requires browser worker support and cross-origin isolation.');
++      if (cancellableIfc && !useParserWorker) throw new Error(ifcWorkerRequirement(globalThis, getLocale()).message);
+       let sharedSource: SharedArrayBuffer | null = null;
+       if (useParserWorker) {
+         if (acquired.isShared && acquired.buffer instanceof SharedArrayBuffer) {
+diff --git a/apps/viewer/src/hooks/useWebGpuOpenGuard.ts b/apps/viewer/src/hooks/useWebGpuOpenGuard.ts
+--- a/apps/viewer/src/hooks/useWebGpuOpenGuard.ts
++++ b/apps/viewer/src/hooks/useWebGpuOpenGuard.ts
+@@ -13,9 +13,10 @@
+  */
+ 
+ import { useCallback, useEffect } from 'react';
+-import { useTranslation } from '@/i18n';
++import { getLocale, useTranslation } from '@/i18n';
+ import { useViewerStore } from '@/store';
+ import { showLoadError } from '@/lib/analytics';
++import { webGpuRequirementMessage } from '../lib/browser-load-requirements.js';
+ import { getWebGPUStatus, retryWebGPU, useWebGPU, type WebGPUStatus } from './useWebGPU';
+ 
+ export interface WebGpuOpenGuard {
+@@ -37,10 +38,10 @@
+     if (state.error !== t('viewportLighting.container.loadErrorCard.webgpuChecking')) return;
+     showLoadError(
+       state.setError, state.setLastLoadRetry,
+-      t('viewportLighting.container.loadErrorCard.webgpuUnsupported'),
++      webGpuRequirementMessage(webgpu.category, getLocale()),
+       'webgpu_unsupported', state.lastLoadRetry,
+     );
+-  }, [t, webgpu.checking, webgpu.supported]);
++  }, [t, webgpu.checking, webgpu.supported, webgpu.category]);
+ 
+   const guard = useCallback((retry?: () => void): boolean => {
+     const status = getWebGPUStatus();
+@@ -67,16 +68,16 @@
+         retryPending = false;
+         showLoadError(
+           state.setError, state.setLastLoadRetry,
+-          t('viewportLighting.container.loadErrorCard.webgpuUnsupported'),
++          webGpuRequirementMessage(fresh.category, getLocale()),
+           'webgpu_unsupported', retryAfterProbe,
+         );
+       });
+     } : null;
+     showLoadError(
+       setError, setLastLoadRetry,
+-      t(status.checking
+-        ? 'viewportLighting.container.loadErrorCard.webgpuChecking'
+-        : 'viewportLighting.container.loadErrorCard.webgpuUnsupported'),
++      status.checking
++        ? t('viewportLighting.container.loadErrorCard.webgpuChecking')
++        : webGpuRequirementMessage(status.category, getLocale()),
+       status.checking ? 'webgpu_checking' : 'webgpu_unsupported',
+       retryAfterProbe,
+     );

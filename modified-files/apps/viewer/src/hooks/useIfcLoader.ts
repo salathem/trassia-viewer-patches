@@ -26,6 +26,8 @@ import { IfcParser, detectFormat, unwrapIfcZipWithResources, type IfcDataStore }
 import { attachTextureBitmaps, type TextureBitmapStore } from '../utils/textureResources.js';
 import { modelAppearanceAssets } from '../lib/appearance/model-assets.js';
 import { WorkerParser } from '@ifc-lite/parser/browser';
+import { ifcWorkerRequirement } from '../lib/browser-load-requirements.js';
+import { getLocale } from '@/i18n';
 import { awaitLoad, isLoadAbort, parserWithFallback, commitIfcReplacement } from '../lib/ifc-load-cancellation.js';
 import { memoryAccounting } from '../lib/perf/memoryAccounting.js';
 import {
@@ -1420,7 +1422,7 @@ export function useIfcLoader() {
       // `WorkerParser.isSupported()` checks COI, SAB and Worker availability.
       // The parser's UTF-8 reader handles SAB-backed views in Firefox too.
       const useParserWorker = WorkerParser.isSupported();
-      if (cancellableIfc && !useParserWorker) throw new Error('IFC loading requires browser worker support and cross-origin isolation.');
+      if (cancellableIfc && !useParserWorker) throw new Error(ifcWorkerRequirement(globalThis, getLocale()).message);
       let sharedSource: SharedArrayBuffer | null = null;
       if (useParserWorker) {
         if (acquired.isShared && acquired.buffer instanceof SharedArrayBuffer) {

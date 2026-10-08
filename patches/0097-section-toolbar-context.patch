@@ -1,0 +1,36 @@
+diff --git a/apps/viewer/src/components/viewer/tools/SectionToolbar.tsx b/apps/viewer/src/components/viewer/tools/SectionToolbar.tsx
+--- a/apps/viewer/src/components/viewer/tools/SectionToolbar.tsx
++++ b/apps/viewer/src/components/viewer/tools/SectionToolbar.tsx
+@@ -48,6 +48,7 @@
+ import { sectionBoxFromBounds, sectionBoxSize } from '@/lib/section/section-box';
+ import type { SectionPlaneAxis } from '@/store/types';
+ import { AlignmentSectionControls } from './AlignmentSectionControls';
++import { ChSectionDistanceLabel, ChSectionToolbarContext } from './ChSectionToolbarContext';
+ import { chooseAlignmentMode, leaveAlignmentMode, useAlignmentToolState } from '@/lib/section/alignment-controller';
+ 
+ type AxisSegment = SectionPlaneAxis | 'face' | 'box' | 'alignment';
+@@ -207,6 +208,7 @@
+         <HudSegmented options={axes} value={axisValue} onChange={handleAxis} aria-label={t('sectionTool.bar.axisAria')} />
+       </span>
+       <AlignmentSectionControls />
++      <ChSectionToolbarContext />
+       {boxSize ? (
+         <span className={GROUP}>
+           <HudDivider />
+@@ -233,6 +235,8 @@
+         title={t(sectionPlane.flipped ? 'sectionTool.flippedTitle' : 'sectionTool.flipLabel')}
+         icon={<FlipHorizontal2 aria-hidden className="h-3.5 w-3.5" />}
+       />
++      <span className="flex flex-col items-end">
++      {distance.kind === 'custom' && <ChSectionDistanceLabel />}
+       <HudValueField
+         disabled={alignmentBusy}
+         value={distance.value}
+@@ -249,6 +253,7 @@
+         aria-label={t(distance.kind === 'alignment' ? 'alignmentSection.distance' : isCustom ? 'sectionTool.distance.customAria' : 'sectionTool.distance.aria')}
+         className="min-w-[4.5rem] justify-end"
+       />
++      </span>
+       {showStoreys && (
+         <HudPopover>
+           <HudPopoverTrigger asChild>

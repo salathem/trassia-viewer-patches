@@ -9,10 +9,10 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0096`, numbers no longer in use are listed below)
+- `patches/` — the exact patches (`0001`–`0098`, numbers no longer in use are listed below)
   applied, in numeric order, on top of upstream commit
   `e79f27342beb01a6f30d9b63c44795ecd118f4de` (tag `@ifc-lite/wasm@10.3.0`)
-- `modified-files/` — the 102 modified files in full source form
+- `modified-files/` — the 104 modified files in full source form
   (exactly extracted from the bound 10.3.0 build image):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/ChatPanel.tsx`
@@ -128,7 +128,7 @@ upstream layout. The other patches keep their described purpose; some were
 re-anchored to the moved upstream code (e.g. the sidebar exclusivity logic now
 lives in `store/store-sync.ts`).
 
-- `0001`–`0096` — Swiss coordinate readout for the measurement tools
+- `0001`–`0098` — Swiss coordinate readout for the measurement tools
   (LV95/LV03 formatting, georeference status).
 - `0004`–`0005` — property panel: Swiss/Trassia provenance property sets sorted
   to the top with a family badge, a free-text filter over the selected element's
@@ -428,3 +428,11 @@ Source extraction image: `sha256:8bf18dd0c67112ef7542f42a26aad377e38d5203b53ed92
 - `packages/renderer/src/camera-controls.ts`
 - `packages/renderer/src/camera.ts`
 - `apps/viewer/src/i18n/catalogues/alignment-section.en.ts`
+
+## Section context and browser capability messages
+
+Patches 0097 and 0098 distinguish section station and plane offset, and describe measured browser load failures.
+Final source extraction image: `sha256:4e0b448518a544cc63679c6e12e8bfb59223385dfb122c89742eab1d06183e04`. This is a local offer, not a publication or live release.
+
+- `apps/viewer/src/components/viewer/tools/SectionToolbar.tsx`
+- `apps/viewer/src/hooks/useWebGpuOpenGuard.ts`
