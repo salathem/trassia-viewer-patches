@@ -9,10 +9,10 @@ executable form served at https://viewer.trassia.com.
 
 ## Contents
 
-- `patches/` — the exact patches (`0001`–`0098`, numbers no longer in use are listed below)
+- `patches/` — the exact patches (`0001`–`0099`, numbers no longer in use are listed below)
   applied, in numeric order, on top of upstream commit
   `e79f27342beb01a6f30d9b63c44795ecd118f4de` (tag `@ifc-lite/wasm@10.3.0`)
-- `modified-files/` — the 104 modified files in full source form
+- `modified-files/` — the 105 modified files in full source form
   (exactly extracted from the bound 10.3.0 build image):
   - `apps/viewer/src/components/viewer/CesiumOverlay.tsx`
   - `apps/viewer/src/components/viewer/ChatPanel.tsx`
@@ -128,7 +128,7 @@ upstream layout. The other patches keep their described purpose; some were
 re-anchored to the moved upstream code (e.g. the sidebar exclusivity logic now
 lives in `store/store-sync.ts`).
 
-- `0001`–`0098` — Swiss coordinate readout for the measurement tools
+- `0001`–`0099` — Swiss coordinate readout for the measurement tools
   (LV95/LV03 formatting, georeference status).
 - `0004`–`0005` — property panel: Swiss/Trassia provenance property sets sorted
   to the top with a family badge, a free-text filter over the selected element's
@@ -436,3 +436,10 @@ Final source extraction image: `sha256:4e0b448518a544cc63679c6e12e8bfb59223385df
 
 - `apps/viewer/src/components/viewer/tools/SectionToolbar.tsx`
 - `apps/viewer/src/hooks/useWebGpuOpenGuard.ts`
+
+## Parked alignment section context
+
+Patch 0099 preserves the exact alignment context in the parked section control, separately from plane offset.
+Full texts extracted from `sha256:c9f4949f426ebf0321497cfc2be70f2e0d137c64b29226e934c67b8865757dad`. Local source offer; no publication or live release.
+
+- `apps/viewer/src/components/viewer/tools/SectionParkedChip.tsx`

@@ -1,0 +1,20 @@
+diff --git a/apps/viewer/src/components/viewer/tools/SectionParkedChip.tsx b/apps/viewer/src/components/viewer/tools/SectionParkedChip.tsx
+--- a/apps/viewer/src/components/viewer/tools/SectionParkedChip.tsx
++++ b/apps/viewer/src/components/viewer/tools/SectionParkedChip.tsx
+@@ -27,6 +27,7 @@
+ import { AXIS_INFO } from './sectionConstants';
+ import { useSectionDistance } from './useSectionDistance';
+ import { sectionBoxSize } from '@/lib/section/section-box';
++import { ChSectionParkedLabel } from './ChSectionToolbarContext';
+ 
+ export function SectionParkedChip() {
+   const shown = useViewerStore((s) => s.sectionPlane.enabled && s.activeTool !== 'section');
+@@ -81,7 +82,7 @@
+           icon: <X aria-hidden className="h-3 w-3" />,
+         }}
+       >
+-        {label}
++        <ChSectionParkedLabel fallback={label} distance={distance.value} />
+       </HudChip>
+     </HudItem>
+   );
