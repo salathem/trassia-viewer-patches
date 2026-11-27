@@ -11,20 +11,3 @@ index 11092f3c1e2a8c311dc9552d0b58a6f643626f91..0ba3ef72b5434dfa9539feff374f0d75
 +    assert.equal(reference('LHN95'), 'EPSG:5729');
    });
  });
-diff --git a/apps/viewer/src/lib/geo/ifc-spatial-reference.ts b/apps/viewer/src/lib/geo/ifc-spatial-reference.ts
-index 9976bec1e62699b30b7c508d218c4342cf602997..c8162cc4fcb30e5e031f76b3b2610192deb056d8 100644
---- a/apps/viewer/src/lib/geo/ifc-spatial-reference.ts
-+++ b/apps/viewer/src/lib/geo/ifc-spatial-reference.ts
-@@ -33,6 +33,12 @@ function declaredVerticalEpsg(name: string | undefined): string | undefined {
-   const normalized = name?.trim().toUpperCase();
-   if (normalized === 'NAVD88' || normalized === 'NORTH AMERICAN VERTICAL DATUM 1988') return 'EPSG:5703';
-   if (normalized === 'NAP' || normalized === 'NORMAAL AMSTERDAMS PEIL') return 'EPSG:5709';
-+  // Trassia: the Swiss height systems as Swiss IFC exports write them
-+  // (IfcProjectedCRS.VerticalDatum 'LN02' / 'LHN95'). Without these two, every
-+  // Swiss model beside the anchor was refused as 'vertical-crs-unknown' and
-+  // stayed in its own local frame.
-+  if (normalized === 'LN02' || normalized === 'LN 02') return 'EPSG:5728';
-+  if (normalized === 'LHN95' || normalized === 'LHN 95') return 'EPSG:5729';
-   return undefined;
- }
- 

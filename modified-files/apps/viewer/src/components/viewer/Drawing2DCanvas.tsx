@@ -5,14 +5,12 @@
 import { drawDxfUnderlaysScreenSpace } from './drawing-underlays';
 import { drawReferenceImages } from './drawing-reference-images';
 import { useReferenceImagesForDrawing } from '@/hooks/useReferenceImagesForDrawing';
-import { ChDrawingRectPointer } from './ChZeichnungAusschnitt';
-import { chDrawingYFactor, type ChDrawingProjection } from '@/lib/ch/zeichnung-ausschnitt';
-import { chQpUndistorted } from '@/lib/ch/qp-corridor';
 import React, { useRef, useState, useEffect } from 'react';
 import {
   GraphicOverrideEngine,
   type Drawing2D,
   type ElementData,
+  isPolygonCutLine,
 } from '@ifc-lite/drawing-2d';
 import type { DrawingLine2D } from '@ifc-lite/renderer';
 import { formatDistance } from './tools/formatDistance';
@@ -22,16 +20,22 @@ import type { PolygonArea2DResult, TextAnnotation2D, CloudAnnotation2D, Annotati
 import type { DxfUnderlayRenderData } from '@/hooks/useDxfUnderlay';
 import type { AnnotationFill2D, AnnotationText2D } from '@/hooks/useSymbolicAnnotations';
 import type { ScanBandPoint } from '@/hooks/scanSectionMath';
+import { drawScanSectionScreenSpace } from './drawing/scanSectionCanvas';
+import { drawMeasurements2D } from './drawing/drawMeasure2D';
+import { drawDimensions2D, sheetViewportScreenRect, type DimensionScene, type ScreenClipRect } from './drawing/drawDimensions2D';
+import { lineCullBox, lineInCullBox } from '@/lib/drawing2d-markup/drawing-line-cull';
 import { type CachedSheetTransform } from '@/lib/drawing/sheet-geometry-key';
-import { resolveSheetTransform } from '@/lib/drawing/sheet-transform';
-import { useDrawingElementPropertiesLookup } from '@/hooks/useDrawingElementPropertiesLookup';
-import { markActiveDrawingCanvasRendered, registerActiveDrawingCanvas } from '@/lib/drawing/active-canvas-snapshot';
 // Trassia overlay (not upstream) — Paket P3-NP: Bemassung zwischen Bruchkanten.
 import { chNpLayout, chNpZeichnen, type ChNpFarben } from '@/lib/ch/np/np-zeichnen';
 
+import { ChDrawingRectPointer } from './ChZeichnungAusschnitt';
+import { chDrawingYFactor, type ChDrawingProjection } from '@/lib/ch/zeichnung-ausschnitt';
+import { chQpUndistorted } from '@/lib/ch/qp-corridor';
+import { resolveSheetTransform } from '@/lib/drawing/sheet-transform';
+import { useDrawingElementPropertiesLookup } from '@/hooks/useDrawingElementPropertiesLookup';
+import { markActiveDrawingCanvasRendered, registerActiveDrawingCanvas } from '@/lib/drawing/active-canvas-snapshot';
 import { getFillColorForType } from './drawing/ifc-fill-colors';
 import { resolveDrawingPaperTheme, type DrawingPaperTheme } from './drawing/paper-theme';
-export { getFillColorForType } from './drawing/ifc-fill-colors';
 
 // ─── IFC annotation overlay helpers (issue #812) ─────────────────────────────
 
@@ -169,46 +173,6 @@ function drawIfcAnnotationsScreenSpace(
   }
 }
 
-/** Dot half-size in screen pixels — constant regardless of zoom, like the DXF underlay's text. */
-const SCAN_DOT_HALF_PX = 0.75;
-const SCAN_DOT_NEUTRAL_COLOR = '#8a8a8a';
-
-/**
- * Render the point-cloud scan overlay (issue #1805), in screen pixels.
- * `scanPoints` already live in the drawing's native 2D coordinate space —
- * `scanSectionMath.ts` projects them with the SAME `projectTo2D` /
- * `projectTo2DBasis` functions the section cutter uses for `cutPolygons` /
- * `lines` — so the caller supplies the plain drawing→screen transform, same
- * as `drawDxfUnderlaysScreenSpace`.
- *
- * Dots draw as tiny filled squares (`fillRect`), not circles: at up to the
- * 500k-point render cap, skipping `beginPath`/`arc`/`fill` per point matters
- * — `fillRect` is a single cheap call with no path tessellation, and at
- * ~1-1.5px a square reads the same as a disc anyway. `fillStyle` is still
- * set per point (colour varies point-to-point for RGB scans); the
- * perf-sensitive part being avoided is the path/arc machinery, not the
- * fillStyle assignment itself.
- */
-function drawScanSectionScreenSpace(
-  ctx: CanvasRenderingContext2D,
-  points: readonly ScanBandPoint[] | undefined,
-  modelToScreen: (x: number, y: number) => { x: number; y: number },
-  opacity: number,
-): void {
-  if (!points || points.length === 0 || opacity <= 0) return;
-  ctx.save();
-  ctx.globalAlpha = opacity;
-  const size = SCAN_DOT_HALF_PX * 2;
-  for (const p of points) {
-    const screen = modelToScreen(p.point.x, p.point.y);
-    ctx.fillStyle = p.color
-      ? `rgb(${Math.round(p.color[0] * 255)}, ${Math.round(p.color[1] * 255)}, ${Math.round(p.color[2] * 255)})`
-      : SCAN_DOT_NEUTRAL_COLOR;
-    ctx.fillRect(screen.x - SCAN_DOT_HALF_PX, screen.y - SCAN_DOT_HALF_PX, size, size);
-  }
-  ctx.restore();
-}
-
 const CANVAS_STYLE = { imageRendering: 'crisp-edges' as const };
 const EMPTY_MEASURE_RESULTS: Measure2DResultData[] = [];
 const EMPTY_UNIT_DISPLAY_OVERRIDES: Record<string, string> = {};
@@ -254,6 +218,8 @@ interface Drawing2DCanvasProps {
   cloudAnnotations?: CloudAnnotation2D[];
   // Selection
   selectedAnnotation?: SelectedAnnotation2D | null;
+  /** Linear dimensions, their tool preview and snap glyphs (`useDimension2D`). */
+  dimensionScene?: DimensionScene | null;
   // IFC annotation overlay (issue #812)
   ifcAnnotationLines?: readonly DrawingLine2D[];
   ifcAnnotationTexts?: readonly AnnotationText2D[];
@@ -263,6 +229,8 @@ interface Drawing2DCanvasProps {
   // Point-cloud scan overlay, already in drawing space (issue #1805)
   scanPoints?: readonly ScanBandPoint[];
   scanOpacity?: number;
+  /** Traced scan outline rings in drawing space (#6871). */
+  scanOutline?: readonly (readonly Point2D[])[];
   // LENGTHUNIT display override for the on-canvas measure distance/perimeter
   // labels (#2199 slice not covered by #2538, which wired every OTHER
   // measure-tool readout — MeasurePanel.tsx, MeasurementVisuals.tsx — through
@@ -273,7 +241,6 @@ interface Drawing2DCanvasProps {
   // white regardless (#5496). Defaults to the light-theme reading so every
   // existing caller (there is exactly one, `DrawingCanvasView`) that doesn't
   // pass it yet keeps today's white-paper look.
-  paperTheme?: DrawingPaperTheme;
   // Trassia overlay (not upstream) — Paket P3-NP: die Bemassung zwischen den
   // Bruchkanten der Bestandsanalyse. Fertig gerechnete Bildschirmkoordinaten
   // kommen NICHT herein — nur die Marken und Masse; die Umrechnung braucht
@@ -282,6 +249,7 @@ interface Drawing2DCanvasProps {
   chNpBemassungen?: readonly import('@/lib/ch/np/np-bemassung').ChNpBemassung[];
   chNpKlassenLabel?: (klasse: string) => import('@/lib/ch/np/np-beschriftung').ChNpKlassenLabel;
   chNpHerkunft?: (marke: import('@/lib/ch/np/np-station').ChNpMarke) => string | null;
+  paperTheme?: DrawingPaperTheme;
 }
 
 const DEFAULT_PAPER_THEME: DrawingPaperTheme = resolveDrawingPaperTheme('light', false);
@@ -314,23 +282,22 @@ export function Drawing2DCanvas({
   cloudAnnotationPoints = [],
   cloudAnnotations = [],
   selectedAnnotation = null,
+  dimensionScene = null,
   ifcAnnotationLines,
   ifcAnnotationTexts,
   ifcAnnotationFills,
   dxfUnderlays,
   scanPoints,
   scanOpacity = 1,
+  scanOutline,
   unitDisplayOverrides = EMPTY_UNIT_DISPLAY_OVERRIDES,
-  paperTheme = DEFAULT_PAPER_THEME,
   // Trassia overlay (not upstream) — Paket P3-NP.
   chNpMarken,
   chNpBemassungen,
   chNpKlassenLabel,
   chNpHerkunft,
+  paperTheme = DEFAULT_PAPER_THEME,
 }: Drawing2DCanvasProps): React.ReactElement {
-  const referenceImages = useReferenceImagesForDrawing(drawing.config.plane);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   // Exact inverse of the preview's raw/sheet mapping, including display-only Y stretch.
   const rectProjection = (() : ChDrawingProjection | null => {
     const factor = chDrawingYFactor(drawing.bounds, chQpUndistorted(drawing).bounds);
@@ -350,6 +317,9 @@ export function Drawing2DCanvas({
       scaleY: (sectionAxis === 'down' ? transform.scale : -transform.scale) * factor };
   })();
 
+  const referenceImages = useReferenceImagesForDrawing(drawing.config.plane);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   // Resolved once per (model set, polygon set) change, never per draw frame.
   const getElementProperties = useDrawingElementPropertiesLookup(drawing, overrideEngine, overridesEnabled);
   useEffect(() => canvasRef.current ? registerActiveDrawingCanvas(canvasRef.current, snapshotSourceDrawing) : undefined, [snapshotSourceDrawing]);
@@ -403,6 +373,7 @@ export function Drawing2DCanvas({
     // ═══════════════════════════════════════════════════════════════════════
     // SHEET MODE: Render paper, frame, title block, then drawing in viewport
     // ═══════════════════════════════════════════════════════════════════════
+    let sheetViewportClip: ScreenClipRect | null = null; // dimensions are clipped with the drawing (sheet mode)
     if (sheetEnabled && activeSheet) {
       const paper = activeSheet.paper;
       const frame = activeSheet.frame;
@@ -650,12 +621,8 @@ export function Drawing2DCanvas({
 
       // Create clip region for viewport
       ctx.beginPath();
-      ctx.rect(
-        mmToScreenX(viewport.x),
-        mmToScreenY(viewport.y),
-        mmToScreen(viewport.width),
-        mmToScreen(viewport.height)
-      );
+      sheetViewportClip = sheetViewportScreenRect(viewport, transform);
+      ctx.rect(...sheetViewportClip);
       ctx.clip();
 
       // Calculate drawing transform to fit in viewport
@@ -717,9 +684,6 @@ export function Drawing2DCanvas({
         };
 
         drawReferenceImages(ctx, referenceImages, modelToScreen);
-
-        // Line width in screen pixels (convert mm to screen)
-        const mmLineToScreen = (mmWeight: number) => Math.max(0.5, mmToScreen(mmWeight / drawingTransform.scaleFactor * 0.001));
 
         // DXF reference underlays render first, beneath the cut geometry
         // (issue #1782). Data is pre-mapped drawing space and exists only
@@ -837,27 +801,22 @@ export function Drawing2DCanvas({
         }
 
         // Draw lines (projection, silhouette, etc.)
-        const lineBounds = drawing.bounds;
-        const lineMargin = Math.max(lineBounds.max.x - lineBounds.min.x, lineBounds.max.y - lineBounds.min.y) * 0.5;
-        const lineMinX = lineBounds.min.x - lineMargin;
-        const lineMaxX = lineBounds.max.x + lineMargin;
-        const lineMinY = lineBounds.min.y - lineMargin;
-        const lineMaxY = lineBounds.max.y + lineMargin;
+        const lineBox = lineCullBox(drawing.bounds);
 
         for (const line of drawing.lines) {
-          if (line.category === 'cut') continue;
+          if (isPolygonCutLine(line)) continue;
           if (!showHiddenLines && line.visibility === 'hidden') continue;
 
           const { start, end } = line.line;
           if (!isFinite(start.x) || !isFinite(start.y) || !isFinite(end.x) || !isFinite(end.y)) continue;
-          if (start.x < lineMinX || start.x > lineMaxX || start.y < lineMinY || start.y > lineMaxY ||
-            end.x < lineMinX || end.x > lineMaxX || end.y < lineMinY || end.y > lineMaxY) continue;
+          if (!lineInCullBox(lineBox, start, end)) continue;
 
           let strokeColor = '#000000';
           let lineWidth = 0.25;
           let dashPattern: number[] = [];
 
           switch (line.category) {
+            case 'cut': lineWidth = 0.5; break;
             case 'projection': lineWidth = 0.25; break;
             case 'hidden': lineWidth = 0.18; strokeColor = '#666666'; dashPattern = [4, 2]; break;
             case 'silhouette': lineWidth = 0.35; break;
@@ -900,7 +859,7 @@ export function Drawing2DCanvas({
         // Point-cloud scan overlay (issue #1805) — drawn last, on top of the
         // cut geometry. `scanPoints` are already in the same drawing space
         // as `cutPolygons`/`lines`, so the same `modelToScreen` applies.
-        drawScanSectionScreenSpace(ctx, scanPoints, modelToScreen, scanOpacity);
+        drawScanSectionScreenSpace(ctx, scanPoints, modelToScreen, scanOpacity, scanOutline);
       };
 
       drawModelContent();
@@ -1105,7 +1064,7 @@ export function Drawing2DCanvas({
         // Get fill color - priority: IFC materials > override engine > IFC type fallback.
         // Direct mode only (#5496): the dark-paper analogue applies here, never
         // in sheet mode above, which stays on white paper.
-        let fillColor = getFillColorForType(polygon.ifcType, paperTheme.isDark), strokeColor = paperTheme.ink, opacity = 1;
+        let fillColor = getFillColorForType(polygon.ifcType, paperTheme.isDark), opacity = 1;
 
         // Use actual IFC material colors from the mesh data
         if (useIfcMaterials) {
@@ -1129,7 +1088,6 @@ export function Drawing2DCanvas({
           };
           const result = overrideEngine.applyOverrides(elementData);
           fillColor = result.style.fillColor;
-          strokeColor = result.style.strokeColor;
           opacity = result.style.opacity;
         }
 
@@ -1203,16 +1161,11 @@ export function Drawing2DCanvas({
       // 3. DRAW PROJECTION/SILHOUETTE LINES (skip 'cut' - already in polygons)
       // ═══════════════════════════════════════════════════════════════════════
       // Pre-compute bounds for line validation
-      const lineBounds = drawing.bounds;
-      const lineMargin = Math.max(lineBounds.max.x - lineBounds.min.x, lineBounds.max.y - lineBounds.min.y) * 0.5;
-      const lineMinX = lineBounds.min.x - lineMargin;
-      const lineMaxX = lineBounds.max.x + lineMargin;
-      const lineMinY = lineBounds.min.y - lineMargin;
-      const lineMaxY = lineBounds.max.y + lineMargin;
+      const lineBox = lineCullBox(drawing.bounds);
 
       for (const line of drawing.lines) {
         // Skip 'cut' lines - they're triangulation edges, already handled by polygons
-        if (line.category === 'cut') continue;
+        if (isPolygonCutLine(line)) continue;
 
         // Skip hidden lines if not showing
         if (!showHiddenLines && line.visibility === 'hidden') continue;
@@ -1222,10 +1175,7 @@ export function Drawing2DCanvas({
         if (!isFinite(start.x) || !isFinite(start.y) || !isFinite(end.x) || !isFinite(end.y)) {
           continue;
         }
-        if (start.x < lineMinX || start.x > lineMaxX || start.y < lineMinY || start.y > lineMaxY ||
-          end.x < lineMinX || end.x > lineMaxX || end.y < lineMinY || end.y > lineMaxY) {
-          continue;
-        }
+        if (!lineInCullBox(lineBox, start, end)) continue;
 
         // Set line style based on category. Ink follows the paper (#5496):
         // direct mode only, sheet mode above stays black-on-white.
@@ -1234,6 +1184,7 @@ export function Drawing2DCanvas({
         let dashPattern: number[] = [];
 
         switch (line.category) {
+          case 'cut': lineWidth = 0.5; break;
           case 'projection':
             lineWidth = 0.25;
             strokeColor = paperTheme.ink;
@@ -1311,121 +1262,14 @@ export function Drawing2DCanvas({
         scanPoints,
         (x, y) => ({ x: x * directScaleX + transform.x, y: y * directScaleY + transform.y }),
         scanOpacity,
+        scanOutline,
       );
     }
 
     // ═══════════════════════════════════════════════════════════════════════
     // 4. RENDER MEASUREMENTS (in screen space)
     // ═══════════════════════════════════════════════════════════════════════
-    const drawMeasureLine = (
-      start: { x: number; y: number },
-      end: { x: number; y: number },
-      distance: number,
-      color: string = '#2196F3',
-      isActive: boolean = false
-    ) => {
-      // Convert drawing coords to screen coords with axis-specific transforms
-      const measureScaleX = sectionAxis === 'side' ? -transform.scale : transform.scale;
-      const measureScaleY = sectionAxis === 'down' ? transform.scale : -transform.scale;
-      const screenStart = {
-        x: start.x * measureScaleX + transform.x,
-        y: start.y * measureScaleY + transform.y,
-      };
-      const screenEnd = {
-        x: end.x * measureScaleX + transform.x,
-        y: end.y * measureScaleY + transform.y,
-      };
-
-      // Draw line
-      ctx.strokeStyle = color;
-      ctx.lineWidth = isActive ? 2 : 1.5;
-      ctx.setLineDash(isActive ? [6, 3] : []);
-      ctx.beginPath();
-      ctx.moveTo(screenStart.x, screenStart.y);
-      ctx.lineTo(screenEnd.x, screenEnd.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Draw endpoints
-      ctx.fillStyle = color;
-      const endpointRadius = isActive ? 5 : 4;
-      ctx.beginPath();
-      ctx.arc(screenStart.x, screenStart.y, endpointRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(screenEnd.x, screenEnd.y, endpointRadius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Draw distance label
-      const midX = (screenStart.x + screenEnd.x) / 2;
-      const midY = (screenStart.y + screenEnd.y) / 2;
-
-      // Format distance using shared utility
-      const labelText = formatDistance(distance, unitDisplayOverrides);
-
-      // Background for label
-      ctx.font = '12px system-ui, sans-serif';
-      const textMetrics = ctx.measureText(labelText);
-      const padding = 4;
-      const bgWidth = textMetrics.width + padding * 2;
-      const bgHeight = 18;
-
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.fillRect(midX - bgWidth / 2, midY - bgHeight / 2, bgWidth, bgHeight);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(midX - bgWidth / 2, midY - bgHeight / 2, bgWidth, bgHeight);
-
-      // Text
-      ctx.fillStyle = '#000000';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(labelText, midX, midY);
-    };
-
-    // Draw completed measurements
-    for (const result of measureResults) {
-      drawMeasureLine(result.start, result.end, result.distance, '#2196F3', false);
-    }
-
-    // Draw active measurement
-    if (measureStart && measureCurrent) {
-      const dx = measureCurrent.x - measureStart.x;
-      const dy = measureCurrent.y - measureStart.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      drawMeasureLine(measureStart, measureCurrent, distance, '#FF5722', true);
-    }
-
-    // Draw snap indicator
-    if (measureMode && measureSnapPoint) {
-      // Use axis-specific transforms (matching canvas rendering)
-      const snapScaleX = sectionAxis === 'side' ? -transform.scale : transform.scale;
-      const snapScaleY = sectionAxis === 'down' ? transform.scale : -transform.scale;
-      const screenSnap = {
-        x: measureSnapPoint.x * snapScaleX + transform.x,
-        y: measureSnapPoint.y * snapScaleY + transform.y,
-      };
-
-      // Draw snap crosshair
-      ctx.strokeStyle = '#4CAF50';
-      ctx.lineWidth = 1.5;
-      const snapSize = 12;
-
-      ctx.beginPath();
-      ctx.moveTo(screenSnap.x - snapSize, screenSnap.y);
-      ctx.lineTo(screenSnap.x + snapSize, screenSnap.y);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(screenSnap.x, screenSnap.y - snapSize);
-      ctx.lineTo(screenSnap.x, screenSnap.y + snapSize);
-      ctx.stroke();
-
-      // Draw snap circle
-      ctx.beginPath();
-      ctx.arc(screenSnap.x, screenSnap.y, 6, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+    drawMeasurements2D(ctx, { measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sectionAxis, transform, unitDisplayOverrides });
 
     // ═══════════════════════════════════════════════════════════════════════
     // 5. RENDER POLYGON AREA MEASUREMENTS (in screen space)
@@ -1670,6 +1514,7 @@ export function Drawing2DCanvas({
       ctx.setLineDash([]);
     }
 
+    if (dimensionScene) drawDimensions2D(ctx, dimensionScene, sheetViewportClip);
     // 8. RENDER SELECTION HIGHLIGHT
     // ═══════════════════════════════════════════════════════════════════════
     if (selectedAnnotation) {
@@ -1823,7 +1668,7 @@ export function Drawing2DCanvas({
       );
     }
     markActiveDrawingCanvasRendered(canvas, snapshotSourceDrawing, textAnnotationEditing === null);
-  }, [referenceImages, drawing, snapshotSourceDrawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, unitDisplayOverrides, paperTheme, chNpMarken, chNpBemassungen, chNpKlassenLabel, chNpHerkunft]);
+  }, [chNpMarken, chNpBemassungen, chNpKlassenLabel, chNpHerkunft, referenceImages, drawing, snapshotSourceDrawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, dimensionScene, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, scanOutline, unitDisplayOverrides, paperTheme]);
 
   return (
     <div className="relative w-full h-full">

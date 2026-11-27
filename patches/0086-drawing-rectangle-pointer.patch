@@ -1,21 +1,21 @@
 diff --git a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
-index f39175db504e17964071d604f99c1c14da4b9f2e..a06f5eb8cf24e382d50d9ed40831de603cc4a91e 100644
+index b7558a418279ae617bba8bd5e07ff813fab63f62..3cfc317ef45118c4b3e5969caf1b57d984e08e55 100644
 --- a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
 +++ b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
-@@ -5,6 +5,9 @@
- import { drawDxfUnderlaysScreenSpace } from './drawing-underlays';
- import { drawReferenceImages } from './drawing-reference-images';
- import { useReferenceImagesForDrawing } from '@/hooks/useReferenceImagesForDrawing';
+@@ -28,6 +28,9 @@ import { type CachedSheetTransform } from '@/lib/drawing/sheet-geometry-key';
+ // Trassia overlay (not upstream) — Paket P3-NP: Bemassung zwischen Bruchkanten.
+ import { chNpLayout, chNpZeichnen, type ChNpFarben } from '@/lib/ch/np/np-zeichnen';
+ 
 +import { ChDrawingRectPointer } from './ChZeichnungAusschnitt';
 +import { chDrawingYFactor, type ChDrawingProjection } from '@/lib/ch/zeichnung-ausschnitt';
 +import { chQpUndistorted } from '@/lib/ch/qp-corridor';
- import React, { useRef, useState, useEffect } from 'react';
- import {
-   GraphicOverrideEngine,
-@@ -328,6 +331,25 @@ export function Drawing2DCanvas({
-   const referenceImages = useReferenceImagesForDrawing(drawing.config.plane);
-   const canvasRef = useRef<HTMLCanvasElement>(null);
-   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+ import { resolveSheetTransform } from '@/lib/drawing/sheet-transform';
+ import { useDrawingElementPropertiesLookup } from '@/hooks/useDrawingElementPropertiesLookup';
+ import { markActiveDrawingCanvasRendered, registerActiveDrawingCanvas } from '@/lib/drawing/active-canvas-snapshot';
+@@ -295,6 +298,25 @@ export function Drawing2DCanvas({
+   chNpHerkunft,
+   paperTheme = DEFAULT_PAPER_THEME,
+ }: Drawing2DCanvasProps): React.ReactElement {
 +  // Exact inverse of the preview's raw/sheet mapping, including display-only Y stretch.
 +  const rectProjection = (() : ChDrawingProjection | null => {
 +    const factor = chDrawingYFactor(drawing.bounds, chQpUndistorted(drawing).bounds);
@@ -35,11 +35,11 @@ index f39175db504e17964071d604f99c1c14da4b9f2e..a06f5eb8cf24e382d50d9ed40831de60
 +      scaleY: (sectionAxis === 'down' ? transform.scale : -transform.scale) * factor };
 +  })();
 +
-   // Resolved once per (model set, polygon set) change, never per draw frame.
-   const getElementProperties = useDrawingElementPropertiesLookup(drawing, overrideEngine, overridesEnabled);
-   useEffect(() => canvasRef.current ? registerActiveDrawingCanvas(canvasRef.current, snapshotSourceDrawing) : undefined, [snapshotSourceDrawing]);
-@@ -1804,10 +1826,9 @@ export function Drawing2DCanvas({
-   }, [referenceImages, drawing, snapshotSourceDrawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, unitDisplayOverrides, paperTheme, chNpMarken, chNpBemassungen, chNpKlassenLabel, chNpHerkunft]);
+   const referenceImages = useReferenceImagesForDrawing(drawing.config.plane);
+   const canvasRef = useRef<HTMLCanvasElement>(null);
+   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+@@ -1649,10 +1671,9 @@ export function Drawing2DCanvas({
+   }, [chNpMarken, chNpBemassungen, chNpKlassenLabel, chNpHerkunft, referenceImages, drawing, snapshotSourceDrawing, transform, showHiddenLines, canvasSize, overrideEngine, overridesEnabled, getElementProperties, entityColorMap, useIfcMaterials, measureMode, measureStart, measureCurrent, measureResults, measureSnapPoint, sheetEnabled, activeSheet, sectionAxis, isPinned, annotation2DActiveTool, annotation2DCursorPos, polygonAreaPoints, polygonAreaResults, textAnnotations, textAnnotationEditing, cloudAnnotationPoints, cloudAnnotations, selectedAnnotation, dimensionScene, ifcAnnotationLines, ifcAnnotationTexts, ifcAnnotationFills, dxfUnderlays, scanPoints, scanOpacity, scanOutline, unitDisplayOverrides, paperTheme]);
  
    return (
 -    <canvas

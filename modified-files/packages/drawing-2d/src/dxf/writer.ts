@@ -55,6 +55,7 @@
  */
 
 import { cssToAci } from './aci-colors.js';
+import { dxfWidthFactor } from './text-layout.js';
 import type { Point2D } from '../types.js';
 
 /** Line style resolved to a DXF linetype. `dashed` maps to the `DASHED` LTYPE. */
@@ -168,7 +169,7 @@ export interface DxfWriterOptions {
  * {@link cssToAci}.
  */
 export class DxfWriter {
-  private readonly layers = new Map<string, DxfLayerRecord>();
+  private readonly layers = new Map<string, DxfLayerRecord>(); // uppercase sanitized names
   /** Raw (pre-sanitization) name → assigned safe name, for stable reuse + collision disambiguation. */
   private readonly layerNameBySource = new Map<string, string>();
   private readonly entities: EntityWrite[] = [];
@@ -219,20 +220,20 @@ export class DxfWriter {
    * `addPolyline`/`addLine`/`addText`. Re-registering the same source name
    * with a different colour/linetype is a no-op (first registration wins) —
    * callers should derive one style per logical layer. DIFFERENT source
-   * names whose sanitized forms collide (`Wände`/`Wønde` → `W_nde`) get a
-   * numeric suffix (`W_nde`, `W_nde_2`, …) instead of silently merging onto
-   * one layer.
+   * names whose sanitized forms compare equal case-insensitively get a
+   * numeric suffix (`Walls`, `walls_2`, …). AutoCAD reserves Defpoints
+   * for its non-plotting layer.
    */
   layer(name: string, cssColor: string, linetype: DxfLinetype = 'CONTINUOUS'): string {
     const assigned = this.layerNameBySource.get(name);
     if (assigned !== undefined) return assigned;
     const base = sanitizeDxfLayerName(name);
     let safe = base;
-    for (let n = 2; this.layers.has(safe); n++) {
+    for (let n = 2; this.layers.has(safe.toUpperCase()) || safe.toUpperCase() === 'DEFPOINTS'; n++) {
       const suffix = `_${n}`;
       safe = base.slice(0, MAX_LAYER_NAME_LENGTH - suffix.length) + suffix;
     }
-    this.layers.set(safe, { name: safe, aci: cssToAci(cssColor), linetype });
+    this.layers.set(safe.toUpperCase(), { name: safe, aci: cssToAci(cssColor), linetype });
     this.layerNameBySource.set(name, safe);
     return safe;
   }
@@ -299,6 +300,7 @@ export class DxfWriter {
       hAlign?: DxfTextHAlign;
       vAlign?: DxfTextVAlign;
       colorOverride?: string;
+      widthScale?: number; fitTo?: Point2D; fitUniform?: boolean; // group 41 (omitted at 1); Fit (72=5), or Aligned (72=3) when uniform, replaces it
     } = {},
   ): void {
     const clean = sanitizeDxfText(text);
@@ -307,24 +309,22 @@ export class DxfWriter {
     // zero-height, invisible TEXT entity, exactly what the guard exists to
     // skip. Reject non-finite heights outright instead.
     if (!clean.trim() || !Number.isFinite(height) || height <= 0) return;
-    this.extend(position);
+    this.extend(position); if (options.fitTo) this.extend(options.fitTo); // the fitted span is extent too
     const rotationDeg = options.rotationDeg ?? 0;
-    const hAlign = options.hAlign ?? 'left';
-    const vAlign = options.vAlign ?? 'baseline';
-    const hCode = H_ALIGN_CODE[hAlign];
-    const vCode = V_ALIGN_CODE[vAlign];
+    const [hCode, vCode] = options.fitTo ? [options.fitUniform ? 3 : 5, 0] : [H_ALIGN_CODE[options.hAlign ?? 'left'], V_ALIGN_CODE[options.vAlign ?? 'baseline']];
     const needsAlignPoint = hCode !== 0 || vCode !== 0;
     const colorGroup = this.colorOverrideGroup(options.colorOverride);
+    const widthScale = options.fitTo ? undefined : dxfWidthFactor(options.widthScale);
     this.entities.push(() => {
       let s =
         '0\nTEXT\n8\n' + layer + '\n' + colorGroup +
         '10\n' + fmt(position.x) + '\n20\n' + fmt(position.y) + '\n30\n0.0\n' +
-        '40\n' + fmt(height) + '\n1\n' + clean + '\n' +
+        '40\n' + fmt(height) + '\n1\n' + clean + '\n' + (widthScale ? '41\n' + fmt(widthScale) + '\n' : '') +
         '50\n' + fmt(rotationDeg) + '\n' +
         '72\n' + hCode + '\n' +
         '73\n' + vCode + '\n';
       if (needsAlignPoint) {
-        s += '11\n' + fmt(position.x) + '\n21\n' + fmt(position.y) + '\n31\n0.0\n';
+        s += '11\n' + fmt((options.fitTo ?? position).x) + '\n21\n' + fmt((options.fitTo ?? position).y) + '\n31\n0.0\n';
       }
       return s;
     });

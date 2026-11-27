@@ -11,32 +11,34 @@
  * hosts stay in lock-step.
  */
 
-import { lazy, Suspense, type ReactNode } from 'react';
-import type { WorkspacePanelId } from './registry';
+import { loadBcfPanel, loadValidationPanel, loadLensPanel, loadGanttPanel, loadListPanel, loadExtensionsPanel } from './deferred-panel-modules';
+import { DeferredPanel } from './DeferredPanel';
+import { AssistantSourceContext } from '@/components/viewer/assistant/AssistantAction';
+import { Suspense, type ReactNode } from 'react';
+import { lazyChunk } from '@/lib/lazy-chunk';
+import { panelModelGateMode, type WorkspacePanelId } from './registry';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import { HierarchyPanel } from '@/components/viewer/HierarchyPanel';
 import { PropertiesPanel } from '@/components/viewer/PropertiesPanel';
-import { ComparePanel } from '@/components/viewer/ComparePanel';
-import { BCFPanel } from '@/components/viewer/BCFPanel';
-import { ValidationPanel } from '@/components/viewer/validation/ValidationPanel';
-import { LensPanel } from '@/components/viewer/LensPanel';
-import { ClashPanel } from '@/components/viewer/ClashPanel';
-import { ExtensionsPanel } from '@/components/extensions/ExtensionsPanel';
-import { ScriptPanel } from '@/components/viewer/ScriptPanel';
-import { GanttPanel } from '@/components/viewer/schedule/GanttPanel';
-import { ListPanel } from '@/components/viewer/lists/ListPanel';
+const InfluxPanel = lazyChunk(() => import('@/components/viewer/influx/InfluxPanel').then(module => ({ default: module.InfluxPanel })));
+
+const ComparePanel = lazyChunk(() => import('@/components/viewer/ComparePanel').then(module => ({ default: module.ComparePanel })));
+const ClashPanel = lazyChunk(() => import('@/components/viewer/ClashPanel').then(module => ({ default: module.ClashPanel })));
 import { RoomPanel } from '@/components/viewer/RoomPanel';
 import { ZonesPanel } from '@/components/viewer/ZonesPanel';
-import { LoadReportPanel } from '@/components/viewer/LoadReportPanel';
+// Opened on demand; kept off the boot path (eager-bundle ratchet, #8341).
+const LoadReportPanel = lazyChunk(() => import('@/components/viewer/LoadReportPanel').then((m) => ({ default: m.LoadReportPanel })));
 import { ChangesPanel } from '@/components/viewer/ChangesPanel';
 import { ChangeSetPanel } from '@/components/viewer/change-sets/ChangeSetPanel';
 import { CostPanel } from '@/components/viewer/CostPanel';
 import { EnvironmentPanel } from '@/components/viewer/EnvironmentPanel';
-import { PointCloudPanel } from '@/components/viewer/PointCloudPanel';
 import { MeasurementsPanel } from '@/components/viewer/MeasurementsPanel';
 import { PlacementPanel } from '@/components/viewer/placement/PlacementPanel';
 import { ModelInspectorPanel } from '@/components/viewer/model-inspector/ModelInspectorPanel';
-import { useViewerStore } from '@/store';
+import { PanelModelGate } from '@/components/viewer/PanelModelGate';
+import { isPanelAvailable } from './availability';
+import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
+import { loadIdsStudioRuntime } from '@/lib/ids-studio/runtime-loader';
 // Trassia overlay (not upstream) — Paket V-DRAPE, siehe ChDrapePanel.tsx.
 import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
 // Trassia overlay (not upstream) — Paket V-KUBATUR, siehe ChKubaturPanel.tsx.
@@ -50,35 +52,64 @@ import { ChLaengsschnittPanel } from '@/components/viewer/ChLaengsschnittPanel';
 // `?entwurf=1` nicht erreichbar: die Registratur fuehrt den Eintrag dann gar
 // nicht. Ein STATISCHER Import hier zoege den Spike ins Startbuendel und die
 // Flagge waere eine Sichtbarkeits-, keine Ladefrage.
-const ChEntwurfPanel = lazy(() =>
+const ChEntwurfPanel = lazyChunk(() =>
   import('@/components/viewer/ChEntwurfPanel').then((m) => ({ default: m.ChEntwurfPanel })),
 );
 // Eigene kleine Fehlergrenze: die Upstream-ChunkErrorBoundary nimmt seit 10.x nur
 // feste Upstream-Beschriftungen an (siehe ChEntwurfFehlergrenze.tsx).
 import { ChEntwurfFehlergrenze } from '@/components/viewer/ChEntwurfFehlergrenze';
+import { useViewerStore } from '@/store';
 // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
 // dynamic chunk keeps it out of the initial bundle until first opened.
-const LayersPanel = lazy(() =>
+const LayersPanel = lazyChunk(() =>
   import('@/components/viewer/layers/LayersPanel').then((m) => ({ default: m.LayersPanel })),
 );
 // Lazy: the Sources panel (cloud-source browser + provider plumbing) is only
 // needed once a user opens it — keep it out of the first-paint bundle.
-const SourcesPanel = lazy(() =>
+const SourcesPanel = lazyChunk(() =>
   import('@/components/sources/SourcesPanel').then((m) => ({ default: m.SourcesPanel })),
 );
 
+// Lazy: the Point Clouds panel carries scan-to-BIM detection, review and creation (#6894);
+// it stays out of the first-paint bundle until first opened.
+const PointCloudPanel = lazyChunk(() => import('@/components/viewer/PointCloudPanel').then((m) => ({ default: m.PointCloudPanel })));
 // Lazy: the Charts panel pulls in ECharts; it stays out of the first-paint bundle.
-const ChartsPanel = lazy(() => import('@/components/viewer/charts/ChartsPanel').then((m) => ({ default: m.ChartsPanel })));
-const DocumentPanel = lazy(() => import('@/components/viewer/document/DocumentPanel').then((m) => ({ default: m.DocumentPanel })));
+const ChartsPanel = lazyChunk(() => import('@/components/viewer/charts/ChartsPanel').then((m) => ({ default: m.ChartsPanel })));
+const DocumentPanel = lazyChunk(() => import('@/components/viewer/document/DocumentPanel').then((m) => ({ default: m.DocumentPanel })));
 // Lazy: the Flow panel pulls in React Flow; it stays out of the first-paint bundle.
-const FlowPanel = lazy(() => import('@/components/viewer/flow/FlowPanel').then((m) => ({ default: m.FlowPanel })));
+const FlowPanel = lazyChunk(() => import('@/components/viewer/flow/FlowPanel').then((m) => ({ default: m.FlowPanel })));
 // Lazy: the drawing view pulls in its canvas, export and underlay code; its runtime
 // (generation, persistence) is DrawingRuntimeHost, mounted eagerly in ViewportContainer.
-const DrawingPanel = lazy(() => import('@/components/viewer/drawing/DrawingPanel').then((m) => ({ default: m.DrawingPanel })));
+const DrawingPanel = lazyChunk(() => import('@/components/viewer/drawing/DrawingPanel').then((m) => ({ default: m.DrawingPanel })));
 // Lazy: the filmstrip of saved basket views (#5508), out of the first-paint bundle like the other bottom panels.
-const PresentationPanel = lazy(() => import('@/components/viewer/presentation/PresentationPanel').then((m) => ({ default: m.PresentationPanel })));
+const PresentationPanel = lazyChunk(() => import('@/components/viewer/presentation/PresentationPanel').then((m) => ({ default: m.PresentationPanel })));
 
-const AppearancePanel = lazy(() => import('@/components/viewer/appearance/AppearancePanel').then(m => ({ default: m.AppearancePanel })));
+const ScriptPanel = lazyChunk(() => import('@/components/viewer/ScriptPanel').then(m => ({ default: m.ScriptPanel })));
+
+const AssistantPanel = lazyChunk(() => import('@/components/viewer/assistant/AssistantPanel').then(m => ({ default: m.AssistantPanel })));
+
+const SemanticPanel = lazyChunk(() => import('@/components/viewer/SemanticPanel').then(m => ({ default: m.SemanticPanel })));
+function SemanticPanelBody() {
+  return <ChunkErrorBoundary label="Linked records panel"><Suspense fallback={null}><SemanticPanel /></Suspense></ChunkErrorBoundary>;
+}
+
+const ReviewPanel = lazyChunk(() => import('@/components/viewer/review/ReviewPanel').then(m => ({ default: m.ReviewPanel })));
+function ReviewPanelBody() {
+  return <ChunkErrorBoundary label="Review panel"><Suspense fallback={null}><ReviewPanel /></Suspense></ChunkErrorBoundary>;
+}
+
+// Lazy: IDS Studio pulls in the authoring core, lint rules and CodeMirror (IDS-030).
+// The panel mounts only once the store's authoring runtime is installed, so the
+// Studio slice's synchronous actions are always ready when the panel calls them.
+const IdsStudioPanel = lazyChunk(() => Promise.all([
+  import('@/components/viewer/ids-studio/IdsStudioPanel'),
+  loadIdsStudioRuntime(),
+]).then(([m]) => ({ default: m.IdsStudioPanel })));
+function IdsStudioPanelBody() {
+  return <ChunkErrorBoundary label="IDS Studio panel"><Suspense fallback={null}><IdsStudioPanel /></Suspense></ChunkErrorBoundary>;
+}
+
+const AppearancePanel = lazyChunk(() => import('@/components/viewer/appearance/AppearancePanel').then(m => ({ default: m.AppearancePanel })));
 
 // Each lazy panel needs its own stable host identity. Reusing the boundary
 // itself as the body can retain another panel's failed-chunk state on a switch.
@@ -103,6 +134,10 @@ function PresentationPanelBody() {
 
 function ChartsPanelBody() {
   return <ChunkErrorBoundary label="Charts panel"><Suspense fallback={null}><ChartsPanel /></Suspense></ChunkErrorBoundary>;
+}
+
+function LoadReportPanelBody({ onClose }: { onClose: () => void }) {
+  return <ChunkErrorBoundary label="Load report panel"><Suspense fallback={null}><LoadReportPanel onClose={onClose} /></Suspense></ChunkErrorBoundary>;
 }
 
 function LayersPanelBody({ onClose }: { onClose: () => void }) {
@@ -135,7 +170,11 @@ function PointCloudPanelBody({ onClose }: { onClose: () => void }) {
     for (const m of s.models.values()) total += m.geometryResult?.totalTriangles ?? 0;
     return total;
   });
-  return <PointCloudPanel assetCount={assetCount} triangleCount={triangleCount} onClose={onClose} />;
+  return (
+    <ChunkErrorBoundary label="Point cloud panel">
+      <Suspense fallback={null}><PointCloudPanel assetCount={assetCount} triangleCount={triangleCount} onClose={onClose} /></Suspense>
+    </ChunkErrorBoundary>
+  );
 }
 
 /**
@@ -147,36 +186,38 @@ function PointCloudPanelBody({ onClose }: { onClose: () => void }) {
  * retired in favour of the strip header's single Close.
  */
 export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): ReactNode {
+  // Switched off by the host: render nothing, so the panel's chunk is never requested.
+  if (!isPanelAvailable(id)) return null;
+  const body = panelBody(id, onClose);
+  const gate = panelModelGateMode(id);
+  return <AssistantSourceContext panel={id}>{gate ? <PanelModelGate id={id} mode={gate} onClose={onClose}>{body}</PanelModelGate> : body}</AssistantSourceContext>;
+}
+
+function panelBody(id: WorkspacePanelId, onClose: () => void): ReactNode {
   switch (id) {
     // Hierarchy's home is the left slot (#1267); it is never routed to the right
     // pane / float / pop-out, but the case keeps the id to body map exhaustive.
+    case 'influx': return <ChunkErrorBoundary key="influx" label="InfluxDB 2"><Suspense fallback={null}><InfluxPanel /></Suspense></ChunkErrorBoundary>;
+    case 'assistant': return <ChunkErrorBoundary label="Assistant panel"><Suspense fallback={null}><AssistantPanel /></Suspense></ChunkErrorBoundary>;
     case 'appearance': return <AppearancePanelBody />;
     case 'hierarchy': return <HierarchyPanel />;
-    case 'properties': return <PropertiesPanel />;
-    case 'compare': return <ComparePanel onClose={onClose} />;
-    case 'bcf': return <BCFPanel onClose={onClose} />;
-    case 'validation': return <ValidationPanel onClose={onClose} />;
-    case 'lens': return <LensPanel onClose={onClose} />;
-    case 'clash': return <ClashPanel onClose={onClose} />;
-    case 'extensions': return <ExtensionsPanel onClose={onClose} />;
-    case 'script': return <ScriptPanel />;
-    case 'gantt': return <GanttPanel />;
-    case 'lists': return <ListPanel />;
+    // The anchor wraps every Information branch (entity, model metadata,
+    // multi-selection, empty): the welcome tour's "Read its data" step broke
+    // whenever the panel showed one of the branches that lacked it.
+    case 'properties': return <div {...tourAnchor(TOUR_ANCHORS.propertiesPanel)} className="h-full"><PropertiesPanel /></div>;
+    case 'compare': return <ChunkErrorBoundary key="compare" label="Compare models"><Suspense fallback={null}><ComparePanel onClose={onClose} /></Suspense></ChunkErrorBoundary>;
+    case 'bcf': return <DeferredPanel id="bcf" onClose={onClose} load={loadBcfPanel} />;
+    case 'validation': return <DeferredPanel id="validation" onClose={onClose} load={loadValidationPanel} />;
+    case 'lens': return <DeferredPanel id="lens" onClose={onClose} load={loadLensPanel} />;
+    case 'clash': return <ChunkErrorBoundary key="clash" label="Clash panel"><Suspense fallback={null}><ClashPanel onClose={onClose} /></Suspense></ChunkErrorBoundary>;
+    case 'extensions': return <DeferredPanel id="extensions" onClose={onClose} load={loadExtensionsPanel} />;
+    case 'script': return <ChunkErrorBoundary label="Script panel"><Suspense fallback={null}><ScriptPanel /></Suspense></ChunkErrorBoundary>;
+    case 'gantt': return <DeferredPanel id="gantt" onClose={onClose} load={loadGanttPanel} />;
+    case 'lists': return <DeferredPanel id="lists" onClose={onClose} load={loadListPanel} />;
     case 'collab': return <RoomPanel onClose={onClose} />;
     case 'zones': return <ZonesPanel onClose={onClose} />;
-    case 'loadReport': return <LoadReportPanel onClose={onClose} />;
-    case 'drape': return <ChDrapePanel onClose={onClose} />;
-    case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
-    case 'laengsschnitt': return <ChLaengsschnittPanel onClose={onClose} />;
+    case 'loadReport': return <LoadReportPanelBody onClose={onClose} />;
     case 'changes': return <ChangesPanel onClose={onClose} />;
-    // Trassia (Trassierungs-Spike S0, nur bei `?entwurf=1`).
-    case 'entwurf': return (
-      <ChEntwurfFehlergrenze>
-        <Suspense fallback={null}>
-          <ChEntwurfPanel onClose={onClose} />
-        </Suspense>
-      </ChEntwurfFehlergrenze>
-    );
     case 'layers': return <LayersPanelBody onClose={onClose} />;
     case 'sources': return <SourcesPanelBody onClose={onClose} />;
     case 'charts': return <ChartsPanelBody />;
@@ -190,6 +231,20 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
     case 'measurements': return <MeasurementsPanel onClose={onClose} />;
     case 'placement': return <PlacementPanel onClose={onClose} />;
     case 'model': return <ModelInspectorPanel onClose={onClose} />;
+    case 'semantic': return <SemanticPanelBody />;
+    case 'review': return <ReviewPanelBody />;
+    case 'idsStudio': return <IdsStudioPanelBody />;
+    case 'drape': return <ChDrapePanel onClose={onClose} />;
+    case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
+    case 'laengsschnitt': return <ChLaengsschnittPanel onClose={onClose} />;
+    // Trassia (Trassierungs-Spike S0, nur bei `?entwurf=1`).
+    case 'entwurf': return (
+      <ChEntwurfFehlergrenze>
+        <Suspense fallback={null}>
+          <ChEntwurfPanel onClose={onClose} />
+        </Suspense>
+      </ChEntwurfFehlergrenze>
+    );
     case 'changeSets': return <ChangeSetPanel onClose={onClose} />;
   }
 }

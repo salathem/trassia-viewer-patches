@@ -5,6 +5,7 @@
 import { QuantityType } from '@ifc-lite/data';
 import { ProjectUnits } from '@ifc-lite/parser';
 import { resolveQuantityDisplay, formatConverted } from '@/lib/units/display';
+import { signedByPrintedValue } from './signedByPrintedValue';
 
 // Constructed once rather than per call: every measure-tool distance readout
 // (including the live-drag SVG labels, which reformat on every pointer-move
@@ -15,12 +16,6 @@ const EMPTY_UNITS = ProjectUnits.empty();
 /** Auto-scaled metric string (mm / cm / m / km), the fallback used when no
  *  LENGTHUNIT override is set. */
 function formatAutoScaledMetric(meters: number): string {
-  // Trassia: EXACTLY zero is not a small length, it is no length — and the
-  // auto-scaler used to render it as `0.0 mm`, so the first point of a
-  // polyline in a metre-unit model announced itself in millimetres before any
-  // distance existed at all (QA 2026-08-26, S-03). Metres is the neutral unit
-  // to say "nothing yet" in; every non-zero value keeps its previous scaling.
-  if (meters === 0) return '0.000 m';
   if (meters < 0.01) {
     return `${(meters * 1000).toFixed(1)} mm`;
   } else if (meters < 1) {
@@ -55,10 +50,25 @@ function formatAutoScaledMetric(meters: number): string {
  * value a second time.
  */
 export function formatDistance(meters: number, overrides: Record<string, string> = {}): string {
+  return formatDistanceValue(meters, overrides, true);
+}
+
+function formatDistanceValue(meters: number, overrides: Record<string, string>, exactZeroInMetres: boolean): string {
   const disp = resolveQuantityDisplay(meters, QuantityType.Length, EMPTY_UNITS, overrides);
-  if (disp.converted === null) return formatAutoScaledMetric(meters);
+  if (disp.converted === null) {
+    // An exact zero starts a new measurement at 0.000 m (Trassia QA S-03).
+    return exactZeroInMetres && meters === 0 ? '0.000 m' : formatAutoScaledMetric(meters);
+  }
   const formatted = formatConverted(disp.converted);
   return disp.unit ? `${formatted} ${disp.unit}` : formatted;
+}
+
+/** Signed delta in the selected unit, with no sign when rounded to zero. */
+export function formatSignedDistance(meters: number, overrides: Record<string, string> = {}): string {
+  // A non-zero submillimetre delta rounds in millimetres. Compare against a
+  // zero in those same units while preserving the neutral exact-zero label.
+  const format = (magnitude: number) => formatDistanceValue(magnitude, overrides, meters === 0);
+  return signedByPrintedValue(meters, format, false);
 }
 
 /**
@@ -108,12 +118,8 @@ export function formatSignedTriple(
   p: { x: number; y: number; z: number },
   overrides: Record<string, string> = {},
 ): string {
-  const axis = (n: number) => {
-    const magnitude = formatDistanceMagnitude(n, overrides);
-    // A negative value already carries its own '-' from the formatter, so only
-    // the positive direction needs one added.
-    return n > 0 ? `+${magnitude}` : magnitude;
-  };
+  const format = (meters: number) => formatDistanceMagnitude(meters, overrides);
+  const axis = (n: number) => signedByPrintedValue(n, format, true);
   return `ΔX ${axis(p.x)}  ΔY ${axis(p.y)}  ΔZ ${axis(p.z)}`;
 }
 

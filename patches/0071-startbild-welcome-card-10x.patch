@@ -1,41 +1,106 @@
 diff --git a/apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx b/apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx
-index 6dba7b99465a7b80d4aae8876f9c4aac2a5a6c9b..df790b503b278819856806cada1ead685a06c80c 100644
+index 603bdc5f957fe997de88fc7687f9782f3b237be4..b25ff693a00888d268c664567249410d36be3ea5 100644
 --- a/apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportWelcomeCard.tsx
-@@ -26,6 +26,9 @@ import { WebGpuDisabledCaption } from './WebGpuTroubleshooting';
- import { TourInvite } from '@/components/tours/TourInvite';
- import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
- import { EVENT_SHOW_SHORTCUTS } from '@/lib/tours/events';
-+// Trassia overlay (not upstream) — Startkarte und Modusschalter, siehe ChStartkarte.tsx und lib/ch/modus.ts.
+@@ -44,6 +44,8 @@ import { EVENT_SHOW_SHORTCUTS } from '@/lib/tours/events';
+ import { trackUiEvent } from '@/lib/analytics';
+ import { onFieldTelemetry } from '@/lib/perf/fieldTelemetryLoader';
+ import { markLoadIntent } from '@/lib/load-intent';
 +import { ChStartkarte } from './ChStartkarte';
 +import { chVollmodus } from '@/lib/ch/modus';
  
- /** Plain CSS text, not UI copy — kept as a module-level constant (rather than
-  *  an inline `<style>{`…`}</style>` template literal) so the i18n literal
-@@ -88,6 +91,11 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
+ const FOCUS = 'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+ const ACTION = `inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold whitespace-nowrap transition-colors ${FOCUS} disabled:cursor-not-allowed disabled:opacity-45`;
+@@ -129,6 +131,18 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
+   const hasRecent = local && recentFiles.length > 0;
+   const hostOpens = hostOpensModel();
+ 
++  // The Trassia card offers all three entries. For a restricted host keep
++  // the stock card, which renders only permitted actions.
++  if (!chVollmodus() && local && samples && blank) {
++    return (
++      <div {...tourAnchor(TOUR_ANCHORS.emptyStateCard)} className="flex w-full max-w-md flex-col">
++        <ChStartkarte onOpen={onOpenClick} onBlank={onStartBlank}
++          webgpuSupported={webgpu.supported} webgpuChecking={webgpu.checking} />
++        <WelcomeRecentFiles files={recentFiles} disabled={actionsDisabled} onOpen={(file) => { void openRecent(file); }} />
++      </div>
++    );
++  }
++
    return (
-     <div {...tourAnchor(TOUR_ANCHORS.emptyStateCard)} className="max-w-md w-full bg-white dark:bg-[#16161e] border border-zinc-300 dark:border-[#3b4261] p-8 flex flex-col items-center transition-transform hover:-translate-y-1 duration-200 shadow-lg">
+     <div {...tourAnchor(TOUR_ANCHORS.emptyStateCard)} className="flex w-full max-w-[500px] flex-col">
+       <h2 className="text-4xl font-extrabold leading-[1.05] tracking-[-0.035em] text-foreground md:text-5xl">
+diff --git a/apps/viewer/src/components/viewer/WelcomeFooterChips.tsx b/apps/viewer/src/components/viewer/WelcomeFooterChips.tsx
+index 62e9105c8f78a590ae62f16f9218d685d4d0f5f3..b7cdfbfa4268b344a71c63c8f843af74821ff5fa 100644
+--- a/apps/viewer/src/components/viewer/WelcomeFooterChips.tsx
++++ b/apps/viewer/src/components/viewer/WelcomeFooterChips.tsx
+@@ -38,7 +38,7 @@ export function WelcomeFooterChips({ tourAvailable }: {
+   const { t } = useTranslation();
+   // A host can switch the product links and the tours off (`lib/features`).
+   const links = chVollmodus() && isFeatureEnabled('help.product-links');
+-  const tour = tourAvailable && isTourIdAvailable('welcome');
++  const tour = chVollmodus() && tourAvailable && isTourIdAvailable('welcome');
+   return (
+     <div className="mt-12 flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs text-muted-foreground">
+       {links || tour ? <p data-welcome-learn-line="" className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+diff --git a/apps/viewer/src/components/viewer/welcome/ViewportWelcome.tsx b/apps/viewer/src/components/viewer/welcome/ViewportWelcome.tsx
+index 4bc1fbc07405e730680fe9df7ab67b865779dfb8..e429c8d61491d0920ebe573c0781a248f5bda9ad 100644
+--- a/apps/viewer/src/components/viewer/welcome/ViewportWelcome.tsx
++++ b/apps/viewer/src/components/viewer/welcome/ViewportWelcome.tsx
+@@ -26,6 +26,7 @@ import { ViewportWelcomeCard, type ViewportWelcomeCardProps } from '../ViewportW
+ import { WelcomeFooterChips } from '../WelcomeFooterChips';
+ import { msSinceLoadIntent, subscribeLoadIntent } from '@/lib/load-intent';
+ import { whenQuiet } from './welcome-mark-schedule';
++import { chVollmodus } from '@/lib/ch/modus';
  
-+      {/* Trassia (Pakete U1/U2, Review B3 «Startbild: fremdes Produkt»): im
-+          Trassia-Modus ersetzt die Startkarte Logo, Titel und Aktionen der
-+          Upstream-Karte (Cloud, LLM, Demo-Stack, Tour-Einladung); die Liste der
-+          zuletzt geoeffneten Dateien darunter bleibt. `?voll=1` zeigt den Upstream. */}
-+      {chVollmodus() ? (<>
-       <style>{FLOAT_SLOW_KEYFRAMES}</style>
+ /** Viewport width (px) from which the 3D mark has room beside the actions. */
+ const SCENE_MIN_WIDTH = 720;
+@@ -52,9 +53,10 @@ export const MARK_IDLE_TIMEOUT_MS = 2000;
+  * once, before any await on the way to `loading`; if no load follows (the
+  * picker was cancelled), the mark gets its turn after the hold.
+  */
+-function useMarkMayStart(): boolean {
++function useMarkMayStart(enabled: boolean): boolean {
+   const [ready, setReady] = useState(false);
+   useEffect(() => {
++    if (!enabled) return;
+     let cancelQuiet = () => {};
+     let hold = 0;
+     const holdFor = (ms: number) => { cancelQuiet(); window.clearTimeout(hold); hold = window.setTimeout(arm, ms); };
+@@ -71,28 +73,30 @@ function useMarkMayStart(): boolean {
+     if (since < INTENT_HOLD_MS) holdFor(INTENT_HOLD_MS - since);
+     else arm();
+     return () => { cancelQuiet(); window.clearTimeout(hold); unsubscribe(); };
+-  }, []);
++  }, [enabled]);
+   return ready;
+ }
  
-       {/* Logo Section */}
-@@ -246,6 +254,14 @@ export function ViewportWelcomeCard({ webgpu, onOpenClick, onStartBlank, recentF
-       {/* First-run tour invite — needs loadFile, so it shares the
-           WebGPU gate of every other action on this card. */}
-       {webgpu.supported && !webgpu.checking && <TourInvite />}
-+      </>) : (
-+        <ChStartkarte
-+          onOpen={onOpenClick}
-+          onBlank={onStartBlank}
-+          webgpuSupported={webgpu.supported}
-+          webgpuChecking={webgpu.checking}
-+        />
-+      )}
+ export function ViewportWelcome(props: ViewportWelcomeCardProps) {
+   const ref = useRef<HTMLDivElement>(null);
+   const [wide, setWide] = useState(false);
+-  const idle = useMarkMayStart();
++  const fullMode = chVollmodus();
++  const idle = useMarkMayStart(fullMode);
++  const showMark = fullMode && wide;
  
-       {recentFiles.length > 0 && (
-         <div className="mt-6 w-full border-t border-zinc-200 dark:border-[#3b4261] pt-4">
+   useEffect(() => {
+     const el = ref.current;
+-    if (!el || typeof ResizeObserver === 'undefined') return;
++    if (!fullMode || !el || typeof ResizeObserver === 'undefined') return;
+     const observer = new ResizeObserver(([entry]) => setWide(entry.contentRect.width >= SCENE_MIN_WIDTH));
+     observer.observe(el);
+     return () => observer.disconnect();
+-  }, []);
++  }, [fullMode]);
+ 
+   return (
+     <div ref={ref} className="flex w-full max-w-6xl flex-col">
+-      <div className={wide ? 'grid grid-cols-[minmax(0,500px)_minmax(0,1fr)] items-center gap-8' : 'flex justify-center'}>
++      <div className={showMark ? 'grid grid-cols-[minmax(0,500px)_minmax(0,1fr)] items-center gap-8' : 'flex justify-center'}>
+         <ViewportWelcomeCard {...props} />
+-        {wide && (
++        {showMark && (
+           <div className="h-[min(560px,64vh)] min-h-[320px]" data-welcome-mark={idle ? 'mounted' : 'deferred'}>
+             {idle && (
+               <Suspense fallback={null}>

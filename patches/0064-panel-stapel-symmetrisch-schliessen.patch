@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/sidebar/SidebarPanelHost.tsx b/apps/viewer/src/components/viewer/sidebar/SidebarPanelHost.tsx
-index 5296ea84718e62ec54d8a820a3beaa3f3ab605de..581eb29581aee3ca6ddf6789d1091d988dcdb54a 100644
+index 2a8abc846660cb6cf2beac5ecd45dc45c1f6b9ab..8bba83558e7b031dc54b1d67f8a50e226860f19e 100644
 --- a/apps/viewer/src/components/viewer/sidebar/SidebarPanelHost.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/SidebarPanelHost.tsx
-@@ -217,7 +217,7 @@ function SplitContainer({
+@@ -220,7 +220,7 @@ function SplitContainer({
    primary: React.ReactNode;
    secondaryId: WorkspacePanelId;
  }) {
@@ -11,7 +11,7 @@ index 5296ea84718e62ec54d8a820a3beaa3f3ab605de..581eb29581aee3ca6ddf6789d1091d98
    return (
      <div ref={containerRef} className="h-full flex flex-col panel-container">
        {/* Top half: flex-basis is the ratio; min-height stops it collapsing. */}
-@@ -233,7 +233,7 @@ function SplitContainer({
+@@ -236,7 +236,7 @@ function SplitContainer({
            close (closing it clears the split). */}
        <div className="flex-1 min-h-[120px] flex flex-col overflow-hidden">
          <div className="flex-1 min-h-0 overflow-hidden">
@@ -21,10 +21,10 @@ index 5296ea84718e62ec54d8a820a3beaa3f3ab605de..581eb29581aee3ca6ddf6789d1091d98
        </div>
      </div>
 diff --git a/apps/viewer/src/hooks/usePanelControls.ts b/apps/viewer/src/hooks/usePanelControls.ts
-index e7bf8ce5123aea7aaf68e688a0a209108c03902d..3271ea5bde829b1123234d5a640257d5ad4e3392 100644
+index dcdf433439df396f37a32c59e3230ba16ba11ac9..4cd1389341c03285a7c924f7ec8acf2e3e8c0287 100644
 --- a/apps/viewer/src/hooks/usePanelControls.ts
 +++ b/apps/viewer/src/hooks/usePanelControls.ts
-@@ -171,6 +171,7 @@ export function usePanelControls(): PanelControls {
+@@ -181,6 +181,7 @@ export function usePanelControls(): PanelControls {
    }, []);
  
    const closePanel = useCallback((id: WorkspacePanelId) => {
@@ -33,27 +33,27 @@ index e7bf8ce5123aea7aaf68e688a0a209108c03902d..3271ea5bde829b1123234d5a640257d5
        useViewerStore.getState().setLeftPanelCollapsed(true);
        return;
 diff --git a/apps/viewer/src/store/createViewerActions.ts b/apps/viewer/src/store/createViewerActions.ts
-index f1222277ca490e8854b5a996f596df7a3ae13103..912cc3e130f967e2959a9aa75ffdf2003ca936f5 100644
+index 61b456484c087364ded5f8a0c62cdff686b1a8ac..80b626de4d7e3ae104430a56435c4b3cefa91ca6 100644
 --- a/apps/viewer/src/store/createViewerActions.ts
 +++ b/apps/viewer/src/store/createViewerActions.ts
-@@ -4,6 +4,7 @@
- 
+@@ -6,6 +6,7 @@ import { discardInstancedShards } from './instancedShardQueue.js';
+ import { clearLoadReport } from '../lib/error-reports/context';
  /** Cross-slice viewer actions. Domain state stays in its owning slice; this
   * composition seam preserves reset side effects and workspace routing. */
 +import { chSidebarClosePatch } from '@/lib/ch/panel-close';
  import type { StateCreator } from 'zustand';
  import type { ViewerState } from './index.js';
  import type { WorkspacePanelId } from '@/lib/panels/registry';
-@@ -17,6 +18,8 @@ import { DEFAULT_CONTROLS_MODE } from './slices/cameraSlice.js';
- import { endClashScenePresentation, type ClashSceneTeardown } from '@/lib/clash/visibility-ownership';
+@@ -22,6 +23,8 @@ import { endClashScenePresentation, type ClashSceneTeardown } from '@/lib/clash/
+ import { readCurrentSymbolicParseCensus, type SymbolicParseCensus } from './symbolic-parse-observer.js';
  
  export interface ViewerActions {
 +  sidebarCloseRevision: number;
 +  closeDockedSidebarPanel: (panel: WorkspacePanelId) => boolean;
-   resetViewerState: () => void;
-   /**
-    * Open one right-side analysis panel and close the others, so the chosen
-@@ -127,6 +130,15 @@ export const createViewerActions: StateCreator<ViewerState, [], [], ViewerAction
+   /** Passive private perf observer; refuses incomplete parses without starting work. */
+   readSymbolicParseOutcomes: () => SymbolicParseCensus;
+   resetViewerState: (options?: { preserveLoading?: boolean }) => void;
+@@ -140,6 +143,17 @@ export const createViewerActions: StateCreator<ViewerState, [], [], ViewerAction
      endClashScenePresentation(() => get() as unknown as ClashSceneTeardown, 'federation-cleared');
    },
  
@@ -63,19 +63,25 @@ index f1222277ca490e8854b5a996f596df7a3ae13103..912cc3e130f967e2959a9aa75ffdf200
 +    const patch = chSidebarClosePatch(get(), panel);
 +    if (patch === null) return false;
 +    set(patch);
++    // Persist the new mode without splitting the atomic close transition.
 +    get().setSidebarMode(get().sidebarMode);
 +    return true;
 +  },
++
    openWorkspacePanel: (panel, surface) => {
      const [set, get] = args;
-     trackPanelOpened(panel, surface, isBottomPanel(panel) || get().sidebarMode !== 'expanded' ? undefined : get().sidebarActivePanel);
-@@ -214,8 +226,7 @@ export const createViewerActions: StateCreator<ViewerState, [], [], ViewerAction
+     if (!isPanelAvailable(panel)) return;
+@@ -239,11 +253,8 @@ export const createViewerActions: StateCreator<ViewerState, [], [], ViewerAction
+     const isActive = s.sidebarActivePanel === panel
        && !s.floatingPanels.some((p) => p.id === panel)
        && !s.poppedOutIds.includes(panel);
-     if (isActive) {
+-    if (isActive) {
 -      get().showWorkspacePanel('properties');
 -      get().setSidebarMode('collapsed');
-+      get().closeDockedSidebarPanel(panel);
-     }
-     else get().showWorkspacePanel(panel, surface);
+-    }
+-    else get().showWorkspacePanel(panel, surface);
++    if (isActive && get().closeDockedSidebarPanel(panel)) return;
++    get().showWorkspacePanel(panel, surface);
    },
+ 
+   toggleBottomPanel: (panel, surface) => {

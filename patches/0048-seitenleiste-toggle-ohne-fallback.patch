@@ -1,26 +1,8 @@
-diff --git a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
-index 57c3ef553e24fc0fc6f7cd1c4f9db030c4ec4da8..61db4988f60665c41d8ebd96e914222fe7ba841b 100644
---- a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
-+++ b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
-@@ -116,7 +116,12 @@ export function ActivityBar() {
-           const title = t(def.titleKey);
-           const Icon = def.Icon;
-           const loc = panelLocation(id);
--          const active = loc === 'docked';
-+          // Trassia (Paket SEITENLEISTE): blau nur, wenn das Panel auch zu sehen
-+          // ist. Ein Seitenpanel gilt bei zusammengeklappter Leiste zwar als
-+          // "docked" (Information bleibt der Store-Fallback), sichtbar ist es
-+          // nicht — ohne diese Klemme leuchtete das Information-Symbol ueber
-+          // einem leeren Bereich. Links-/Bodenpanels haben eigene Slots.
-+          const active = loc === 'docked' && (def.region !== 'side' || mode === 'expanded');
-           const open = isOpen(id);
-           const showGroupLabel = def.group !== prevGroup;
-           prevGroup = def.group;
 diff --git a/apps/viewer/src/hooks/usePanelControls.ts b/apps/viewer/src/hooks/usePanelControls.ts
-index 310401f8f5ae956ebdae9510cacdd0cbd5fff2f1..e7bf8ce5123aea7aaf68e688a0a209108c03902d 100644
+index 860f87990ef2e098037c2416165c23af45b6efcd..dcdf433439df396f37a32c59e3230ba16ba11ac9 100644
 --- a/apps/viewer/src/hooks/usePanelControls.ts
 +++ b/apps/viewer/src/hooks/usePanelControls.ts
-@@ -182,6 +182,17 @@ export function usePanelControls(): PanelControls {
+@@ -192,6 +192,17 @@ export function usePanelControls(): PanelControls {
      useViewerStore.getState().closeFloatingPanel(id);
      closePanelWindow(id);
      if (isAnalysisPanel(id)) setDockedVisible(id, false);
@@ -39,10 +21,10 @@ index 310401f8f5ae956ebdae9510cacdd0cbd5fff2f1..e7bf8ce5123aea7aaf68e688a0a20910
  
    const dockPanel = useCallback((id: WorkspacePanelId) => openInHome(id), [openInHome]);
 diff --git a/apps/viewer/src/store/createViewerActions.ts b/apps/viewer/src/store/createViewerActions.ts
-index bcd0b2a82d8e682a6c34512a0a45f4702c0ae747..f1222277ca490e8854b5a996f596df7a3ae13103 100644
+index d34c4528b869506cfc495cd19a8d5057d20a67e2..61b456484c087364ded5f8a0c62cdff686b1a8ac 100644
 --- a/apps/viewer/src/store/createViewerActions.ts
 +++ b/apps/viewer/src/store/createViewerActions.ts
-@@ -213,7 +213,10 @@ export const createViewerActions: StateCreator<ViewerState, [], [], ViewerAction
+@@ -239,7 +239,10 @@ export const createViewerActions: StateCreator<ViewerState, [], [], ViewerAction
      const isActive = s.sidebarActivePanel === panel
        && !s.floatingPanels.some((p) => p.id === panel)
        && !s.poppedOutIds.includes(panel);

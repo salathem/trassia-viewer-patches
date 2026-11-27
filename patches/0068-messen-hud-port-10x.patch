@@ -1,48 +1,8 @@
-diff --git a/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx b/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx
-index 166edaef3245e99b7d98d72c2693a4c16eb2b385..de491fb7ced22d5173705bd5efe030237008db6e 100644
---- a/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx
-+++ b/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx
-@@ -18,6 +18,7 @@ import { measureHintKey } from './measure-modes/readouts';
- import { projectedEnh, useProjectedLatLon, type Vec3Like } from './measure-modes/geo-readout';
- // Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-geo-status.tsx
- import { ChGeoBannerHud } from './measure-modes/ch-geo-status';
-+import { chLatestMeasurePoint } from '@/lib/ch/ch-measure-points';
- 
- export function MeasureHint() {
-   const { t } = useTranslation();
-@@ -41,14 +42,22 @@ export function MeasureHint() {
- export function MeasureGeoReadout() {
-   const { t } = useTranslation();
-   const activeMeasurement = useViewerStore((s) => s.activeMeasurement);
--  const measurements = useViewerStore((s) => s.measurements);
-   const geoReadoutEnabled = useViewerStore((s) => s.geoReadoutEnabled);
-   const anchor = useAnchorGeoreference();
-   const showGeo = geoReadoutEnabled && anchor !== null;
--  // The live point: the moving end of the current drag, else the most
--  // recently finalized endpoint.
--  const livePoint: Vec3Like | null =
--    activeMeasurement?.current ?? (measurements.length > 0 ? measurements[measurements.length - 1].end : null);
-+  // Trassia (Paket V-MESS): der Live-Punkt liest auch Polylinie, Winkel und
-+  // Radius — upstream nur die Distanzmessung, sonst blieb die Box stumm.
-+  const livePoint: Vec3Like | null = useViewerStore((s) => chLatestMeasurePoint({
-+    measureMode: s.measureMode,
-+    activeMeasurement: s.activeMeasurement,
-+    measurements: s.measurements,
-+    activePolyline: s.activePolyline,
-+    polylineMeasurements: s.polylineMeasurements,
-+    activeAngle: s.activeAngle,
-+    angleMeasurements: s.angleMeasurements,
-+    activeRadius: s.activeRadius,
-+    radiusMeasurements: s.radiusMeasurements,
-+  }));
-   // Hook order is fixed: called unconditionally, gated by its arguments.
-   // Non-blocking: null until proj4 resolves, so E/N/H is unaffected.
-   const latLon = useProjectedLatLon(showGeo ? livePoint : null, showGeo ? anchor : null);
 diff --git a/apps/viewer/src/components/viewer/tools/MeasurementList.tsx b/apps/viewer/src/components/viewer/tools/MeasurementList.tsx
-index 57601cc2002cc86ecb084b24cc6910104b850598..5fb07d990d5dbaef42d9518ecc8bd59ee29e5cae 100644
+index 246e9b28411d69deade869fbd42f5996c61d849b..106e839d2198dce70e7b1edd2d75bba67dc932c1 100644
 --- a/apps/viewer/src/components/viewer/tools/MeasurementList.tsx
 +++ b/apps/viewer/src/components/viewer/tools/MeasurementList.tsx
-@@ -19,12 +19,15 @@ import { useViewerStore, type Measurement } from '@/store';
+@@ -20,7 +20,7 @@ import { useViewerStore, type Measurement } from '@/store';
  import { useTranslation } from '@/i18n/useTranslation';
  import { StaleMeasurementBadge } from '../reposition/StaleMeasurementBadge';
  import { formatDistance } from './formatDistance';
@@ -51,86 +11,179 @@ index 57601cc2002cc86ecb084b24cc6910104b850598..5fb07d990d5dbaef42d9518ecc8bd59e
  import { inclination, formatInclination } from './measure-modes/inclination';
  import { polylineBasisLabelKey } from './measure-modes/polyline';
  import { projectedEnh, EnhLine } from './measure-modes/geo-readout';
- import { useAnchorGeoreference, type AnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
+@@ -28,6 +28,7 @@ import { useAnchorGeoreference, type AnchorGeoreference } from '@/lib/geo/useAnc
+ import { finishOpenPolyline, finishOpenRadius } from '@/store/finishMeasureSequence';
+ import { dispatchKeyboardDown } from '@/lib/commands/dispatcher';
  import { ANGLE_REQUIRED_PICKS, formatAngleMeasurement, formatRadiusPoints } from './measure-modes/readouts';
-+// Trassia overlay (not upstream) — ΔE/ΔN/ΔH statt Renderer-Achsen und LV95-Zeilen
-+// je Messpunkt; siehe overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-measure-readouts.tsx
 +import { ChAxisDeltas, ChEnhPoints, chAnglePickLabels } from './measure-modes/ch-measure-readouts';
  
  const ROW = 'rounded bg-muted/50 px-2 py-1 text-xs';
  const ROW_LIVE = 'flex items-center justify-between gap-2 rounded bg-overlay-accent-soft px-2 py-1 text-xs';
-@@ -116,6 +119,8 @@ export function MeasurementList() {
-               <X className="h-3 w-3" />
-             </IconButton>
-           </div>
-+          {/* Trassia (M-06): die Stuetzpunkte. Entlang einer Achse SIND sie die Messung. */}
+@@ -183,7 +184,9 @@ export function MeasurementList() {
+           deleteLabel={t('measure.list.deletePolyline', { index: i + 1 })}
+           onDelete={deletePolylineMeasurement}
+           onLostFocus={recordedRowLostFocus}
+-        />
++        >
 +          <ChEnhPoints points={pl.points} />
-         </div>
++        </RecordedRow>
        ))}
  
-@@ -132,6 +137,8 @@ export function MeasurementList() {
-               <X className="h-3 w-3" />
-             </IconButton>
-           </div>
-+          {/* Trassia (M-06): die Pickpunkte; `S` ist der Scheitel eines Dreipunktwinkels. */}
-+          <ChEnhPoints points={a.picks.map((pick) => pick.point)} labels={chAnglePickLabels(a.kind, a.picks.length)} />
-         </div>
+       {angleMeasurements.map((a, i) => (
+@@ -196,7 +199,9 @@ export function MeasurementList() {
+           deleteLabel={t('measure.list.deleteAngle', { index: i + 1 })}
+           onDelete={deleteAngleMeasurement}
+           onLostFocus={recordedRowLostFocus}
+-        />
++        >
++          <ChEnhPoints points={a.picks.map(pick => pick.point)} labels={chAnglePickLabels(a.kind, a.picks.length)} />
++        </RecordedRow>
        ))}
        {activeAngle && (
-@@ -205,7 +212,9 @@ function MeasurementItem({ measurement, index, onDelete, deleteLabel, geoAnchor,
-         </IconButton>
-       </div>
+         <div className={ROW_LIVE}>
+@@ -221,7 +226,9 @@ export function MeasurementList() {
+           deleteLabel={t('measure.list.deleteRadius', { index: i + 1 })}
+           onDelete={deleteRadiusMeasurement}
+           onLostFocus={recordedRowLostFocus}
+-        />
++        >
++          <ChEnhPoints points={r.points} />
++        </RecordedRow>
+       ))}
+       {activeRadius && (
+         <div className={ROW_LIVE}>
+@@ -355,7 +362,7 @@ function MeasurementItem({ measurement, index, onDelete, onLostFocus, deleteLabe
+       onLostFocus={onLostFocus}
+     >
        <div className="overflow-x-auto whitespace-nowrap font-mono text-2xs leading-tight text-muted-foreground">
 -        <div>{formatAxisDeltas(components, unitDisplayOverrides)}</div>
-+        {/* Trassia (M-05): ΔE/ΔN/ΔH bei georeferenziertem Modell — die Renderer-Achsen
-+            zeigten die Nordrichtung unter `dZ` mit umgekehrtem Vorzeichen. */}
 +        <div><ChAxisDeltas start={measurement.start} end={measurement.end} overrides={unitDisplayOverrides} /></div>
          <div>{formatHorizontalVertical(components, unitDisplayOverrides)}</div>
          {/* Inclination, derived from the same two endpoints (#2199 §4). */}
          <div>{formatInclination(inclination(components))}</div>
 diff --git a/apps/viewer/src/components/viewer/tools/MeasurementVisuals.tsx b/apps/viewer/src/components/viewer/tools/MeasurementVisuals.tsx
-index e739637fe6bbd96845ddd705e3658322cb832683..1c6a7b3ef7c3ff58434740ffe959ff8b4c3afc0d 100644
+index 1b7c4af63946ba5e74cecc766cdbe23c6bca3326..653450c08077b1c84cb17c4230b762850f59a9a5 100644
 --- a/apps/viewer/src/components/viewer/tools/MeasurementVisuals.tsx
 +++ b/apps/viewer/src/components/viewer/tools/MeasurementVisuals.tsx
-@@ -16,6 +16,9 @@ import type { MeasurementConstraintEdge } from '@/store/types';
+@@ -15,7 +15,9 @@ import type { Measurement, SnapVisualization, ActivePolyline, PolylineMeasuremen
+ import type { MeasurementConstraintEdge } from '@/store/types';
  import { SnapType, type SnapTarget } from '@ifc-lite/renderer';
  import { formatDistance } from './formatDistance';
- import { distanceComponents, formatAxisDeltas, formatHorizontalVertical } from './measure-modes/components';
-+// Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-measure-readouts.tsx
+-import { distanceComponents, formatAxisDeltas, formatHorizontalVertical } from './measure-modes/components';
++import { distanceComponents, formatHorizontalVertical } from './measure-modes/components';
 +import { ChAxisDeltas } from './measure-modes/ch-measure-readouts';
 +import type { Vec3Like } from './measure-modes/geo-readout';
  import { inclination, formatInclination } from './measure-modes/inclination';
  import { polylineOpenLength, polylineBasisLabelKey } from './measure-modes/polyline';
  import { CLOSE_LOOP_SCREEN_RADIUS_PX } from '../measureHandlers';
-@@ -53,10 +56,11 @@ function centroid(points: readonly Point3[]): Point3 {
+@@ -53,10 +55,11 @@ function centroid(points: readonly Point3[]): Point3 {
  }
  
  /** dX/dY/dZ, H/V and inclination under a distance label (#2199 §4). */
 -function Breakdown({ components, unitDisplayOverrides }: { components: ReturnType<typeof distanceComponents>; unitDisplayOverrides: Record<string, string> }) {
-+function Breakdown({ components, unitDisplayOverrides, start, end }: { components: ReturnType<typeof distanceComponents>; unitDisplayOverrides: Record<string, string>; start?: Vec3Like; end?: Vec3Like }) {
++function Breakdown({ start, end, unitDisplayOverrides }: { start: Vec3Like; end: Vec3Like; unitDisplayOverrides: Record<string, string> }) {
++  const components = distanceComponents(start, end);
    return (
      <div className={SUB_CLASS}>
 -      <div>{formatAxisDeltas(components, unitDisplayOverrides)}</div>
-+      {/* Trassia (M-05): ΔE/ΔN/ΔH bei georeferenziertem Modell statt Renderer-Achsen. */}
-+      <div>{start && end ? <ChAxisDeltas start={start} end={end} overrides={unitDisplayOverrides} /> : formatAxisDeltas(components, unitDisplayOverrides)}</div>
++      <div><ChAxisDeltas start={start} end={end} overrides={unitDisplayOverrides} /></div>
        <div>{formatHorizontalVertical(components, unitDisplayOverrides)}</div>
        <div>{formatInclination(inclination(components))}</div>
      </div>
-@@ -160,7 +164,7 @@ export const MeasurementOverlays = React.memo(function MeasurementOverlays({ mea
+@@ -125,7 +128,6 @@ export const MeasurementOverlays = React.memo(function MeasurementOverlays({ mea
+     <>
+       {/* Completed measurements */}
+       {measurements.map((m) => {
+-        const components = distanceComponents(m.start, m.end);
+         return (
+         <div key={m.id} className="pointer-events-none">
+           {/* Line connecting start and end */}
+@@ -167,7 +169,7 @@ export const MeasurementOverlays = React.memo(function MeasurementOverlays({ mea
            <WorldLabel worldPoint={midpoint(m.start, m.end)} offset={LABEL_OFFSET} className={LABEL_CLASS}>
              <div className="font-medium">{formatDistance(m.distance, unitDisplayOverrides)}</div>
              {/* Axis breakdown, derived on render (see measure-modes/components). */}
 -            <Breakdown components={components} unitDisplayOverrides={unitDisplayOverrides} />
-+            <Breakdown components={components} unitDisplayOverrides={unitDisplayOverrides} start={m.start} end={m.end} />
++            <Breakdown start={m.start} end={m.end} unitDisplayOverrides={unitDisplayOverrides} />
            </WorldLabel>
          </div>
          );
-@@ -294,7 +298,7 @@ export const MeasurementOverlays = React.memo(function MeasurementOverlays({ mea
+@@ -301,7 +303,7 @@ export const MeasurementOverlays = React.memo(function MeasurementOverlays({ mea
                wants dX/dY/dZ, so the live readout must not be the poorer one. */}
            <WorldLabel worldPoint={midpoint(activeMeasurement.start, activeMeasurement.current)} active offset={LABEL_OFFSET} className={LABEL_CLASS}>
              <div className="font-medium">{formatDistance(activeMeasurement.distance, unitDisplayOverrides)}</div>
 -            <Breakdown components={distanceComponents(activeMeasurement.start, activeMeasurement.current)} unitDisplayOverrides={unitDisplayOverrides} />
-+            <Breakdown components={distanceComponents(activeMeasurement.start, activeMeasurement.current)} unitDisplayOverrides={unitDisplayOverrides} start={activeMeasurement.start} end={activeMeasurement.current} />
++            <Breakdown start={activeMeasurement.start} end={activeMeasurement.current} unitDisplayOverrides={unitDisplayOverrides} />
            </WorldLabel>
          </div>
        )}
+diff --git a/apps/viewer/src/components/viewer/tools/measure-modes/readouts.ts b/apps/viewer/src/components/viewer/tools/measure-modes/readouts.ts
+index 828fe690c84dfaddeea98494d8dd9bc65ce2bf87..7900bb2422f90a978e6128ed7470338b4a782810 100644
+--- a/apps/viewer/src/components/viewer/tools/measure-modes/readouts.ts
++++ b/apps/viewer/src/components/viewer/tools/measure-modes/readouts.ts
+@@ -11,6 +11,7 @@
+  */
+ 
+ import type { TranslationKey } from '@/i18n/en';
++import { chLatestMeasureReading } from '@/lib/ch/ch-measure-points';
+ import {
+   ANGLE_REQUIRED_PICKS,
+   type ActiveAngle,
+@@ -137,6 +138,12 @@ export interface MeasureLivePointState {
+   measurements: readonly Measurement[];
+   measurePointLive: MeasurePoint | null;
+   measurePointLast: PlacedMeasurePoint | null;
++  activePolyline: ActivePolyline | null;
++  polylineMeasurements: readonly { id: string; points: readonly MeasurePoint[] }[];
++  activeAngle: ActiveAngle | null;
++  angleMeasurements: readonly AngleMeasurement[];
++  activeRadius: ActiveRadius | null;
++  radiusMeasurements: readonly { id: string; points: readonly MeasurePoint[] }[];
+ }
+ 
+ /**
+@@ -144,9 +151,8 @@ export interface MeasureLivePointState {
+  * reading that is not live names the stored measurement it came from, so the
+  * readout can carry that measurement's Stale badge once its model moves (#8828).
+  * Point mode reads its own hover/placed point (#8770) and nothing else, so a
+- * distance endpoint never shows up as a picked point there. Every other mode
+- * keeps the rule the readouts always had: the moving end of the current drag,
+- * else the end of the last finished distance.
++ * distance endpoint never shows up as a picked point there. The other modes
++ * use the current activity or the last real pick of the stored measurement.
+  */
+ export type MeasureLivePoint = { point: MeasurePoint; live: true } | { point: MeasurePoint; live: false; id: string };
+ 
+@@ -155,9 +161,9 @@ export function measureLivePoint(s: MeasureLivePointState): MeasureLivePoint | n
+     if (s.measurePointLive) return { point: s.measurePointLive, live: true };
+     return s.measurePointLast ? { point: s.measurePointLast, live: false, id: s.measurePointLast.id } : null;
+   }
+-  if (s.activeMeasurement) return { point: s.activeMeasurement.current, live: true };
+-  const last = s.measurements[s.measurements.length - 1];
+-  return last ? { point: last.end, live: false, id: last.id } : null;
++  const reading = chLatestMeasureReading(s);
++  if (reading?.live) return reading;
++  return reading?.id ? { point: reading.point, live: false, id: reading.id } : null;
+ }
+ 
+ /**
+diff --git a/apps/viewer/src/components/viewer/tools/measure-modes/useMeasureLivePoint.ts b/apps/viewer/src/components/viewer/tools/measure-modes/useMeasureLivePoint.ts
+index 7c939514836a944a148fd3debe307223e5af7c76..9d5c4d12df70cd7dad16c9fa5caeb2c0b4cf0f7d 100644
+--- a/apps/viewer/src/components/viewer/tools/measure-modes/useMeasureLivePoint.ts
++++ b/apps/viewer/src/components/viewer/tools/measure-modes/useMeasureLivePoint.ts
+@@ -3,14 +3,10 @@
+  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ 
+ import { useViewerStore } from '@/store';
++import { useShallow } from 'zustand/react/shallow';
+ import { measureLivePoint } from './readouts';
+ 
+ /** {@link measureLivePoint} over the store, shared by the Point tab and the HUD readouts. */
+ export function useMeasureLivePoint() {
+-  const measureMode = useViewerStore((s) => s.measureMode);
+-  const activeMeasurement = useViewerStore((s) => s.activeMeasurement);
+-  const measurements = useViewerStore((s) => s.measurements);
+-  const measurePointLive = useViewerStore((s) => s.measurePointLive);
+-  const measurePointLast = useViewerStore((s) => s.measurePointLast);
+-  return measureLivePoint({ measureMode, activeMeasurement, measurements, measurePointLive, measurePointLast });
++  return useViewerStore(useShallow(measureLivePoint));
+ }

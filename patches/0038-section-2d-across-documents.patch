@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
-index cb6f1703f87f68612ff7d2f128db86e1fdc65688..f81407472e783be59c830e21beba833b0020aa08 100644
+index 9c2cef95e9e8875abb3b637852b1defde501781d..ea3eb505ced97b8cf120d5ce3078464622572a39 100644
 --- a/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
 +++ b/apps/viewer/src/components/viewer/Drawing2DCanvas.tsx
-@@ -343,8 +343,15 @@ export function Drawing2DCanvas({
+@@ -313,8 +313,15 @@ export function Drawing2DCanvas({
      const ctx = canvas.getContext('2d');
      if (!ctx) return;
  
@@ -21,7 +21,7 @@ index cb6f1703f87f68612ff7d2f128db86e1fdc65688..f81407472e783be59c830e21beba833b
      canvas.height = canvasSize.height * dpr;
      ctx.scale(dpr, dpr);
 diff --git a/apps/viewer/src/hooks/useAnnotation2D.ts b/apps/viewer/src/hooks/useAnnotation2D.ts
-index 1e112361249b817c618c23ef560f69830dd05531..47013cb348cc4ba75ee87cfaac6e2ea6c06118ad 100644
+index 1c578718765f2500a37389b5b5f2d8e210d2de30..73fc9911ef81e7e6376d72fe9972278238e12fb7 100644
 --- a/apps/viewer/src/hooks/useAnnotation2D.ts
 +++ b/apps/viewer/src/hooks/useAnnotation2D.ts
 @@ -261,6 +261,54 @@ export function useAnnotation2D({
@@ -176,38 +176,3 @@ index caa1bd5860e240f4730210e4c441d326850c6c8a..42edf19f0d4828e83458f9120316d126
  
    // ═══════════════════════════════════════════════════════════════════════
    // PAN / MEASURE HANDLERS
-diff --git a/apps/viewer/src/hooks/useViewControls.ts b/apps/viewer/src/hooks/useViewControls.ts
-index e938f2369b1e628031876b1a5586ca5a881fb775..894397137de832f5db38df6f2ec5dee1b4281b68 100644
---- a/apps/viewer/src/hooks/useViewControls.ts
-+++ b/apps/viewer/src/hooks/useViewControls.ts
-@@ -24,6 +24,22 @@ interface UseViewControlsParams {
-   activeSheet: DrawingSheet | null;
-   isPinned: boolean;
-   cachedSheetTransformRef: React.MutableRefObject<CachedSheetTransform | null>;
-+  /**
-+   * Trassia (Paket QP-AUSDOCK): eine Zahl, die sich aendert, sobald
-+   * `containerRef.current` auf einen ANDEREN Knoten zeigt.
-+   *
-+   * Der Radzoom haengt an `containerRef.current` — an einem DOM-Knoten also,
-+   * nicht am Verweisobjekt. Wird das Panel in ein eigenes Fenster verlegt, baut
-+   * `ChPanelFrame` seinen Rumpf neu auf, und der alte Knoten ist fort. Die
-+   * Liste am Ende des Effekts (`panelVisible`, `status`) merkt davon nichts:
-+   * ein `RefObject` bleibt beim Wechsel dasselbe Objekt. Ohne dieses Feld
-+   * horcht der Zoom danach an einem Knoten, den niemand mehr sieht — im
-+   * ausgedockten Fenster bewegte das Mausrad nichts (gemessen 2026-08-30, in
-+   * beide Richtungen, waehrend die Zoomknoepfe daneben wirkten).
-+   *
-+   * Optional: wer es weglaesst, bekommt genau das bisherige Verhalten.
-+   */
-+  reattachToken?: number;
- }
- 
- interface UseViewControlsResult {
-@@ -68,6 +84,7 @@ function useViewControls({
-   activeSheet,
-   isPinned,
-   cachedSheetTransformRef,
-+  reattachToken,
- }: UseViewControlsParams): UseViewControlsResult {
-   const [viewTransform, setViewTransform] = useState({ x: 0, y: 0, scale: 1 });
-   const [needsFit, setNeedsFit] = useState(true); // Force fit on first open and on a new plane

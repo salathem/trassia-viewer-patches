@@ -1,17 +1,17 @@
 diff --git a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
-index 9464e12e7e997e8e211a9995436bda243e9abc21..70c967feb6dd77ff5551d051ea8d381bd896b7aa 100644
+index c590c077dc92b96e1d58dbb92ab4127f5c70ed6b..a95fce9e4626ad3f0fe2b91d23a9b3284e666e56 100644
 --- a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
 +++ b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
-@@ -30,6 +30,8 @@ import {
- } from '@/lib/geo/cesium-placement';
- import { egm96Undulation } from '@/lib/geo/egm96-undulation';
+@@ -31,6 +31,8 @@ import {
+ import { egm96Undulation } from '@ifc-lite/geo';
+ import { bendsAwayFromAnchorPlane } from '@/lib/geo/globe-placement';
  import { holdCameraY, type ViewerHeightFrame } from '@/lib/geo/viewer-up-scale';
 +// Trassia (V-WELT-FIX-2): in dieser Szene ist die Cesium-Hoehenachse LN02.
 +import { chCesiumGeoidAnteil } from '@/lib/ch/kontext/hoehenbezug';
  import { getGlobalRenderer } from '@/hooks/useBCF';
  import { getCesiumModule } from './cesium-module';
  import type { CesiumViewerLifetime } from './cesium-viewer-lifetime';
-@@ -212,8 +214,13 @@ export function useCesiumBridge({
+@@ -216,8 +218,13 @@ export function useCesiumBridge({
          // was actually applied to this model. N mirrors the bridge: the EGM96
          // undulation, or 0 when heights are flagged ellipsoidal. Keeps the snap
          // button round-tripping (#1456).
@@ -27,19 +27,19 @@ index 9464e12e7e997e8e211a9995436bda243e9abc21..70c967feb6dd77ff5551d051ea8d381b
          setCesiumTerrainSaveHeight(
            terrainHForFrame !== null
 diff --git a/apps/viewer/src/lib/geo/cesium-bridge.ts b/apps/viewer/src/lib/geo/cesium-bridge.ts
-index 4883a4dddd6bac05b4d01a5d2bc279e6a8023fef..85690e39f3ca707561fecfed9bbf1749d5e47d03 100644
+index 8c237efd993df74cb9f6c09ca87041e199ce1043..a434eeed52f4b787dabebe7bd14dc3e649687739 100644
 --- a/apps/viewer/src/lib/geo/cesium-bridge.ts
 +++ b/apps/viewer/src/lib/geo/cesium-bridge.ts
-@@ -37,6 +37,8 @@ import {
+@@ -41,6 +41,8 @@ import {
  import { getEffectiveAxisScales, resolveMapUnitToMetreScale } from './geo-scale';
  import { shouldApplyGeoidUndulation } from './cesium-placement';
- import { egm96Undulation } from './egm96-undulation';
+ import { egm96Undulation } from '@ifc-lite/geo';
 +// Trassia (V-WELT-FIX-2): in dieser Szene ist die Cesium-Hoehenachse LN02.
 +import { chCesiumGeoidAnteil } from '@/lib/ch/kontext/hoehenbezug';
  import { viewerToEnuRotation, type ViewerToEnuRotation } from './viewer-enu-rotation';
  import { ecefCameraFrame } from './ecef-camera-frame';
  import { viewBasis } from '@ifc-lite/renderer';
-@@ -157,8 +159,14 @@ export async function computeCesiumModelOrigin(
+@@ -193,8 +195,14 @@ export async function computeCesiumModelOrigin(
      // — the authored altitude is orthometric by spec, whether or not a
      // VerticalDatum is declared (it is optional and routinely omitted). The
      // only opt-out is a file whose heights are already ellipsoidal. (#1355)
@@ -53,5 +53,5 @@ index 4883a4dddd6bac05b4d01a5d2bc279e6a8023fef..85690e39f3ca707561fecfed9bbf1749
 -      ? egm96Undulation(lat, lon)
 +      ? chCesiumGeoidAnteil(egm96Undulation(lat, lon))
        : 0;
-     return {
-       longitude: lon,
+     const frame = computeGridFrame(projDef, easting, northing, lat);
+     const kc = geographic ? 1 : combinedScaleFactor(frame.pointScale, lat, height + geoidUndulation);

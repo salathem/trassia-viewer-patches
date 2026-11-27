@@ -1,40 +1,24 @@
 diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-index 246ec94f50c81e5c94b4a5feab836a833fe30078..78ce87e2da5866e1672b166b813beac83993e3bc 100644
+index a4845b1f434644cddde27bb179c8fa6fa1d8bd38..919bb7be9d5f80733efbcb8c675cdf21592acd0e 100644
 --- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
 +++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-@@ -44,6 +44,13 @@ import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
- import { useChProjectLoader } from '@/hooks/useChProjectLoader';
- import { ChProjectBanner } from './ChProjectBanner';
- import { ChLensEngine } from './ChLensEngine';
-+// Trassia overlay (not upstream) — Paket V-UX: die Zeile der benannten
-+// Ansichten (U3), der Hinweis auf schmalen Schirmen (P6/U4) und der
-+// Beobachter, der ein verdraengtes Werkzeugpanel in den zweiten Stapelplatz
-+// legt statt es hinauszuwerfen (P4).
+@@ -67,6 +67,9 @@ import {
+ import { dockedBottomPanel as dockedBottomPanelOf } from '@/lib/panels/rendered-panels';
+ import { useBottomPanelFlags } from '@/hooks/useBottomPanelFlags';
+ import { usePanelControls } from '@/hooks/usePanelControls';
 +import { ChViewsBar } from './ChViewsBar';
 +import { ChMobileHint } from './ChMobileHint';
 +import { ChPanelStackKeeper } from './ChPanelStackKeeper';
- import { chReadProjectParam } from '@/lib/ch/project-manifest';
- import { EntityContextMenu } from './EntityContextMenu';
- import { AnonymizedExportDialog } from './anonymized-export/AnonymizedExportDialog';
-@@ -273,6 +280,21 @@ export function ViewerLayout() {
-           </div>
-         )}
-         <ChProjectBanner />
-+
-+        {/* Trassia: benannte Ansichten dieser Mappe (U3). Nur bei `?project=`,
-+            weil die Ablage am Mappen-Slug haengt. */}
+ import { useMobileLayoutMode } from '@/hooks/useMobileLayoutMode';
+ import { useThemeDocumentClass } from './useThemeDocumentClass';
+ import { EVENT_OPEN_COMMAND_PALETTE } from '@/lib/tours/events';
+@@ -244,6 +247,9 @@ export function ViewerLayout() {
+         <FlavorDialogHost />
+         <AgentBridgeHost />
+         <ConfirmDialogHost />
 +        <ChViewsBar />
-+
-+        {/* Trassia: unter 30 rem blendet die Anwendung ihre Werkzeuge aus.
-+            Das darf sie — aber nicht stumm (U4). */}
 +        <ChMobileHint />
-+
-+        {/* Trassia: kein Bauteil, ein Beobachter (P4). */}
 +        <ChPanelStackKeeper />
-+
-+        {/* Trassia: on a phone the Lens panel is never mounted (one bottom
-+            sheet, closed at start), so nothing evaluates the lens a project
-+            manifest set. This runs it where the panel cannot. */}
-         <ChLensEngine />
-         <ChLoadNoticeBanner />
-         <KeyboardShortcutsDialog open={shortcutsDialog.open} onClose={shortcutsDialog.close} initialTab={shortcutsDialog.tab} />
+         <EntityContextMenu />
+         <HoverTooltip />
+         <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen}

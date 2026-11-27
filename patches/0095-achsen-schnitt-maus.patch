@@ -1,76 +1,16 @@
-diff --git a/apps/viewer/src/components/viewer/tools/SectionVisualization.tsx b/apps/viewer/src/components/viewer/tools/SectionVisualization.tsx
---- a/apps/viewer/src/components/viewer/tools/SectionVisualization.tsx
-+++ b/apps/viewer/src/components/viewer/tools/SectionVisualization.tsx
-@@ -22,6 +22,8 @@
- import type { CustomSectionPlane } from '@/store/types';
- import { useTranslation } from '@/i18n';
- import { capturePointer, releasePointer } from '@/lib/pointer-capture';
-+import { chMoveAxisSection, chAxisSectionInputActive } from '@/lib/ch/axis-section-input';
-+import { setAlignmentDistance } from '@/lib/section/alignment-controller';
- import { AxisArrow, Handle, PlaneOutline, useSceneProjector } from '../../viewport-ui/scene';
- import { isAnchorVisible, vec3Key } from '../../viewport-ui/scene/projection';
- import { useWakeOnChange } from '../../viewport-ui/scene/useWakeOnChange';
-@@ -103,6 +105,7 @@
- 
-   const dragRef = useRef<{
-     startDistance: number;
-+    lastCursor: ScreenPoint;
-     startCursor: ScreenPoint;
-     screenNormal: ScreenPoint;
-     pixelsPerMeter: number;
-@@ -121,6 +124,7 @@
-     capturePointer(e.target as Element, e.pointerId);
-     dragRef.current = {
-       startDistance: customPlane.distance,
-+      lastCursor: { x: e.clientX, y: e.clientY },
-       startCursor: { x: e.clientX, y: e.clientY },
-       screenNormal: { x: dx / ppm, y: dy / ppm },
-       pixelsPerMeter: ppm,
-@@ -132,12 +136,31 @@
-     const s = dragRef.current;
-     if (!s) return;
-     e.stopPropagation();
-+    // Follow the current tangent through bends, using incremental cursor motion.
-+    const { foot: f, tip: tp } = screen.current;
-+    if (f && tp) {
-+      const dx = tp.x - f.x;
-+      const dy = tp.y - f.y;
-+      const ppm = Math.hypot(dx, dy);
-+      if (ppm >= 1e-3) {
-+        const delta = ((e.clientX - s.lastCursor.x) * dx + (e.clientY - s.lastCursor.y) * dy) / (ppm * ppm);
-+        if (chMoveAxisSection(delta)) {
-+          s.lastCursor = { x: e.clientX, y: e.clientY };
-+          return;
-+        }
-+        if (customPlane.alignment) {
-+          void setAlignmentDistance(customPlane.alignment.geometricHorizontalDistanceMeters + delta);
-+          s.lastCursor = { x: e.clientX, y: e.clientY };
-+          return;
-+        }
-+      } else if (chAxisSectionInputActive() || customPlane.alignment) return;
-+    } else if (chAxisSectionInputActive() || customPlane.alignment) return;
-     const cdx = e.clientX - s.startCursor.x;
-     const cdy = e.clientY - s.startCursor.y;
-     // Project the cursor delta onto the screen-projected normal, then pixels -> metres.
-     const along = cdx * s.screenNormal.x + cdy * s.screenNormal.y;
-     setDistance(s.startDistance + along / s.pixelsPerMeter);
--  }, [setDistance]);
-+  }, [setDistance, customPlane.alignment]);
- 
-   const handlePointerUp = useCallback((e: React.PointerEvent<SVGCircleElement>) => {
-     if (!dragRef.current) return;
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
+index e07fcb6701b38518094680f4da5259b10ddc21ed..e9d7b5f12961828fe38ffa49c735f1e0447ca30a 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -30,6 +30,7 @@
- import { BasepointOverlay } from './BasepointOverlay';
+@@ -36,6 +36,7 @@ import { BasepointOverlay } from './BasepointOverlay';
  import { ChLaengsschnittNavigationMarker } from './ChLaengsschnittNavigationMarker';
+ import { StructuralGlyphLayer } from './structural/StructuralGlyphLayer';
  import { SceneOverlayRoot } from '@/components/viewport-ui/scene';
 +import { ChSectionWheelInput } from './ChSectionWheelInput';
  import { DrawingRuntimeHost } from './drawing/DrawingRuntimeHost';
  import { BCFOverlay } from './bcf/BCFOverlay';
  import { CesiumOverlay } from './CesiumOverlay';
-@@ -1018,6 +1019,7 @@
+@@ -796,6 +797,7 @@ function ViewportContainerLive() {
        />
        {/* ONE scene-overlay kernel per viewport (#5486, #5511, #5512, was
            two roots until `ToolOverlays` (#5502) consolidated here). */}
@@ -78,10 +18,107 @@ diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/view
        <SceneOverlayRoot>
          <AnnotationLayer />
          <CollabPresenceLayer />
+diff --git a/apps/viewer/src/components/viewer/tools/SectionVisualization.tsx b/apps/viewer/src/components/viewer/tools/SectionVisualization.tsx
+index 02d376385eb55debbf42b3a539b634185f3822a1..5be87a94d1a6246ad69480c3acc648a0ab6e52a8 100644
+--- a/apps/viewer/src/components/viewer/tools/SectionVisualization.tsx
++++ b/apps/viewer/src/components/viewer/tools/SectionVisualization.tsx
+@@ -21,6 +21,8 @@ import { useCallback, useEffect, useId, useRef } from 'react';
+ import { customPlaneCenter, useViewerStore } from '@/store';
+ import { useTranslation } from '@/i18n';
+ import { capturePointer, releasePointer } from '@/lib/pointer-capture';
++import { chAxisSectionInputActive, chMoveAxisSection } from '@/lib/ch/axis-section-input';
++import { moveAlignmentDistanceBy } from '@/lib/section/alignment-controller';
+ import { AxisArrow, Handle, PlaneOutline, useSceneProjector } from '../../viewport-ui/scene';
+ import { isAnchorVisible, vec3Key } from '../../viewport-ui/scene/projection';
+ import { useWakeOnChange } from '../../viewport-ui/scene/useWakeOnChange';
+@@ -60,7 +62,7 @@ export function SectionPlaneVisualization({ enabled }: SectionPlaneVisualization
+       {enabled && customPlane && (
+         <SectionPlaneDragGizmo
+           foot={customPlaneCenter(customPlane)} normal={customPlane.normal} value={customPlane.distance}
+-          setValue={setSectionCustomDistance} onDragStart={onDragStart} onDragEnd={onDragEnd}
++          setValue={setSectionCustomDistance} onDragStart={onDragStart} onDragEnd={onDragEnd} followAxis
+         />
+       )}
+       {/* A cardinal plane gets the same handle (#7545): its foot is where the renderer put the plane, and
+@@ -93,6 +95,8 @@ export function SectionPlaneDragGizmo(props: {
+   setValue: (metres: number) => void;
+   /** Units of `value` per metre along `normal`; 1 unless the value is not measured along the normal (a rotated building's axis coordinate). */
+   valuePerMetre?: number;
++  /** Only a custom plane can be bound to an alignment. */
++  followAxis?: boolean;
+   onDragStart: () => void;
+   onDragEnd: () => void;
+ }) {
+@@ -120,8 +124,11 @@ export function SectionPlaneDragGizmo(props: {
+   useWakeOnChange(projector, `${vec3Key(foot)}|${vec3Key(tip)}`);
+ 
+   const dragRef = useRef<{
++    planeId: string;
++    axisMode: 'native' | 'trassia' | null;
+     startDistance: number;
+     startCursor: ScreenPoint;
++    lastCursor: ScreenPoint;
+     screenNormal: ScreenPoint;
+     pixelsPerMeter: number;
+   } | null>(null);
+@@ -137,25 +144,49 @@ export function SectionPlaneDragGizmo(props: {
+     if (ppm < 1e-3) return; // edge-on view — a drag would be unstable
+     // Capture only once a drag will start: an edge-on bail would leave it held (#5403).
+     capturePointer(e.target as Element, e.pointerId);
++    const plane = useViewerStore.getState().sectionPlane;
++    const axisMode = !props.followAxis ? null : plane.custom?.alignment ? 'native' : chAxisSectionInputActive() ? 'trassia' : null;
++    const cursor = { x: e.clientX, y: e.clientY };
+     dragRef.current = {
++      planeId: plane.id,
++      axisMode,
+       startDistance: value,
+-      startCursor: { x: e.clientX, y: e.clientY },
++      startCursor: cursor,
++      lastCursor: cursor,
+       screenNormal: { x: dx / ppm, y: dy / ppm },
+       pixelsPerMeter: ppm,
+     };
+     onDragStart();
+-  }, [value, onDragStart]);
++  }, [value, onDragStart, props.followAxis]);
+ 
+   const handlePointerMove = useCallback((e: React.PointerEvent<SVGCircleElement>) => {
+     const s = dragRef.current;
+     if (!s) return;
+     e.stopPropagation();
++    const plane = useViewerStore.getState().sectionPlane;
++    if (s.planeId !== plane.id) return;
++    if (s.axisMode) {
++      // Follow the live tangent through bends. Invalid or edge-on samples
++      // are discarded instead of replaying that cursor travel on the next hit.
++      const previous = s.lastCursor;
++      s.lastCursor = { x: e.clientX, y: e.clientY };
++      const { foot: f, tip: tp } = screen.current;
++      if (!f || !tp) return;
++      const dx = tp.x - f.x, dy = tp.y - f.y;
++      const lengthSquared = dx * dx + dy * dy;
++      if (!(lengthSquared >= 1e-6)) return;
++      const delta = ((e.clientX - previous.x) * dx + (e.clientY - previous.y) * dy) / lengthSquared;
++      if (s.axisMode === 'native') moveAlignmentDistanceBy(delta);
++      else if (!plane.custom?.alignment) chMoveAxisSection(delta);
++      return;
++    }
++    if (props.followAxis && (plane.custom?.alignment || chAxisSectionInputActive())) return;
+     const cdx = e.clientX - s.startCursor.x;
+     const cdy = e.clientY - s.startCursor.y;
+     // Project the cursor delta onto the screen-projected normal, then pixels -> metres.
+     const along = cdx * s.screenNormal.x + cdy * s.screenNormal.y;
+     setDistance(s.startDistance + (along / s.pixelsPerMeter) * valuePerMetre);
+-  }, [setDistance, valuePerMetre]);
++  }, [setDistance, valuePerMetre, props.followAxis]);
+ 
+   const handlePointerUp = useCallback((e: React.PointerEvent<SVGCircleElement>) => {
+     if (!dragRef.current) return;
 diff --git a/apps/viewer/src/i18n/catalogues/alignment-section.en.ts b/apps/viewer/src/i18n/catalogues/alignment-section.en.ts
+index e6098922f41101b37c8618556e28f0a701e720b3..08133c3d9b1682e36961d324bba1364c41343f71 100644
 --- a/apps/viewer/src/i18n/catalogues/alignment-section.en.ts
 +++ b/apps/viewer/src/i18n/catalogues/alignment-section.en.ts
-@@ -11,6 +11,6 @@
+@@ -11,6 +11,6 @@ export const alignmentSectionEn = {
    'alignmentSection.loading': 'Resolving alignment…',
    'alignmentSection.distance': 'Horizontal distance from start',
    'alignmentSection.approximate': 'Approximate curve · distance from start',
@@ -89,3 +126,42 @@ diff --git a/apps/viewer/src/i18n/catalogues/alignment-section.en.ts b/apps/view
 +  'alignmentSection.help': 'Distance is geometric horizontal metres from the physical start, not authored chainage. The plane follows the evaluated tangent. Drag the plane handle or use Shift + mouse wheel in the 3D view to move along the alignment. The plane stays perpendicular to its tangent. Ctrl + mouse wheel or trackpad pinch zooms the view.',
    'alignmentSection.error': 'Cannot section this alignment: {detail}',
  } as const satisfies Record<string, TranslationValue>;
+diff --git a/apps/viewer/src/lib/section/alignment-controller.ts b/apps/viewer/src/lib/section/alignment-controller.ts
+index ebe4a7d2b41aebae77edd61b2ffe5d2554104398..fc95be7650d991a55280847e46efe36626806f41 100644
+--- a/apps/viewer/src/lib/section/alignment-controller.ts
++++ b/apps/viewer/src/lib/section/alignment-controller.ts
+@@ -51,6 +51,9 @@ function apply(sample: AlignmentSectionSample, binding: AlignmentSectionBinding,
+   const center = customPlaneCenter(custom);
+   const component = cardinal.axis === 'side' ? center[0] : cardinal.axis === 'down' ? center[1] : center[2];
+   const position = range ? worldToPercent(component, range) : state.sectionPlane.position;
++  if (owner?.modelId === binding.modelId && owner.expressId === binding.expressId) {
++    owner.distance = binding.geometricHorizontalDistanceMeters;
++  }
+   useViewerStore.setState({ sectionPlane: { ...state.sectionPlane, custom, box: undefined,
+     axis: cardinal.axis, position, ...(initial ? { enabled: true } : {}) }, sectionPickMode: false, sectionPickPreview: null });
+   if (initial) state.setSectionVisible(true);
+@@ -141,6 +144,7 @@ export async function setAlignmentDistance(distance: number): Promise<void> {
+   const binding = useViewerStore.getState().sectionPlane.custom?.alignment;
+   if (!binding || !owner || owner.modelId !== binding.modelId || owner.expressId !== binding.expressId
+     || !Number.isFinite(distance)) return;
++  owner.distance = distance;
+   if (useAlignmentToolState.getState().busy) { queuedDistance = distance; return; }
+   if (!client) return;
+   const version = generation;
+@@ -153,6 +157,16 @@ export async function setAlignmentDistance(distance: number): Promise<void> {
+   } catch (error) { if (version === generation && sequence === request) fail(error); }
+ }
+ 
++/** Drag and wheel deltas accumulate while the worker evaluates the last request. */
++export function moveAlignmentDistanceBy(delta: number): boolean {
++  const binding = useViewerStore.getState().sectionPlane.custom?.alignment;
++  if (!binding) return false;
++  if (!owner || owner.modelId !== binding.modelId || owner.expressId !== binding.expressId || !Number.isFinite(delta)) return true;
++  const distance = Math.max(0, Math.min(binding.geometricHorizontalLengthMeters, owner.distance + delta));
++  if (distance !== owner.distance) void setAlignmentDistance(distance);
++  return true;
++}
++
+ /** Scene component owns this lifetime, including model removal and edits. */
+ export function startAlignmentTool(): () => void {
+   unsubscribe?.();

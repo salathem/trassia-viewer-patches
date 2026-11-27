@@ -1,37 +1,30 @@
 diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
-index 347d06ad5cf2f6a60cb3177b680328447b8ae4bf..345a522d001316324fc22cdc16e1cb42ba0b4c4e 100644
+index 6f45aa10516533e65472b37e3814c19696c9fab6..23238cbeca1d247e468c20f324241e26f0579164 100644
 --- a/apps/viewer/src/hooks/useDrawingExport.ts
 +++ b/apps/viewer/src/hooks/useDrawingExport.ts
-@@ -11,6 +11,8 @@ import { downloadFile, sanitizeFilename } from '@/lib/export/download';
- // Trassia overlay (not upstream) — the station cut publishes what it is
- // called; see overlay/apps/viewer/src/lib/ch/section-export-name.ts.
- import { chSectionExportStem } from '@/lib/ch/section-export-name';
-+// Trassia overlay (not upstream) — see overlay/apps/viewer/src/lib/ch/qp-corridor.ts
+@@ -7,6 +7,7 @@ import { resolvedElementTags, elementTagsSvg } from '@/lib/drawing/element-tags'
+ import { escapeTagXml as escapeXml, elementTagsDxf, drawElementTagsPdf } from '@/lib/drawing/element-tag-export';
+ import { buildDxfUnderlaySvg, drawDxfUnderlaysPdf, mappedDxfUnderlayOptions } from '@/lib/export/drawing-vector-underlays';
+ import { drawingReferenceSvg, snapshotDrawingReferences, rasterizeReferenceLayer } from '@/lib/export/drawing-raster-references';
 +import { chQpUndistorted } from '@/lib/ch/qp-corridor';
- import { toast } from '@/components/ui/toast';
- import { useTranslation } from '@/i18n';
- import { pdfLineStyleFor } from '@/lib/export/pdf-line-style';
-@@ -270,7 +272,7 @@ interface UseDrawingExportResult {
+ import type React from 'react';
+ import { posthog, trackExportCompleted } from '@/lib/analytics';
+ import { downloadFile, sanitizeFilename } from '@/lib/export/download';
+@@ -149,7 +150,7 @@ export interface UseDrawingExportResult {
  }
  
- function useDrawingExport({
+ export function createDrawingExport({
 -  drawing,
-+  drawing: drawingFromStore,
++  drawing: displayDrawing,
    displayOptions,
    sectionPlane,
    activePresetId,
-@@ -291,6 +293,14 @@ function useDrawingExport({
+@@ -168,6 +169,8 @@ export function createDrawingExport({
+   isPinned = false,
    cachedSheetTransformRef,
- }: UseDrawingExportParams): UseDrawingExportResult {
-   const { t } = useTranslation();
-+  // Trassia (Paket V-QP): JEDER Export — SVG, PDF, DXF — nimmt die unverzerrte
-+  // Zeichnung. Die Hoehenueberhoehung des Querprofil-Panels ist eine Lesehilfe
-+  // am Bildschirm; ein 2x gestrecktes DXF waere ein Plan, der aussieht wie ein
-+  // brauchbarer und keiner ist. Der KORRIDOR dagegen steckt schon in dieser
-+  // Zeichnung und soll es auch: der Benutzer hat den Schnitt begrenzt, und der
-+  // Plan soll enthalten, was er auf dem Schirm hatte. Ohne Ueberhoehung ist das
-+  // dasselbe Objekt, der Export also bitgleich mit dem Upstream.
-+  const drawing = chQpUndistorted(drawingFromStore);
+ }: UseDrawingExportParams, services: { t: UseTranslationResult['t']; dimensionGraphicsAt: ExportDimensionGraphics; warn?: (message: string) => void }): UseDrawingExportResult {
++  // Screen exaggeration is excluded from SVG, DXF and PDF artefacts.
++  const drawing = chQpUndistorted(displayDrawing);
+   const { t, dimensionGraphicsAt } = services;
    // Georef inputs for the DXF export (PR #1871 review, P1): placement edits
    // applied in CesiumPlacementEditor live in `georefMutations` (per model
-   // id), not in `ifcDataStore`, and in a federation the georef frame is the

@@ -1,63 +1,86 @@
 diff --git a/apps/viewer/src/i18n/en.ts b/apps/viewer/src/i18n/en.ts
-index 825de2796e718ae86e2f66c1bbd964a488019410..f532d90fe54af6ffa5a33ef3c1084a22455538ed 100644
+index 0d58bc53a47d93b4029ed34e9f1bbb70ddda358f..c88e3d9f83dbcae95c3e32c6dfee947d5c5c89cf 100644
 --- a/apps/viewer/src/i18n/en.ts
 +++ b/apps/viewer/src/i18n/en.ts
-@@ -110,6 +110,7 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
+@@ -170,6 +170,7 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
  
  /** English is assembled from feature catalogues so no locale becomes a monolith. */
  export const en = {
 +  'trassia.panel.drape': 'Terrain drape',
-   ...analysisPanelEn,
-   ...annotationsEn,
-   ...anonymizedExportEn,
+   ...influxEn,
+   ...zoneEmissionEn,
+   ...newIfcEn,
+diff --git a/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts b/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts
+index c920e88752976471830554e2a42fa8a25645d42a..c879c2d2ef2518502100b6b62286a7643d4fec02 100644
+--- a/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts
++++ b/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts
+@@ -7,6 +7,7 @@ export type AuditFamily = 'core' | 'authoring' | 'clash' | 'analytics' | 'appear
+ /** Explicit current-control audits, never inferred from an operation count.
+  * Adding a panel requires an audit entry and concrete classified bindings. */
+ export const panelControlAudits: Readonly<Record<WorkspacePanelId, readonly AuditFamily[]>> = {
++  drape: [], // Trassia panel, local UI controls.
+   hierarchy: ['core'], properties: ['core', 'authoring', 'coordination'], layers: ['coordination'], zones: ['authoring'],
+   model: ['authoring'], placement: ['authoring'], changes: ['authoring', 'core'], changeSets: ['authoring'],
+   clash: ['clash'], validation: ['authoring'], idsStudio: ['authoring'], compare: ['coordination'], bcf: ['coordination'],
+diff --git a/apps/viewer/src/lib/panels/availability.ts b/apps/viewer/src/lib/panels/availability.ts
+index e6e84d21c83ec8e9014f3ece9ca8fcbcac419b97..50e9e5406b94d88f3dd9b66467ea172498d8d838 100644
+--- a/apps/viewer/src/lib/panels/availability.ts
++++ b/apps/viewer/src/lib/panels/availability.ts
+@@ -21,7 +21,7 @@ import { isCollabEnabled } from '@/lib/collab/config';
+ import { isFeatureEnabled, type FeatureId } from '@/lib/features';
+ import type { WorkspacePanelId } from './registry';
+ 
+-export const PANEL_FEATURE: Readonly<Record<Exclude<WorkspacePanelId, 'hierarchy' | 'properties'>, FeatureId>> = {
++export const PANEL_FEATURE: Readonly<Record<Exclude<WorkspacePanelId, 'drape' | 'hierarchy' | 'properties'>, FeatureId>> = {
+   sources: 'files.sources',
+   measurements: 'tools.measure',
+   lens: 'view.lens',
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index 5b5a674e6f56a920e82523717b38dedfd4f9d54c..b0fac740105b2b9f9749444e0584e1eb671bfcdc 100644
+index 02983d3eed4898ae96dbca6dc1ba8c8547ada13d..6c20bbbd2a1d3d9a1629639e5cbed635bd976df3 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
 @@ -21,6 +21,7 @@
  // the viewer-embed bundle too, which has no unplugin-icons resolver for the
  // `~icons/viewer/*` virtual modules (#6315 broke that build).
- import { BarChart3, Box, CalendarRange, ClipboardCheck, Cloud, Coins, Crosshair, DraftingCompass, FileText, FileWarning, GitBranch, GitCompareArrows, History, Info, Layers as LayersIcon, ListTree, MessageSquare, Move3d, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
+ import { BarChart3, Bot, Box, CalendarRange, ChartLine, ClipboardCheck, ClipboardPen, Cloud, Coins, Crosshair, DraftingCompass, FileText, FileWarning, GitBranch, GitCompareArrows, History, Info, Link2, Layers as LayersIcon, ListChecks, ListTree, MessageSquare, Move3d, Paintbrush, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
 +import { Mountain } from 'lucide-react';
  import type { TranslationKey } from '@/i18n';
  
  /** Every panel reachable from the unified sidebar rail. `properties` is the
-@@ -58,7 +59,8 @@ export type WorkspacePanelId =
-   | 'presentation'
-   | 'changes'
-   | 'model'
--  | 'changeSets';
-+  | 'changeSets'
-+  | 'drape';
+@@ -63,6 +64,7 @@ export type WorkspacePanelId =
+   | 'review'
+   | 'assistant'
+   | 'idsStudio'
++  | 'drape'
+   | 'influx';
  
  /** Shared task grouping for the rail, ribbon panel browser, and palette commands (#5873). */
- export type PanelGroup = 'coordinate' | 'check' | 'quantify' | 'automate' | 'site' | 'author';
-@@ -200,6 +202,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
-   // Named change sets (#6232 D4): the active set collects new edits; export /
-   // import as files. Flag-free like 'changes' / 'model'. APPENDED (no Alt shortcut).
-   { id: 'changeSets', titleKey: 'changeSets.panel.title', Icon: GitBranch, group: 'author', region: 'side' },
+@@ -214,6 +216,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   // authored before any model is loaded.
+   { id: 'influx', titleKey: 'influx.title', Icon: ChartLine, group: 'site', region: 'side' },
+   { id: 'idsStudio', titleKey: 'idsStudio.title', Icon: ClipboardPen, group: 'check', region: 'side', prefersWide: true },
 +  { id: 'drape', titleKey: 'trassia.panel.drape', Icon: Mountain, group: 'author', region: 'side' },
  ];
  
- // The bottom strip (Script / Schedule / Lists) is table-driven; the id union and
+ /** How a panel opened on an empty viewer offers a way to a model
 diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-index 40b0b3361c524e24b9c7431076c068a67ffc87a7..d2a427782e273fe6d154f7f7b2fca08a7ee3a55d 100644
+index c572285f4123153504d4f930f8b02cd85f608f3d..24f034c4c6c5da3561a730a56f5989a462affb4c 100644
 --- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
 +++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-@@ -37,6 +37,8 @@ import { MeasurementsPanel } from '@/components/viewer/MeasurementsPanel';
- import { PlacementPanel } from '@/components/viewer/placement/PlacementPanel';
- import { ModelInspectorPanel } from '@/components/viewer/model-inspector/ModelInspectorPanel';
- import { useViewerStore } from '@/store';
+@@ -39,6 +39,8 @@ import { PanelModelGate } from '@/components/viewer/PanelModelGate';
+ import { isPanelAvailable } from './availability';
+ import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
+ import { loadIdsStudioRuntime } from '@/lib/ids-studio/runtime-loader';
 +// Trassia overlay (not upstream) — Paket V-DRAPE, siehe ChDrapePanel.tsx.
 +import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
+ import { useViewerStore } from '@/store';
  // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
  // dynamic chunk keeps it out of the initial bundle until first opened.
- const LayersPanel = lazy(() =>
-@@ -146,6 +148,7 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
-     case 'collab': return <RoomPanel onClose={onClose} />;
-     case 'zones': return <ZonesPanel onClose={onClose} />;
-     case 'loadReport': return <LoadReportPanel onClose={onClose} />;
+@@ -215,6 +217,7 @@ function panelBody(id: WorkspacePanelId, onClose: () => void): ReactNode {
+     case 'semantic': return <SemanticPanelBody />;
+     case 'review': return <ReviewPanelBody />;
+     case 'idsStudio': return <IdsStudioPanelBody />;
 +    case 'drape': return <ChDrapePanel onClose={onClose} />;
-     case 'changes': return <ChangesPanel onClose={onClose} />;
-     case 'layers': return <LayersPanelBody onClose={onClose} />;
-     case 'sources': return <SourcesPanelBody onClose={onClose} />;
+     case 'changeSets': return <ChangeSetPanel onClose={onClose} />;
+   }
+ }

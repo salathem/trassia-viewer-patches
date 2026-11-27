@@ -18,16 +18,19 @@
  * `window.location.origin`; a cross-origin URL is refused, never fetched.
  */
 
-import { chIsHtmlResponse } from '@/lib/ch/ch-file-validation';
-import { chSetLoadNotice } from '@/lib/ch/ch-load-notice';
-import { chReadProjectParam } from '@/lib/ch/project-manifest';
 import { useEffect, useRef } from 'react';
 import { useIfcLoader } from './useIfcLoader.js';
 import { useIfcFederation } from './useIfcFederation.js';
 import { useWebGpuOpenGuard } from './useWebGpuOpenGuard';
+import { watchLoadSupersession } from './modelLoadCanceller.js';
 import { showLoadError } from '@/lib/analytics';
 import { useViewerStore } from '@/store';
 import { useTranslation, type TranslationKey } from '@/i18n';
+import { markLoadIntent } from '@/lib/load-intent';
+import { pageUrlModelAllowed } from '@/lib/processed-model';
+import { chIsHtmlResponse } from '@/lib/ch/ch-file-validation';
+import { chSetLoadNotice } from '@/lib/ch/ch-load-notice';
+import { chReadProjectParam } from '@/lib/ch/project-manifest';
 
 export function useModelUrlAutoload(): void {
   // The loader and federation hooks subscribe to actions only; `useIfc()` also
@@ -40,8 +43,11 @@ export function useModelUrlAutoload(): void {
   // probe is pending. Preserve the source requested on this mount.
   const sourceRef = useRef<{ modelUrl: string | null; baseUrl: string } | null>(null);
   if (sourceRef.current === null) {
+    const search = window.location.search;
+    const params = new URLSearchParams(search);
     sourceRef.current = {
-      modelUrl: new URLSearchParams(window.location.search).get('model'),
+      // The processed entry owns this page request, including its malformed-link error.
+      modelUrl: params.has('processed') || chReadProjectParam(search).slug !== '' ? null : params.get('model'),
       baseUrl: window.location.href,
     };
   }
@@ -56,25 +62,27 @@ export function useModelUrlAutoload(): void {
     if (!source) return;
     const { modelUrl, baseUrl: sourceBaseUrl } = source;
     if (!modelUrl) return;
-    if (chReadProjectParam(window.location.search).slug !== '') {
-      console.warn('[viewer] ?model= ignored: ?project= loads this session');
-      return;
-    }
     autoloadDoneRef.current = true;
 
     // `retry` is required at every call (#5851 review): a malformed or
     // cross-origin URL is the SAME url string on every attempt, so retrying
     // it can never differ — null, no Retry button. A fetch failure may well
     // be transient, so it gets a real retry over this same attempt.
+    let resolvedUrl: URL | null = null;
     const fail = (key: TranslationKey, code: string, retry: (() => void) | null, values?: Record<string, string>) => {
       const { setError, setLastLoadRetry } = useViewerStore.getState();
-      chSetLoadNotice({ fileName: modelUrl, message: t(key, values) });
-      showLoadError(setError, setLastLoadRetry, t(key, values), code, retry);
+      const message = t(key, values);
+      chSetLoadNotice({ fileName: resolvedUrl?.origin === window.location.origin ? resolvedUrl.pathname : 'Linked model', message });
+      showLoadError(setError, setLastLoadRetry, message, code, retry);
     };
 
-    let resolvedUrl: URL | null = null;
     const attempt = async () => {
-      if (!guardWebGpu(() => { void attempt(); })) return;
+      if (!pageUrlModelAllowed('model')) return; // a host asked for its own model; checked again on Retry
+      markLoadIntent(); // the model is fetched before the load starts
+      // Replay-safe (a fetch, no gesture): Retry on the unsupported card may
+      // re-run it after the re-check. This effect never reaches the guard
+      // while the check is still running; it waits for the check instead.
+      if (!guardWebGpu(() => { void attempt(); }, { replay: 'free' })) return;
       // Resolve (supports relative paths) and enforce same-origin before fetching.
       let source: URL;
       try {
@@ -88,20 +96,28 @@ export function useModelUrlAutoload(): void {
         fail('viewportLighting.container.modelUrlAutoload.crossOrigin', 'model_url_cross_origin', null);
         return;
       }
+      // A load the user starts while the model downloads is what they want
+      // to see; the autoload then drops out quietly (L9).
+      const supersession = watchLoadSupersession('any');
       try {
-        const res = await fetch(source.href);
+        const res = await fetch(source.href, { mode: 'same-origin', signal: supersession.signal });
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         if (chIsHtmlResponse(res.headers.get('content-type'))) {
           throw new Error('the server returned a web page, not a model file');
         }
         const blob = await res.blob();
+        if (supersession.signal.aborted) return;
+        supersession.stop(); // the add below is this autoload's own load
         const filename = source.pathname.split('/').pop() || 'model.ifc';
         const file = new File([blob], filename, { type: blob.type || 'application/x-step' });
         await addModel(file);
       } catch (err) {
+        if (supersession.signal.aborted) return;
         const reason = err instanceof Error ? err.message : String(err);
         fail('viewportLighting.container.modelUrlAutoload.fetchFailed', 'model_url_fetch_failed',
           () => { void attempt(); }, { reason });
+      } finally {
+        supersession.stop();
       }
     };
 

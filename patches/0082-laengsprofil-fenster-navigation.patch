@@ -1,20 +1,20 @@
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index 06e5dbfb547e5fb9dc44cbde7796db2cf8807be1..1f59de261419a09532dad9afb75014767f374db1 100644
+index a87620088af9585784df566613103cb880a7e6ea..e07fcb6701b38518094680f4da5259b10ddc21ed 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -28,6 +28,7 @@ import { AnnotationLayer } from './annotations/AnnotationLayer';
+@@ -33,6 +33,7 @@ import { AnnotationLayer } from './annotations/AnnotationLayer';
  import { CollabPresenceLayer } from './CollabPresenceLayer';
  import { MeasurementSceneLayer } from './scene/MeasurementSceneLayer';
  import { BasepointOverlay } from './BasepointOverlay';
 +import { ChLaengsschnittNavigationMarker } from './ChLaengsschnittNavigationMarker';
+ import { StructuralGlyphLayer } from './structural/StructuralGlyphLayer';
  import { SceneOverlayRoot } from '@/components/viewport-ui/scene';
  import { DrawingRuntimeHost } from './drawing/DrawingRuntimeHost';
- import { BCFOverlay } from './bcf/BCFOverlay';
-@@ -1022,6 +1023,7 @@ export function ViewportContainer() {
+@@ -800,6 +801,7 @@ function ViewportContainerLive() {
          <CollabPresenceLayer />
          {bcfOverlayVisible && <BCFOverlay />}
          <BasepointOverlay />
 +        <ChLaengsschnittNavigationMarker />
+         <StructuralGlyphLayer isolatedIds={computedIsolatedIds} />
          <ZoneOverlay />
          <MeasurementSceneLayer />
-         <ToolOverlays />

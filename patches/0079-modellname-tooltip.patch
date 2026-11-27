@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx b/apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx
-index a6f89aa27a03399435dcb4c36445e90a019cbf43..708b778aae4481e33903fc3a49fff10d75cf11db 100644
+index d69e210d981cbf1f84e79445a9d73cd7344ae109..5068680cc062d12382558767dc4f3545d1745fe5 100644
 --- a/apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx
 +++ b/apps/viewer/src/components/viewer/hierarchy/ModelHeaderRow.tsx
-@@ -110,9 +110,14 @@ export function ModelHeaderRow({
+@@ -115,9 +115,14 @@ export function ModelHeaderRow({
          )}
  
          <FileBox className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -19,4 +19,4 @@ index a6f89aa27a03399435dcb4c36445e90a019cbf43..708b778aae4481e33903fc3a49fff10d
 +        </Tooltip>
  
          {node.elementCount !== undefined && (
-           <span className="ch-zeilenzahl text-2xs tabular-nums text-zinc-400 dark:text-zinc-500 px-1 shrink-0">
+           <span className="ch-zeilenzahl shrink-0 px-1 text-2xs tabular-nums text-muted-foreground">

@@ -15,8 +15,7 @@ import type { Measurement, SnapVisualization, ActivePolyline, PolylineMeasuremen
 import type { MeasurementConstraintEdge } from '@/store/types';
 import { SnapType, type SnapTarget } from '@ifc-lite/renderer';
 import { formatDistance } from './formatDistance';
-import { distanceComponents, formatAxisDeltas, formatHorizontalVertical } from './measure-modes/components';
-// Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-measure-readouts.tsx
+import { distanceComponents, formatHorizontalVertical } from './measure-modes/components';
 import { ChAxisDeltas } from './measure-modes/ch-measure-readouts';
 import type { Vec3Like } from './measure-modes/geo-readout';
 import { inclination, formatInclination } from './measure-modes/inclination';
@@ -56,11 +55,11 @@ function centroid(points: readonly Point3[]): Point3 {
 }
 
 /** dX/dY/dZ, H/V and inclination under a distance label (#2199 §4). */
-function Breakdown({ components, unitDisplayOverrides, start, end }: { components: ReturnType<typeof distanceComponents>; unitDisplayOverrides: Record<string, string>; start?: Vec3Like; end?: Vec3Like }) {
+function Breakdown({ start, end, unitDisplayOverrides }: { start: Vec3Like; end: Vec3Like; unitDisplayOverrides: Record<string, string> }) {
+  const components = distanceComponents(start, end);
   return (
     <div className={SUB_CLASS}>
-      {/* Trassia (M-05): ΔE/ΔN/ΔH bei georeferenziertem Modell statt Renderer-Achsen. */}
-      <div>{start && end ? <ChAxisDeltas start={start} end={end} overrides={unitDisplayOverrides} /> : formatAxisDeltas(components, unitDisplayOverrides)}</div>
+      <div><ChAxisDeltas start={start} end={end} overrides={unitDisplayOverrides} /></div>
       <div>{formatHorizontalVertical(components, unitDisplayOverrides)}</div>
       <div>{formatInclination(inclination(components))}</div>
     </div>
@@ -69,6 +68,7 @@ function Breakdown({ components, unitDisplayOverrides, start, end }: { component
 
 export interface MeasurementOverlaysProps {
   measurements: Measurement[];
+  /** Point mode's placed point, drawn as the pending-point mark (as is a just-set Distance start). */
   pending: { screenX: number; screenY: number } | null;
   // `current` carries world x/y/z (the store's ActiveMeasurement uses a full
   // MeasurePoint) so the live label can show the same axis breakdown.
@@ -118,11 +118,16 @@ export const MeasurementOverlays = React.memo(function MeasurementOverlays({ mea
     hoverPosition?.y,
   ]);
 
+  // A just-set Distance start (#8785): the end has not left the start yet (a
+  // tap, which has no hover, or a click before the first move). It draws as the
+  // pending-point mark, not a zero-length line with a "0 mm" label.
+  const startOnly = activeMeasurement?.distance === 0;
+  const pendingMark = pending ?? (startOnly ? activeMeasurement.start : null);
+
   return (
     <>
       {/* Completed measurements */}
       {measurements.map((m) => {
-        const components = distanceComponents(m.start, m.end);
         return (
         <div key={m.id} className="pointer-events-none">
           {/* Line connecting start and end */}
@@ -164,7 +169,7 @@ export const MeasurementOverlays = React.memo(function MeasurementOverlays({ mea
           <WorldLabel worldPoint={midpoint(m.start, m.end)} offset={LABEL_OFFSET} className={LABEL_CLASS}>
             <div className="font-medium">{formatDistance(m.distance, unitDisplayOverrides)}</div>
             {/* Axis breakdown, derived on render (see measure-modes/components). */}
-            <Breakdown components={components} unitDisplayOverrides={unitDisplayOverrides} start={m.start} end={m.end} />
+            <Breakdown start={m.start} end={m.end} unitDisplayOverrides={unitDisplayOverrides} />
           </WorldLabel>
         </div>
         );
@@ -252,7 +257,7 @@ export const MeasurementOverlays = React.memo(function MeasurementOverlays({ mea
       })()}
 
       {/* Active measurement (live preview while dragging) */}
-      {activeMeasurement && (
+      {activeMeasurement && !startOnly && (
         <div className="pointer-events-none">
           <svg
             className="absolute inset-0 pointer-events-none"
@@ -298,7 +303,7 @@ export const MeasurementOverlays = React.memo(function MeasurementOverlays({ mea
               wants dX/dY/dZ, so the live readout must not be the poorer one. */}
           <WorldLabel worldPoint={midpoint(activeMeasurement.start, activeMeasurement.current)} active offset={LABEL_OFFSET} className={LABEL_CLASS}>
             <div className="font-medium">{formatDistance(activeMeasurement.distance, unitDisplayOverrides)}</div>
-            <Breakdown components={distanceComponents(activeMeasurement.start, activeMeasurement.current)} unitDisplayOverrides={unitDisplayOverrides} start={activeMeasurement.start} end={activeMeasurement.current} />
+            <Breakdown start={activeMeasurement.start} end={activeMeasurement.current} unitDisplayOverrides={unitDisplayOverrides} />
           </WorldLabel>
         </div>
       )}
@@ -547,26 +552,14 @@ export const MeasurementOverlays = React.memo(function MeasurementOverlays({ mea
         />
       )}
 
-      {/* Pending point (legacy - keep for backward compatibility) */}
-      {pending && !activeMeasurement && (
+      {/* Pending point: a just-set Distance start, or Point mode's placed point */}
+      {pendingMark && (
         <svg
           className="absolute inset-0 pointer-events-none"
           style={{ overflow: 'visible', pointerEvents: 'none' }}
         >
-          <circle
-            cx={pending.screenX}
-            cy={pending.screenY}
-            r="5"
-            fill="none"
-            stroke={ACCENT}
-            strokeWidth="1.5"
-          />
-          <circle
-            cx={pending.screenX}
-            cy={pending.screenY}
-            r="2.5"
-            fill={ACCENT}
-          />
+          <circle cx={pendingMark.screenX} cy={pendingMark.screenY} r="5" fill="none" stroke={ACCENT} strokeWidth="1.5" />
+          <circle cx={pendingMark.screenX} cy={pendingMark.screenY} r="2.5" fill={ACCENT} />
         </svg>
       )}
     </>

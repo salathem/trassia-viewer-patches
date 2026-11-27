@@ -1,0 +1,170 @@
+diff --git a/apps/viewer/src/components/viewer/tools/formatDistance.test.ts b/apps/viewer/src/components/viewer/tools/formatDistance.test.ts
+index d79fd853399df529fa8b5023702694def10c848e..d2cfae7c81341434b8b7ad06ca6c03ed5e373595 100644
+--- a/apps/viewer/src/components/viewer/tools/formatDistance.test.ts
++++ b/apps/viewer/src/components/viewer/tools/formatDistance.test.ts
+@@ -146,3 +146,21 @@ describe('formatSplitHoverLabel', () => {
+     );
+   });
+ });
++
++// A delta's sign must follow what is PRINTED: a tiny negative that rounds to
++// zero in the display unit used to print `-0` / `-0.000` / `-0.0 mm`, and a tiny
++// positive printed `+0` (a direction claimed for nothing).
++describe('signed readouts that round to zero (#11465)', () => {
++  it('formatSignedTriple prints an axis that rounds to zero without a sign', () => {
++    assert.strictEqual(
++      formatSignedTriple({ x: -0, y: -1e-6, z: 1e-6 }, { LENGTHUNIT: 'm' }),
++      'ΔX 0  ΔY 0  ΔZ 0',
++    );
++    // Auto-scaled path (no override): sub-millimetre-noise, 4 decimals of a metre value.
++    assert.strictEqual(formatSignedTriple({ x: 1.5, y: -0.00001, z: 2 }), 'ΔX +1.500  ΔY 0.000  ΔZ +2.000');
++  });
++
++  it('formatSignedTriple keeps the sign on a value that still shows a digit', () => {
++    assert.strictEqual(formatSignedTriple({ x: -0.0001, y: 0.0001, z: 0 }, { LENGTHUNIT: 'm' }), 'ΔX -0.0001  ΔY +0.0001  ΔZ 0');
++  });
++});
+diff --git a/apps/viewer/src/components/viewer/tools/formatDistance.ts b/apps/viewer/src/components/viewer/tools/formatDistance.ts
+index db76395e632c41bb932fec1b94b088b6896cd6ee..9939de5a73f00f50e8577bcdb00968cbffb58b38 100644
+--- a/apps/viewer/src/components/viewer/tools/formatDistance.ts
++++ b/apps/viewer/src/components/viewer/tools/formatDistance.ts
+@@ -5,6 +5,7 @@
+ import { QuantityType } from '@ifc-lite/data';
+ import { ProjectUnits } from '@ifc-lite/parser';
+ import { resolveQuantityDisplay, formatConverted } from '@/lib/units/display';
++import { signedByPrintedValue } from './signedByPrintedValue';
+ 
+ // Constructed once rather than per call: every measure-tool distance readout
+ // (including the live-drag SVG labels, which reformat on every pointer-move
+@@ -15,12 +16,6 @@ const EMPTY_UNITS = ProjectUnits.empty();
+ /** Auto-scaled metric string (mm / cm / m / km), the fallback used when no
+  *  LENGTHUNIT override is set. */
+ function formatAutoScaledMetric(meters: number): string {
+-  // Trassia: EXACTLY zero is not a small length, it is no length — and the
+-  // auto-scaler used to render it as `0.0 mm`, so the first point of a
+-  // polyline in a metre-unit model announced itself in millimetres before any
+-  // distance existed at all (QA 2026-08-26, S-03). Metres is the neutral unit
+-  // to say "nothing yet" in; every non-zero value keeps its previous scaling.
+-  if (meters === 0) return '0.000 m';
+   if (meters < 0.01) {
+     return `${(meters * 1000).toFixed(1)} mm`;
+   } else if (meters < 1) {
+@@ -55,12 +50,27 @@ function formatAutoScaledMetric(meters: number): string {
+  * value a second time.
+  */
+ export function formatDistance(meters: number, overrides: Record<string, string> = {}): string {
++  return formatDistanceValue(meters, overrides, true);
++}
++
++function formatDistanceValue(meters: number, overrides: Record<string, string>, exactZeroInMetres: boolean): string {
+   const disp = resolveQuantityDisplay(meters, QuantityType.Length, EMPTY_UNITS, overrides);
+-  if (disp.converted === null) return formatAutoScaledMetric(meters);
++  if (disp.converted === null) {
++    // An exact zero starts a new measurement at 0.000 m (Trassia QA S-03).
++    return exactZeroInMetres && meters === 0 ? '0.000 m' : formatAutoScaledMetric(meters);
++  }
+   const formatted = formatConverted(disp.converted);
+   return disp.unit ? `${formatted} ${disp.unit}` : formatted;
+ }
+ 
++/** Signed delta in the selected unit, with no sign when rounded to zero. */
++export function formatSignedDistance(meters: number, overrides: Record<string, string> = {}): string {
++  // A non-zero submillimetre delta rounds in millimetres. Compare against a
++  // zero in those same units while preserving the neutral exact-zero label.
++  const format = (magnitude: number) => formatDistanceValue(magnitude, overrides, meters === 0);
++  return signedByPrintedValue(meters, format, false);
++}
++
+ /**
+  * A single length axis, converted the same way {@link formatDistance} does,
+  * but WITHOUT the trailing unit symbol — the numeric half only. Used to build
+@@ -108,12 +118,8 @@ export function formatSignedTriple(
+   p: { x: number; y: number; z: number },
+   overrides: Record<string, string> = {},
+ ): string {
+-  const axis = (n: number) => {
+-    const magnitude = formatDistanceMagnitude(n, overrides);
+-    // A negative value already carries its own '-' from the formatter, so only
+-    // the positive direction needs one added.
+-    return n > 0 ? `+${magnitude}` : magnitude;
+-  };
++  const format = (meters: number) => formatDistanceMagnitude(meters, overrides);
++  const axis = (n: number) => signedByPrintedValue(n, format, true);
+   return `ΔX ${axis(p.x)}  ΔY ${axis(p.y)}  ΔZ ${axis(p.z)}`;
+ }
+ 
+diff --git a/apps/viewer/src/components/viewer/tools/measure-modes/components.test.ts b/apps/viewer/src/components/viewer/tools/measure-modes/components.test.ts
+index 424c0326b2d82322ad0aa6fa8ce0a36c7b3708a5..d44ec97417262a5c0cdd3877bf6eb3022e253e77 100644
+--- a/apps/viewer/src/components/viewer/tools/measure-modes/components.test.ts
++++ b/apps/viewer/src/components/viewer/tools/measure-modes/components.test.ts
+@@ -130,3 +130,15 @@ describe('formatSignedDistance with a LENGTHUNIT override', () => {
+     assert.strictEqual(formatSignedDistance(-0.25, {}), '-25.0 cm');
+   });
+ });
++
++describe('formatSignedDistance rounds the sign with the value (#11465)', () => {
++  it('prints a delta that rounds to zero without a minus sign', () => {
++    assert.strictEqual(formatSignedDistance(-1e-7), '0.0 mm');
++    assert.strictEqual(formatSignedDistance(-1e-7, { LENGTHUNIT: 'm' }), '0 m');
++    assert.strictEqual(formatSignedDistance(-0), '0.000 m');
++  });
++  it('keeps the minus sign when a digit is shown', () => {
++    assert.strictEqual(formatSignedDistance(-0.0004), '-0.4 mm');
++    assert.strictEqual(formatSignedDistance(-2), '-2.000 m');
++  });
++});
+diff --git a/apps/viewer/src/components/viewer/tools/measure-modes/components.ts b/apps/viewer/src/components/viewer/tools/measure-modes/components.ts
+index a732690b788927fa1e1c71000c58f0a09c89330e..61e3e98652112136234fa4c5acfd583f7e98e543 100644
+--- a/apps/viewer/src/components/viewer/tools/measure-modes/components.ts
++++ b/apps/viewer/src/components/viewer/tools/measure-modes/components.ts
+@@ -15,7 +15,9 @@
+  * silently wrong for every model.
+  */
+ 
+-import { formatDistance } from '../formatDistance';
++import { formatDistance, formatSignedDistance } from '../formatDistance';
++
++export { formatSignedDistance };
+ 
+ export interface Point3 {
+   x: number;
+@@ -55,17 +57,6 @@ export function distanceComponents(start: Point3, end: Point3): DistanceComponen
+   };
+ }
+ 
+-/**
+- * Format a signed delta, keeping the sign in front of the unit-scaled
+- * magnitude. `overrides` is the user's LENGTHUNIT display override (#1573,
+- * `unitDisplayOverrides`); omitting it (or passing `{}`) keeps the previous
+- * auto-scaled-metric behaviour.
+- */
+-export function formatSignedDistance(meters: number, overrides: Record<string, string> = {}): string {
+-  const magnitude = formatDistance(Math.abs(meters), overrides);
+-  return meters < 0 ? `-${magnitude}` : magnitude;
+-}
+-
+ /** One-line per-axis readout, e.g. `dX 3.000 m  dY 12.000 m  dZ 4.000 m`. */
+ export function formatAxisDeltas(c: DistanceComponents, overrides: Record<string, string> = {}): string {
+   return `dX ${formatSignedDistance(c.dx, overrides)}  dY ${formatSignedDistance(c.dy, overrides)}  dZ ${formatSignedDistance(c.dz, overrides)}`;
+diff --git a/apps/viewer/src/components/viewer/tools/signedByPrintedValue.ts b/apps/viewer/src/components/viewer/tools/signedByPrintedValue.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..903c14c85b0a2572c51a2ce1da7e3cd96b248e1c
+--- /dev/null
++++ b/apps/viewer/src/components/viewer/tools/signedByPrintedValue.ts
+@@ -0,0 +1,16 @@
++/* This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
++
++/**
++ * Format `|value|` and sign it by what is PRINTED, not by the raw value: a
++ * value that rounds to zero reads as zero, never `-0` or `+0`, because a sign
++ * on nothing claims a direction (#11465). Comparing against the formatted
++ * zero keeps this locale-safe. `plus` adds `+` to positive values.
++ */
++export function signedByPrintedValue(value: number, format: (magnitude: number) => string, plus: boolean): string {
++  const magnitude = format(Math.abs(value));
++  if (Number.isNaN(value) || magnitude === format(0)) return magnitude;
++  if (value < 0) return `-${magnitude}`;
++  return plus ? `+${magnitude}` : magnitude;
++}

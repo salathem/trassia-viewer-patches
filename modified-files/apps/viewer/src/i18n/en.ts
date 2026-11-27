@@ -2,11 +2,29 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import { influxEn } from './catalogues/influx.en';
+import { errorReportEn } from './catalogues/error-report.en';
+import { structuralReviewEn } from './catalogues/structural-review.en';
+import { groupReviewEn } from './catalogues/group-review.en';
+
+import { zoneEmissionEn } from './catalogues/zone-emission.en';
+
+import { newIfcEn } from './catalogues/new-ifc.en';
+import type { LazyTranslationKey } from './lazy-catalogues';
 import { automationEditorEn } from './catalogues/automation-editor.en';
+import { spaceEnvelopeEn } from './catalogues/space-envelope.en';
+import { semanticIdentityEn } from './catalogues/semantic-identity.en';
+import { semanticResultsEn } from './catalogues/semantic-results.en';
+import { semanticEn } from './catalogues/semantic.en';
 import { flowStartupEn } from './catalogues/flow-startup.en';
 import { appearanceAssignmentListEn } from './catalogues/appearance-assignment-list.en';
 import { appearanceAssignmentMembersEn } from './catalogues/appearance-assignment-members.en';
 import { analysisPanelEn } from './catalogues/analysis-panel.en';
+import { capturedArtifactsEn } from './catalogues/captured-artifacts.en';
+import { resultViewEn } from './catalogues/result-view.en';
+import { activityTrayEn } from './catalogues/activity-tray.en';
+import type { reviewWorkspaceEn } from './catalogues/review-workspace.en';
+import { panelNoModelEn } from './catalogues/panel-no-model.en';
 import { annotationsEn } from './catalogues/annotations.en';
 import { anonymizedExportEn } from './catalogues/anonymized-export.en';
 import { chartsEn } from './catalogues/charts.en';
@@ -17,18 +35,50 @@ import { appearancePanelEn } from './catalogues/appearance-panel.en';
 import { appearancePickersEn } from './catalogues/appearance-pickers.en';
 import { appearanceWorkflowsEn } from './catalogues/appearance-workflows.en';
 import { bcfEn } from './catalogues/bcf.en';
+import { bcfDraftsEn } from './catalogues/bcf-drafts.en';
 import { clashGroupsEn } from './catalogues/clash-groups.en';
+import { clashQualityEn } from './catalogues/clash-quality.en';
 import { clashToolsEn } from './catalogues/clash-tools.en';
 import { bulkPropertyEditorEn } from './catalogues/bulk-property-editor.en';
 import { ionUploadEn } from './catalogues/ion-upload.en';
 import { cesiumGeoEn } from './catalogues/cesium-geo.en';
 import { chatEn } from './catalogues/chat.en';
+import { assistantSourcesEn } from './catalogues/assistant-sources.en';
+import { assistantPackChecksEn } from './catalogues/assistant-pack-checks.en';
+import { assistantPackCoordinationEn } from './catalogues/assistant-pack-coordination.en';
+import { assistantPackSiteEn } from './catalogues/assistant-pack-site.en';
+import { assistantPackTablesEn } from './catalogues/assistant-pack-tables.en';
+import { assistantPackMeasureEn } from './catalogues/assistant-pack-measure.en';
+import { assistantPackAutomationEn } from './catalogues/assistant-pack-automation.en';
 import { chatByokEn } from './catalogues/chat-byok.en';
+import { costReviewEn } from './catalogues/cost-review.en';
+import { modelChangesEn } from './catalogues/model-changes.en';
+import { clashGroupApplyEn } from './catalogues/clash-group-apply.en';
+import { tableCorrectionsEn } from './catalogues/table-corrections.en';
+import { assistantReuseEn } from './catalogues/assistant-reuse.en';
+import { assistantWorkbenchEn } from './catalogues/assistant-workbench.en';
+import { workspaceMigrationEn } from './catalogues/workspace-migration.en';
+import { assistantUsageEn } from './catalogues/assistant-usage.en';
+import { aiReportsEn } from './catalogues/ai-reports.en';
+import { flowAssistantEn } from './catalogues/flow-assistant.en';
+import { modelAuthoringEn } from './catalogues/model-authoring.en';
+import { roomReviewEn } from './catalogues/room-review.en';
+import { sceneActionsEn } from './catalogues/scene-actions.en';
+import { checkAuthoringEn } from './catalogues/check-authoring.en';
+import { idsAgentEn } from './catalogues/ids-agent.en';
+import { assistantArtifactsEn } from './catalogues/assistant-artifacts.en';
+import type { TranslationValue } from './types';
+import type { semanticAssistEn } from './catalogues/semantic-assist.en';
+import type { landXmlGeorefAssumptionsEn } from './catalogues/landxml-georef-assumptions.en';
+import type { ifcFederationAssumptionsEn } from './catalogues/ifc-federation-assumptions.en';
 import { commandPaletteEn } from './catalogues/command-palette.en';
 import { commandsEn } from './catalogues/commands.en';
 import { compareKeyPropertyEn } from './catalogues/compare-key-property.en';
 import { comparePanelEn } from './catalogues/compare-panel.en';
+import { compareAnalysisEn } from './catalogues/compare-analysis.en';
 import { costPanelEn } from './catalogues/cost-panel.en';
+import { deviationStatsEn } from './catalogues/deviation-stats.en';
+import { scanToBimEn } from './catalogues/scan-to-bim.en';
 import { exportDialogEn } from './catalogues/export-dialog.en';
 import { dataConnectorEn } from './catalogues/data-connector.en';
 import { extensionsFlavorsEn } from './catalogues/extensions-flavors.en';
@@ -36,12 +86,14 @@ import { extensionsPanelsEn } from './catalogues/extensions-panels.en';
 import { ganttWorkCalendarEn } from './catalogues/gantt-work-calendar.en';
 import { geometryExportDialogsEn } from './catalogues/geometry-export-dialogs.en';
 import { filterGroupsEn } from './catalogues/filter-groups.en';
+import { customGroupingEn } from './catalogues/custom-grouping.en';
 import { filterOperatorsEn } from './catalogues/filter-operators.en';
 import { documentEn } from './catalogues/document.en';
 import { documentMenuEn } from './catalogues/document-menu.en';
 import { drawingUnderlayEn } from './catalogues/drawing-underlay.en';
 import { hierarchyEn } from './catalogues/hierarchy.en';
 import { idsPanelEn } from './catalogues/ids-panel.en';
+import { idsStudioEn } from './catalogues/ids-studio.en';
 import { validationEditorEn } from './catalogues/validation-editor.en';
 import { validationPanelEn } from './catalogues/validation-panel.en';
 import { manualValidationEn } from './catalogues/manual-validation.en';
@@ -50,7 +102,11 @@ import { keyboardShortcutsEn } from './catalogues/keyboard-shortcuts.en';
 import { settingsEn } from './catalogues/settings.en';
 import { layersPanelEn } from './catalogues/layers-panel.en';
 import { landXmlEn } from './catalogues/landxml.en';
+import { landXmlTerrainExportEn } from './catalogues/landxml-terrain-export.en';
+import { rhinoExportEn } from './catalogues/rhino-export.en';
 import { terrainImageryEn } from './catalogues/terrain-imagery.en';
+import { siteContextEn } from './catalogues/site-context.en';
+import { floodCheckEn } from './catalogues/flood-check.en';
 import { lensPanelEn } from './catalogues/lens-panel.en';
 import { propertyEditorEn } from './catalogues/property-editor.en';
 import { placementPanelEn } from './catalogues/placement-panel.en';
@@ -64,6 +120,8 @@ import { mergeLayersBannerEn } from './catalogues/merge-layers-banner.en';
 import { miscPanelsBEn } from './catalogues/misc-panels-b.en';
 import { miscPanelsAEn } from './catalogues/misc-panels-a.en';
 import { propertiesEn } from './catalogues/properties.en';
+import { gaussianCaptureEn } from './catalogues/gaussian-capture.en';
+import { georeferencingEn } from './catalogues/georeferencing.en';
 import { propertiesPanelEn } from './catalogues/properties-panel.en';
 import { attributeEditorEn } from './catalogues/attribute-editor.en';
 import { propertiesSelectionEn } from './catalogues/properties-selection.en';
@@ -73,6 +131,7 @@ import { relationshipCardEn } from './catalogues/relationship-card.en';
 import { ribbonToolbarEn } from './catalogues/ribbon-toolbar.en';
 import { scheduleEn } from './catalogues/schedule.en';
 import { sectionToolEn } from './catalogues/section-tool.en';
+import { sectionPlanesEn } from './catalogues/section-planes.en';
 import { alignmentSectionEn } from './catalogues/alignment-section.en';
 import { section2dEn } from './catalogues/section-2d.en';
 import { sheetsPdfEn } from './catalogues/sheets-pdf.en';
@@ -103,6 +162,7 @@ import { pushPullAlignEn } from './catalogues/push-pull-align.en';
 import { trimExtendEn } from './catalogues/trim-extend.en';
 import { remeshEn } from './catalogues/remesh.en';
 import { storeyContextEn } from './catalogues/storey-context.en';
+import { storeyManagerEn } from './catalogues/storey-manager.en';
 import { structuralPropertiesEn } from './catalogues/structural-properties.en';
 import { webgpuTroubleshootingEn } from './catalogues/webgpu-troubleshooting.en';
 import { scriptPanelEn } from './catalogues/script-panel.en';
@@ -110,12 +170,25 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
 
 /** English is assembled from feature catalogues so no locale becomes a monolith. */
 export const en = {
-  'trassia.visibility.toggleSelection': 'Toggle visibility of selected tree rows (Ctrl-click rows at any level) or selected elements by their own state; partly visible groups hide, a second press brings them back',
   'trassia.panel.entwurf': 'Alignment design (spike)',
   'trassia.panel.laengsschnitt': 'Längsprofil',
   'trassia.panel.kubatur': 'Auftrag / Abtrag (Kubatur)',
   'trassia.panel.drape': 'Drape auf Gelände (DXF, GeoJSON, WFS)',
+  ...influxEn,
+  ...zoneEmissionEn,
+  ...newIfcEn,
+  ...errorReportEn,
+  ...structuralReviewEn,
+  ...groupReviewEn,
+  ...semanticEn,
+  ...semanticResultsEn,
+  ...semanticIdentityEn,
   ...analysisPanelEn,
+  ...resultViewEn,
+  ...capturedArtifactsEn,
+  ...activityTrayEn,
+  'reviewWorkspace.title': 'Review',
+  ...panelNoModelEn,
   ...annotationsEn,
   ...anonymizedExportEn,
   ...exportDialogEn,
@@ -126,6 +199,7 @@ export const en = {
   ...appearanceAssignmentListEn,
   ...appearanceAssignmentMembersEn,
   ...sectionToolEn,
+  ...sectionPlanesEn,
   ...alignmentSectionEn,
   ...section2dEn,
   ...costPanelEn,
@@ -137,6 +211,7 @@ export const en = {
   ...commandsEn,
   ...ganttWorkCalendarEn,
   ...filterGroupsEn,
+  ...customGroupingEn,
   ...filterOperatorsEn,
   ...chartsEn,
   ...changesPanelEn,
@@ -170,6 +245,7 @@ export const en = {
   ...trimExtendEn,
   ...remeshEn,
   ...storeyContextEn,
+  ...storeyManagerEn,
   ...documentEn,
   ...documentMenuEn,
   ...drawingUnderlayEn,
@@ -177,19 +253,25 @@ export const en = {
   ...settingsEn,
   ...hierarchyEn,
   ...propertiesEn,
+  ...gaussianCaptureEn,
+  ...georeferencingEn,
   ...propertiesPanelEn,
   ...attributeEditorEn,
   ...propertiesSelectionEn,
   ...sweptDiskInspectionEn,
   ...extrusionInspectionEn,
   ...landXmlEn,
+  ...landXmlTerrainExportEn,
   ...terrainImageryEn,
+  ...siteContextEn,
+  ...floodCheckEn,
   ...structuralPropertiesEn,
   ...appearancePanelEn,
   ...appearancePickersEn,
   ...appearanceWorkflowsEn,
   ...compareKeyPropertyEn,
   ...comparePanelEn,
+  ...compareAnalysisEn,
   ...extensionsFlavorsEn,
   ...extensionsPanelsEn,
   ...idsPanelEn,
@@ -200,10 +282,35 @@ export const en = {
   ...automationEditorEn,
   ...flowPanelEn,
   ...chatEn,
+  ...assistantSourcesEn,
+  ...assistantPackChecksEn,
+  ...assistantPackCoordinationEn,
+  ...assistantPackSiteEn,
+  ...assistantPackTablesEn,
+  ...assistantPackMeasureEn,
+  ...assistantPackAutomationEn,
   ...chatByokEn,
+  ...modelChangesEn,
+  ...costReviewEn,
+  ...clashGroupApplyEn,
+  ...tableCorrectionsEn,
+  ...assistantUsageEn,
+  ...assistantReuseEn,
+  ...assistantWorkbenchEn,
+  ...workspaceMigrationEn,
+  ...aiReportsEn,
+  ...flowAssistantEn,
+  ...modelAuthoringEn,
+  ...roomReviewEn,
+  ...sceneActionsEn,
+  ...checkAuthoringEn,
+  ...idsAgentEn,
+  ...assistantArtifactsEn,
   ...clashPanelEn,
   ...clashToolsEn,
+  ...clashQualityEn,
   ...bcfEn,
+  ...bcfDraftsEn,
   ...layersPanelEn,
   ...lensPanelEn,
   ...searchModalEn,
@@ -216,10 +323,19 @@ export const en = {
   ...zonesPanelEn,
   ...dataConnectorEn,
   ...geometryExportDialogsEn,
+  ...rhinoExportEn,
   ...miscPanelsBEn,
   ...viewportLightingEn,
   ...miscPanelsAEn,
+  ...deviationStatsEn,
+  ...scanToBimEn,
   ...sheetsPdfEn,
+  ...spaceEnvelopeEn,
+  ...idsStudioEn,
 } as const;
 
-export type TranslationKey = keyof typeof en;
+/** Strings that load with the panels that use them (see `registerEnglish`); their keys are typed here, their text is not in the eager bundle. */
+type LazyEnglish = typeof semanticAssistEn & typeof landXmlGeorefAssumptionsEn & typeof ifcFederationAssumptionsEn;
+export type TranslationKey = keyof typeof en | keyof LazyEnglish | LazyTranslationKey | keyof typeof reviewWorkspaceEn;
+/** The live English catalogue: `en` plus whatever lazy catalogues have registered. */
+export const englishCatalogue: Partial<Record<TranslationKey, TranslationValue>> = en;

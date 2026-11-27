@@ -1,12 +1,182 @@
+diff --git a/apps/viewer/src/components/viewer/useMouseControls.ts b/apps/viewer/src/components/viewer/useMouseControls.ts
+index 7d61a7e79d399d533f859260050d77a65ac73b0c..e9174558b26fdf42ade5c6ee91d83bdd0763b8d1 100644
+--- a/apps/viewer/src/components/viewer/useMouseControls.ts
++++ b/apps/viewer/src/components/viewer/useMouseControls.ts
+@@ -505,6 +505,7 @@ export function useMouseControls(params: UseMouseControlsParams): void {
+       }
+ 
+       const willOrbit = gesture === 'orbit';
++      const localNavigation = !params.fastZoomRef.current;
+ 
+       // Set orbit pivot to the 3D point under the cursor so rotation feels anchored
+       // to what the user is looking at. On miss, place pivot at current distance along
+@@ -514,7 +515,16 @@ export function useMouseControls(params: UseMouseControlsParams): void {
+         ? focusedClashOrbitPivot(useViewerStore.getState(), selectedEntityIdRef.current) : null;
+       let orbitPivot = clashPivot;
+       let awaitProbe: { x: number; y: number } | null = null;
+-      if (willOrbit && !clashPivot) {
++      if (localNavigation && (willOrbit || gesture === 'pan')) {
++        // Resolve the visible depth once at the start of a model gesture. The
++        // picker keeps its GPU probe and large-scene CPU budget (#8769).
++        const { width, height } = canvas.getBoundingClientRect();
++        const centre = { x: width / 2, y: height / 2 };
++        const hit = pickSurface(centre.x, centre.y);
++        if (hit) camera.setNavigationSurface?.(hit);
++        if (willOrbit) orbitPivot ??= camera.getTarget();
++        if (!hit && pickSurface.live?.()) awaitProbe = centre;
++      } else if (willOrbit && !clashPivot) {
+         const rect = canvas.getBoundingClientRect();
+         const cx = e.clientX - rect.left;
+         const cy = e.clientY - rect.top;
+@@ -542,16 +552,25 @@ export function useMouseControls(params: UseMouseControlsParams): void {
+         camera.setOrbitCenter(orbitPivot);
+         const pending = { point: orbitPivot ?? camera.getTarget(), camera, canvas };
+         pendingOrbitPivot = pending;
+-        if (awaitProbe) {
++        if (awaitProbe && !clashPivot) {
+           // No probe answer yet: adopt it when it lands, if this press is
+           // still a click (its pivot not yet shown) and nothing moved the camera.
+           const pose = cameraPoseKey(camera);
+           void pickSurface.probed?.(awaitProbe.x, awaitProbe.y).then((point) => {
+             if (!point || disposed || pendingOrbitPivot !== pending || cameraPoseKey(camera) !== pose) return;
+-            camera.setOrbitCenter(point);
+-            pending.point = point;
++            if (localNavigation) camera.setNavigationSurface?.(point);
++            const target = localNavigation ? camera.getTarget() : point;
++            camera.setOrbitCenter(target);
++            pending.point = target;
+           });
+         }
++      } else if (awaitProbe) {
++        const pose = cameraPoseKey(camera);
++        void pickSurface.probed?.(awaitProbe.x, awaitProbe.y).then((point) => {
++          if (point && !disposed && mouseState.isPanning && cameraPoseKey(camera) === pose) {
++            camera.setNavigationSurface?.(point);
++          }
++        });
+       }
+ 
+       if (gesture === 'pan' || gesture === 'fly') {
+@@ -569,7 +588,11 @@ export function useMouseControls(params: UseMouseControlsParams): void {
+       const y = e.clientY - rect.top;
+       const tool = activeToolRef.current;
+       if (commandPress.move(e)) return;
+-      if (!mouseState.isDragging) pickSurface.prime?.(x, y); // #8769: the next wheel or orbit finds the depth waiting
++      if (!mouseState.isDragging) {
++        const { width, height } = rect;
++        if (params.fastZoomRef.current) pickSurface.prime?.(x, y);
++        else pickSurface.prime?.(width / 2, height / 2);
++      }
+ 
+       // Rectangle-select drag: just update the visual; no orbit / pan
+       // / pick / hover work happens in this branch.
+@@ -787,6 +810,7 @@ export function useMouseControls(params: UseMouseControlsParams): void {
+     // Eased, cursor-anchored, surface-aware wheel zoom; Ctrl/Cmd held = finer step (#2683, #5393, #9507).
+     const wheelZoom = createViewportWheelZoom({
+       camera, canvas, pickSurface, // #5393, #8769
++      centreAnchor: () => !params.fastZoomRef.current,
+       sensitivity: () => wheelZoomSensitivityFactor(useViewerStore.getState().wheelZoomSensitivity),
+       onStep: afterWheelMove,
+       onSettle: () => endWheelGesture('zoom'),
+@@ -804,6 +828,7 @@ export function useMouseControls(params: UseMouseControlsParams): void {
+     });
+ 
+     const handleWheel = (e: WheelEvent) => {
++      if (e.defaultPrevented) return; // A captured section gesture already consumed this event.
+       noteMouseSideInput('mouse'); // the Measure hint follows the last input, and a wheel or pinch is a mouse's (#8999)
+       if (fly.isActive()) return fly.wheel(e); // while flying the wheel sets fly speed, not zoom
+       const wheel = resolveWheelNavigation(useViewerStore.getState().navigationPreset, e);
+diff --git a/apps/viewer/src/components/viewer/wheelZoom.ts b/apps/viewer/src/components/viewer/wheelZoom.ts
+index 469a07c1077bc7c446e1c869598ab5414f36b0f6..a3cdb54a8e5ffcd1a1b3f32bf8f32909e39f79ef 100644
+--- a/apps/viewer/src/components/viewer/wheelZoom.ts
++++ b/apps/viewer/src/components/viewer/wheelZoom.ts
+@@ -150,6 +150,8 @@ export function wheelZoomInput(
+ }
+ 
+ export interface WheelZoomStepOptions {
++  /** Model navigation uses the visible screen centre for depth and pivot. */
++  centreAnchor?: boolean;
+   /** The pose is read back after each step so a cached surface point is only
+    *  reused while nothing but the surface zoom has moved the camera (#5393). */
+   camera: SurfaceZoomCamera;
+@@ -208,12 +210,13 @@ function gestureSurface(opts: WheelZoomStepOptions, mouseX: number, mouseY: numb
+  */
+ export function applyWheelZoomStep(px: number, anchor: WheelZoomAnchor, opts: WheelZoomStepOptions): void {
+   const rect = opts.canvas.getBoundingClientRect();
+-  const mouseX = anchor.clientX - rect.left;
+-  const mouseY = anchor.clientY - rect.top;
++  const mouseX = opts.centreAnchor ? rect.width / 2 : anchor.clientX - rect.left;
++  const mouseY = opts.centreAnchor ? rect.height / 2 : anchor.clientY - rect.top;
+ 
+-  // Only zooming in can pass through a surface; zooming out and the fast
+-  // (pure dolly) zoom keep the plain path and never pick.
+-  const gesture = px < 0 && !opts.fastZoom ? gestureSurface(opts, mouseX, mouseY) : null;
++  // Model zoom also needs the local depth on the way out. A fast (pure dolly)
++  // step keeps the plain path. The existing CPU/GPU picker remains in charge.
++  const gesture = (px < 0 || opts.centreAnchor) && !opts.fastZoom ? gestureSurface(opts, mouseX, mouseY) : null;
++  if (opts.centreAnchor && gesture?.point) opts.camera.setNavigationSurface?.(gesture.point);
+   const surface = gesture?.point ?? undefined;
+   opts.camera.zoom(
+     px,
+@@ -277,8 +280,9 @@ export function createWheelZoomController(opts: WheelZoomControllerOptions): Whe
+   };
+ }
+ 
+-export interface ViewportWheelZoomOptions extends Omit<WheelZoomStepOptions, 'fastZoom'>,
++export interface ViewportWheelZoomOptions extends Omit<WheelZoomStepOptions, 'fastZoom' | 'centreAnchor'>,
+   Pick<WheelZoomControllerOptions, 'sensitivity' | 'onSettle' | 'keyTarget' | 'reducedMotion'> {
++  centreAnchor?: () => boolean;
+   /** After every camera step. */
+   onStep(): void;
+ }
+@@ -288,7 +292,10 @@ export function createViewportWheelZoom(opts: ViewportWheelZoomOptions): WheelZo
+   return createWheelZoomController({
+     ...opts,
+     step: (px, anchor, fastZoom) => {
+-      applyWheelZoomStep(px, anchor, { camera: opts.camera, canvas: opts.canvas, fastZoom, pickSurface: opts.pickSurface });
++      applyWheelZoomStep(px, anchor, {
++        camera: opts.camera, canvas: opts.canvas, fastZoom, pickSurface: opts.pickSurface,
++        centreAnchor: opts.centreAnchor?.(),
++      });
+       opts.onStep();
+     },
+     // An orthographic zoom by another control changes only the view size.
+diff --git a/apps/viewer/src/components/viewer/zoomSurface.ts b/apps/viewer/src/components/viewer/zoomSurface.ts
+index 54d7e0fc8c608e59c2ca178fde3e127b7fc511d9..886895dd17f83e09efb77cb989e1a397116f66f8 100644
+--- a/apps/viewer/src/components/viewer/zoomSurface.ts
++++ b/apps/viewer/src/components/viewer/zoomSurface.ts
+@@ -137,6 +137,7 @@ export const SURFACE_PICK_IDLE_MS = 400;
+ 
+ /** The part of `Camera` a surface zoom drives. */
+ export interface SurfaceZoomCamera extends ZoomPoseCamera {
++  setNavigationSurface?(point: SurfacePoint | null): boolean;
+   zoom(
+     delta: number,
+     addVelocity?: boolean,
+diff --git a/packages/renderer/src/camera-controls.ts b/packages/renderer/src/camera-controls.ts
+index d81c2fa0065d3f99007928518e1432187b539968..8b273be92706eb2be2673bcefbf7d0e4ce35f797 100644
+--- a/packages/renderer/src/camera-controls.ts
++++ b/packages/renderer/src/camera-controls.ts
+@@ -429,7 +429,10 @@ export class CameraControls {
+     const right = normalize(cross(dir, upRef));
+     const up = normalize(cross(right, dir));
+ 
+-    const speed = dist * CC.PAN_SPEED_MULTIPLIER;
++    // Orthographic screen scale is independent of eye-to-target distance.
++    const scaleDistance = this.state.projectionMode === 'orthographic'
++      ? this.state.orthoSize / Math.tan(this.state.camera.fov / 2) : dist;
++    const speed = scaleDistance * CC.PAN_SPEED_MULTIPLIER;
+     const offset = {
+       x: (right.x * deltaX + up.x * deltaY) * speed,
+       y: (right.y * deltaX + up.y * deltaY) * speed,
 diff --git a/packages/renderer/src/camera.ts b/packages/renderer/src/camera.ts
+index 1102ea3f8c0f5e4fdd38e3f3ee1c1f26f62a6294..1725c7b2936e22509edda503502eced068492f5b 100644
 --- a/packages/renderer/src/camera.ts
 +++ b/packages/renderer/src/camera.ts
-@@ -140,6 +140,23 @@
-    */
-   setOrbitCenter(center: Vec3 | null): void {
+@@ -182,6 +182,23 @@ export class Camera {
      this.controls.setOrbitCenter(center);
-+  }
-+
+   }
+ 
 +  /** Re-seat the navigation depth on a visible centre surface without changing
 +   * the view direction. A miss keeps the previous depth; never use scene size
 +   * or the magnitude of absolute coordinates as an interaction scale. */
@@ -22,138 +192,8 @@ diff --git a/packages/renderer/src/camera.ts b/packages/renderer/src/camera.ts
 +    this.controls.setOrbitCenter(null);
 +    this.updateMatrices();
 +    return true;
-   }
- 
-   /** Restrict interactive orbit/pan/zoom (embed `controls` param, #2934). */
-diff --git a/packages/renderer/src/camera-controls.ts b/packages/renderer/src/camera-controls.ts
---- a/packages/renderer/src/camera-controls.ts
-+++ b/packages/renderer/src/camera-controls.ts
-@@ -383,7 +383,10 @@
-     const right = normalize(cross(dir, upRef));
-     const up = normalize(cross(right, dir));
- 
--    const speed = dist * CC.PAN_SPEED_MULTIPLIER;
-+    // Orthographic screen scale is independent of eye-to-target distance.
-+    const scaleDistance = this.state.projectionMode === 'orthographic'
-+      ? this.state.orthoSize / Math.tan(this.state.camera.fov / 2) : dist;
-+    const speed = scaleDistance * CC.PAN_SPEED_MULTIPLIER;
-     const offset = {
-       x: (right.x * deltaX + up.x * deltaY) * speed,
-       y: (right.y * deltaX + up.y * deltaY) * speed,
-diff --git a/apps/viewer/src/components/viewer/zoomSurface.ts b/apps/viewer/src/components/viewer/zoomSurface.ts
---- a/apps/viewer/src/components/viewer/zoomSurface.ts
-+++ b/apps/viewer/src/components/viewer/zoomSurface.ts
-@@ -38,11 +38,15 @@
-   renderer: ZoomSurfaceRenderer,
-   camera: { getOrbitAnchorBounds(): unknown },
-   getPickOptions: () => ZoomSurfacePickOptions,
-+  localNavigation = false,
- ): ZoomSurfacePicker {
-   return (x, y) => {
-     const options = getPickOptions();
--    if (options.isStreaming || camera.getOrbitAnchorBounds() !== null) return null;
--    if (isPivotRaycastTooExpensive(renderer.getScene())) return null;
-+    if (options.isStreaming || (!localNavigation && camera.getOrbitAnchorBounds() !== null)) return null;
-+    // Local navigation needs real depth even in a federated/outlier model.
-+    // RaycastEngine reuses its BVH; callers cache the hit for the whole wheel
-+    // gesture and only sample once when a drag begins.
-+    if (!localNavigation && isPivotRaycastTooExpensive(renderer.getScene())) return null;
-     return renderer.raycastScene(x, y, options)?.intersection.point ?? null;
-   };
- }
-@@ -76,6 +80,7 @@
- 
- /** The part of `Camera` a surface zoom drives. */
- export interface SurfaceZoomCamera extends ZoomPoseCamera {
-+  setNavigationSurface?(point: SurfacePoint | null): boolean;
-   zoom(
-     delta: number,
-     addVelocity?: boolean,
-diff --git a/apps/viewer/src/components/viewer/wheelZoom.ts b/apps/viewer/src/components/viewer/wheelZoom.ts
---- a/apps/viewer/src/components/viewer/wheelZoom.ts
-+++ b/apps/viewer/src/components/viewer/wheelZoom.ts
-@@ -130,6 +130,8 @@
- }
- 
- export interface WheelZoomOptions {
-+  /** Model navigation uses the visible screen centre for depth and pivot. */
-+  centreAnchor?: boolean;
-   /** The pose is read back after each notch so a cached surface point is only
-    *  reused while nothing but the surface zoom has moved the camera (#5393). */
-   camera: SurfaceZoomCamera;
-@@ -191,13 +193,14 @@
-   e.preventDefault();
- 
-   const rect = opts.canvas.getBoundingClientRect();
--  const mouseX = e.clientX - rect.left;
--  const mouseY = e.clientY - rect.top;
-+  const mouseX = opts.centreAnchor ? rect.width / 2 : e.clientX - rect.left;
-+  const mouseY = opts.centreAnchor ? rect.height / 2 : e.clientY - rect.top;
- 
-   const delta = wheelZoomDelta(e, opts.fineModifierHeld);
-   // Only zooming in can pass through a surface; zooming out and the fast
-   // (pure dolly) zoom keep the plain path and never pick.
--  const gesture = delta < 0 && !opts.fastZoom ? gestureSurface(opts, mouseX, mouseY) : null;
-+  const gesture = (delta < 0 || opts.centreAnchor) && !opts.fastZoom ? gestureSurface(opts, mouseX, mouseY) : null;
-+  if (opts.centreAnchor && gesture?.point) opts.camera.setNavigationSurface?.(gesture.point);
-   const surface = gesture?.point ?? undefined;
-   opts.camera.zoom(
-     delta,
-diff --git a/apps/viewer/src/components/viewer/useMouseControls.ts b/apps/viewer/src/components/viewer/useMouseControls.ts
---- a/apps/viewer/src/components/viewer/useMouseControls.ts
-+++ b/apps/viewer/src/components/viewer/useMouseControls.ts
-@@ -488,13 +488,21 @@
- 
-       const willOrbit = gesture === 'orbit';
- 
--      // Set orbit pivot to the 3D point under the cursor so rotation feels anchored
--      // to what the user is looking at. On miss, place pivot at current distance along
--      // the cursor ray so orbit always feels connected to where you're pointing.
--      // A focused clash with nothing selected orbits around the clashing pair (#4806).
-+      // Model navigation is anchored at the centre of what is currently
-+      // visible, not at the model origin or a remote scene/outlier centre.
-+      // Sample once at gesture start; a miss retains the last view-axis depth.
-+      const localNavigation = !params.fastZoomRef.current;
-+      let orbitPivot = willOrbit
-+        ? focusedClashOrbitPivot(useViewerStore.getState(), selectedEntityIdRef.current) : null;
-+      if (localNavigation && (willOrbit || gesture === 'pan')) {
-+        const rect = canvas.getBoundingClientRect();
-+        const point = createZoomSurfacePicker(renderer, camera, getPickOptions, true)(rect.width / 2, rect.height / 2);
-+        camera.setNavigationSurface(point);
-+        orbitPivot ??= camera.getTarget();
-+      } else {
-       const clashPivot = willOrbit
-         ? focusedClashOrbitPivot(useViewerStore.getState(), selectedEntityIdRef.current) : null;
--      let orbitPivot = clashPivot;
-+      orbitPivot = clashPivot;
-       if (willOrbit && !clashPivot) {
-         const rect = canvas.getBoundingClientRect();
-         const cx = e.clientX - rect.left;
-@@ -533,6 +541,8 @@
-           // No geometry hit or large model — anchor the pivot to the scene centre.
-           orbitPivot = sceneAnchorOrbitPivot(camera, cx, cy, rect.width, rect.height);
-         }
-+      }
++  }
 +
-       }
-       if (willOrbit) {
-         camera.setOrbitCenter(orbitPivot);
-@@ -761,6 +771,7 @@
-     });
- 
-     const handleWheel = (e: WheelEvent) => {
-+      if (e.defaultPrevented) return; // A captured section gesture already consumed this event.
-       if (fly.isActive()) return fly.wheel(e); // while flying the wheel sets fly speed, not zoom
-       const wheel = resolveWheelNavigation(useViewerStore.getState().navigationPreset, e);
-       // Cancels the browser's own Ctrl+wheel page zoom as well as scrolling;
-@@ -771,8 +782,9 @@
-         applyWheelZoom(e, {
-           camera, canvas,
-           fastZoom: e.shiftKey || params.fastZoomRef.current,
-+          centreAnchor: !params.fastZoomRef.current,
-           fineModifierHeld: fineZoomModifier.isHeld(),
--          pickSurface: createZoomSurfacePicker(renderer, camera, getPickOptions), // #5393
-+          pickSurface: createZoomSurfacePicker(renderer, camera, getPickOptions, !params.fastZoomRef.current), // #5393
-         });
-       }
-       if (!wheel.panX && !wheel.panY && !wheel.zoom) return;
+   /** Restrict interactive orbit/pan/zoom (embed `controls` param, #2934). */
+   setInteractionMode(mode: InteractionMode): void {
+     this.interactionMode = mode;

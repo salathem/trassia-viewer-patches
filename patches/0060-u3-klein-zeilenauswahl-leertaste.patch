@@ -1,89 +1,77 @@
 diff --git a/apps/viewer/src/components/viewer/HierarchyPanel.tsx b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
-index e7f35fb2f7c2e7a8ac0a9a9dea0ffee4ade8c4e6..59dd6247239bcbd881fa2819ff17e98a8c0b699b 100644
+index aff32baa18d3442b94d47cac5b0b6b8921acfcf0..378a80e064ed99b502319874dd019a489f341f92 100644
 --- a/apps/viewer/src/components/viewer/HierarchyPanel.tsx
 +++ b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
-@@ -2,7 +2,7 @@
-  * License, v. 2.0. If a copy of the MPL was not distributed with this
-  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+@@ -4,7 +4,7 @@
+ 
+ import { LayerGroupingControl } from './hierarchy/LayerGroupingControl';
  
 -import { useState, useCallback, useRef, useMemo } from 'react';
 +import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
  import { useTranslation } from '@/i18n';
  import { useVirtualizer } from '@tanstack/react-virtual';
- import { Search, Building2, Layers, LayoutTemplate, FileBox, GripHorizontal, Palette, Network } from 'lucide-react';
-@@ -20,7 +20,7 @@ import { EmptyState } from '@/components/ui/empty-state';
+ import { Search, Building2, Layers, LayoutTemplate, FileBox, GripHorizontal, Palette, Network, Layers3, Shapes } from 'lucide-react';
+@@ -22,7 +22,7 @@ import { EmptyState } from '@/components/ui/empty-state';
  import { useSourceHost } from '@/services/sources/SourceHostProvider';
  import { syncSourceModel } from '@/lib/sources/syncSourceModel';
  
--import type { TreeNode } from './hierarchy/types';
-+import { isSpatialContainer, type TreeNode } from './hierarchy/types';
+-import { HIERARCHY_ROW_HEIGHT, type TreeNode } from './hierarchy/types';
++import { HIERARCHY_ROW_HEIGHT, isSpatialContainer, type TreeNode } from './hierarchy/types';
  import { useHierarchyTree } from './hierarchy/useHierarchyTree';
  import { useRevealSelection } from './hierarchy/useRevealSelection';
  import { useHierarchySplit } from './hierarchy/useHierarchySplit';
-@@ -48,6 +48,12 @@ import { useStreamingThrottled } from '@/hooks/useStreamingThrottled';
+@@ -53,6 +53,9 @@ import { useStreamingThrottled } from '@/hooks/useStreamingThrottled';
  // Trassia overlay (Paket V-TILES) — die Kachelsaetze der Projektmappe stehen
  // ueber der Modellliste. Ohne Kachelsatz rendert die Komponente nichts.
  import { ChTileLayers } from './ChTileLayers';
-+// Trassia overlay (Paket U3-klein, Marco E21 2026-09-04): Zeilen-Auswahl ueber
-+// alle Zeilentypen (Ctrl-Klick) und die Leertaste als Sichtbarkeits-Umschalter.
-+// Das Panel meldet dem Modul nur, welche Elemente eine Zeile hat.
 +import { chRegistriereZeilenAufloeser, chZeilenKlick } from '@/lib/ch/zeilen-auswahl';
 +import { chNachkommenElemente, type ChRaumKnoten } from '@/lib/ch/container-elemente';
 +import { collectAggregatedDescendants, type AggregationRelationships } from '@/utils/aggregation';
  
  export function HierarchyPanel() {
    const { t } = useTranslation();
-@@ -67,6 +73,7 @@ export function HierarchyPanel() {
-   const setModelVisibility = useViewerStore((s) => s.setModelVisibility);
-   const { addModel, removeModel } = useIfcFederation(useIfcLoader().loadFile);
-   const sourceHost = useSourceHost();
-+  const toGlobalId = useViewerStore((s) => s.toGlobalId);
-   const selectedEntityId = useViewerStore((s) => s.selectedEntityId);
-   const selectedEntityIds = useViewerStore((s) => s.selectedEntityIds);
-   const setSelectedEntities = useViewerStore((s) => s.setSelectedEntities);
-@@ -215,6 +222,33 @@ export function HierarchyPanel() {
-     }
-   }, [getNodeElements, hiddenEntities, hideEntities, showEntities, selectedEntityId, clearSelection]);
- 
-+  // Trassia (U3-klein): die Leertaste (useKeyboardShortcuts) braucht die
-+  // Elemente einer gewaehlten Zeile — nur dieses Panel kennt sie.
+@@ -209,6 +212,30 @@ export function HierarchyPanel() {
+   // A source's container plan (a Rhino layer, #10214) is the layer tree's: only
+   // the spatial grouping's rows follow it, and only they record own states.
+   const planModels = groupingMode === 'spatial' ? models : undefined;
++  const toGlobalId = useViewerStore((state) => state.toGlobalId);
++
 +  useEffect(() => {
 +    chRegistriereZeilenAufloeser({
 +      elementeVon: (node) => {
-+        const direkt = getNodeElements(node);
-+        // Tester U3 B-3: Container-Zeilen (Site, Gebaeude, Facility …) liefern
-+        // im Upstream [] — fuer die Leertaste zaehlen alle Elemente darunter.
-+        if (direkt.length > 0 || !isSpatialContainer(node.type) || node.expressIds.length === 0) return direkt;
++        const direct = getNodeElements(node);
++        if (direct.length > 0 || !isSpatialContainer(node.type) || node.expressIds.length === 0) return direct;
 +        const modelId = node.modelIds[0] ?? 'legacy';
-+        const store = modelId === 'legacy' ? ifcDataStore : models.get(modelId)?.ifcDataStore;
-+        const wurzel = store?.spatialHierarchy?.project;
-+        if (!wurzel) return [];
-+        const lokal = chNachkommenElemente([wurzel as unknown as ChRaumKnoten], node.expressIds[0]);
-+        // Tester N-1: direkt enthaltene Baugruppen (IfcElementAssembly & Co.) tragen
-+        // keine Geometrie — ihre Teile (IfcRelAggregates) muessen mit, wie beim
-+        // Element-Fall des Upstreams (#1133).
-+        const rel = store?.relationships as AggregationRelationships | undefined;
-+        const alle = new Set<number>(lokal);
-+        if (rel) for (const id of lokal) for (const teil of collectAggregatedDescendants(rel, id)) alle.add(teil);
-+        const ids = [...alle];
-+        return modelId === 'legacy' ? ids : ids.map((id) => toGlobalId(modelId, id));
++        const source = models.get(modelId)?.ifcDataStore ?? (modelId === 'legacy' ? ifcDataStore : null);
++        const project = source?.spatialHierarchy?.project;
++        if (!project) return [];
++        const directMembers = chNachkommenElemente([project as unknown as ChRaumKnoten], node.expressIds[0]);
++        const relationships = source?.relationships as AggregationRelationships | undefined;
++        const all = new Set(directMembers);
++        if (relationships) {
++          for (const id of directMembers) {
++            for (const part of collectAggregatedDescendants(relationships, id)) all.add(part);
++          }
++        }
++        return modelId === 'legacy' ? [...all] : [...all].map((id) => toGlobalId(modelId, id));
 +      },
 +    });
 +    return () => chRegistriereZeilenAufloeser(null);
 +  }, [getNodeElements, models, ifcDataStore, toGlobalId]);
-+
-   // Handle model visibility toggle
-   const handleModelVisibilityToggle = useCallback((modelId: string, e: React.MouseEvent) => {
-     e.stopPropagation();
-@@ -296,6 +330,7 @@ export function HierarchyPanel() {
+ 
+   // Toggle visibility for a node
+   const handleVisibilityToggle = useCallback((node: TreeNode) => {
+@@ -312,6 +339,9 @@ export function HierarchyPanel() {
      section: SelectionSection,
      index: number,
    ) => {
-+    if (!chZeilenKlick(node, event)) return;
++    // Preserve the native roving-focus keyboard path. Pointer selection
++    // additionally records the logical row for the viewport Space shortcut.
++    if ('type' in event && event.type === 'click' && !chZeilenKlick(node, event)) return;
      const rows = selectionRows[section][index];
      if (!rows?.length) return;
      try {
-@@ -671,13 +706,13 @@ export function HierarchyPanel() {
+@@ -619,12 +649,12 @@ export function HierarchyPanel() {
          </div>}
  
          {/* Footer status */}
@@ -93,48 +81,50 @@ index e7f35fb2f7c2e7a8ac0a9a9dea0ffee4ade8c4e6..59dd6247239bcbd881fa2819ff17e98a
            isolatedEntities={isolatedEntities} typeIsolationLabel={typeIsolationLabel}
            clearStoreySelection={clearStoreySelection} clearClassFilter={clearClassFilter}
            clearIsolation={clearIsolation} clearAllFilters={clearAllFilters}
-           idleHint={t('hierarchy.panel.modelsFooterHint', { count: models.size })} idleHintLightShade="500"
 -        />
 +        />}
        </div>
      );
    }
 diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-index 0f6156a803fb9d80e2494957db7edad3f7784517..a950ab9c8f05bd5b6ab699cffc2dc31edd7c596b 100644
+index ec55792023ff8a04a1d0d04b7f7a09730989688d..3af6d61ef9d13c8ebbd51669821b07388f3f8c2d 100644
 --- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
 +++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-@@ -16,6 +16,7 @@ import { bottomPanelFlags } from '@/lib/panels/bottom-panels';
- // 2026-09-03): Alt+Ziffer oeffnet im Trassia-Modus nur Panels, die die Leiste
- // anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
+@@ -6,6 +6,7 @@
+ import { useEffect } from 'react';
+ import { isPanelAvailable } from '@/lib/panels/availability';
  import { chVollmodus } from '@/lib/ch/modus';
 +import { chElementePlan, chPlanAusfuehren, chZeilenAuswahlLeeren, chZeilenSichtbarkeitUmschalten } from '@/lib/ch/zeilen-auswahl';
- import { closeAllPanelWindows } from '@/services/panel-windows';
- import { WALK_MOVEMENT_KEYS, eventKey, isTextEditingElement } from '@/lib/keyboard-event';
- import { bindModelWorkspaceKeys } from '@/lib/commands/modeling/keys-workspace';
-@@ -29,6 +30,7 @@ interface KeyboardShortcutsOptions { enabled?: boolean }
- function escapeGlobal(closeAll: boolean, event?: KeyboardEvent): boolean | void {
-   const target = event?.target as HTMLElement | null;
-   if (target?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return false;
+ import { replayWorkspaceHistory } from '@/lib/model-placement/history';
+ import { registerKeyboardCommand, type CommandRun } from '@/lib/commands/dispatcher';
+ import type { KeyCommandId } from '@/lib/commands/keyboard-commands';
+@@ -30,6 +31,7 @@ interface KeyboardShortcutsOptions { enabled?: boolean }
+ function escapeGlobal(closeAll: boolean, event: KeyboardEvent): boolean | void {
+   const target = event.target as Element | null;
+   if (target?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [data-ch-sidebar-customize]')) return false;
 +  chZeilenAuswahlLeeren();
    const state = useViewerStore.getState();
    if (closeAll) {
      state.showWorkspacePanel('properties');
-@@ -100,6 +102,18 @@ function hideSelected(event: KeyboardEvent): boolean {
-     const tag = document.activeElement?.tagName;
-     if (tag === 'BUTTON' || tag === 'SELECT' || tag === 'A') return false;
-   }
-+  if (event.key === ' ') {
-+    const s = useViewerStore.getState();
-+    const actions = { hideEntities: s.hideEntities, showEntities: s.showEntities, setModelVisibility: s.setModelVisibility };
-+    let steps = chZeilenSichtbarkeitUmschalten({ versteckt: s.hiddenEntities, modellSichtbar: (id) => s.models.get(id)?.visible }, actions);
-+    if (steps === 0) {
-+      const ids = s.selectedEntityIds.size > 0 ? [...s.selectedEntityIds] : s.selectedEntityId === null ? [] : [s.selectedEntityId];
-+      const plan = chElementePlan(ids, s.hiddenEntities);
-+      chPlanAusfuehren(plan, actions);
-+      steps = plan.length;
-+    }
-+    return steps > 0;
-+  }
-   return hideSelectionFromStore();
+@@ -93,8 +95,19 @@ function splitSelected(): void {
  }
  
+ // A focused button keeps Space: the dispatcher yields it before any command runs (#9233).
+-function hideSelected(): boolean {
+-  return hideSelectionFromStore();
++function hideSelected(event: KeyboardEvent): boolean {
++  if (event.key !== ' ') return hideSelectionFromStore();
++  const state = useViewerStore.getState();
++  const actions = { hideEntities: state.hideEntities, showEntities: state.showEntities, setModelVisibility: state.setModelVisibility };
++  if (chZeilenSichtbarkeitUmschalten({
++    versteckt: state.hiddenEntities,
++    modellSichtbar: (id) => state.models.get(id)?.visible,
++  }, actions) > 0) return true;
++  const ids = state.selectedEntityIds.size > 0 ? [...state.selectedEntityIds]
++    : state.selectedEntityId === null ? [] : [state.selectedEntityId];
++  const plan = chElementePlan(ids, state.hiddenEntities);
++  chPlanAusfuehren(plan, actions);
++  return plan.length > 0;
+ }
+ 
+ /**

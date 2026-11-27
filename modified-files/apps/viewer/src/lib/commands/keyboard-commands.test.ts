@@ -34,6 +34,7 @@ const DISPATCHER_CONTEXTS = {
   overlay: true,
   'tool.walk': true,
   'tool.measure': true,
+  'tool.section': true,
   command: true,
   'command.wall.place': true, // Representative command-specific context.
   'workspace.model': true,
@@ -72,6 +73,27 @@ describe('keyboard command table (#5836)', () => {
         ? [`${when} ${chordIdentity(undo.keys[0])}: ${undo.id} and ${second.id}`]
         : [], when);
     }
+  });
+
+  // #9296: the workspace's tool layer wins over `global`, so a global chord it
+  // also claims stops working inside Model (Measure on Shift+M did).
+  // The only intended overlap: inside Model, 1/2/3 pick Plan, Split and 3D
+  // (the workspace bar shows these keys) instead of the Top, Bottom and Front
+  // camera views, which keep 1/2/3 everywhere else.
+  const INTENDED_SHADOWS = new Set([
+    'camera.viewTop under model.layoutPlan',
+    'camera.viewBottom under model.layoutSplit',
+    'camera.viewFront under model.layout3d',
+  ]);
+  it('no global command is shadowed inside the Model workspace (#9296)', () => {
+    const model = new Map(KEY_COMMANDS.filter((c) => c.when === 'workspace.model')
+      .flatMap((c) => c.keys.map((chord) => [chordIdentity(chord), c.id] as const)));
+    const shadowed = KEY_COMMANDS.filter((c) => c.when === 'global')
+      .flatMap((c) => c.keys.flatMap((chord) => {
+        const owner = model.get(chordIdentity(chord));
+        return owner && !INTENDED_SHADOWS.has(`${c.id} under ${owner}`) ? [`${formatChord(chord, false)}: ${c.id} under ${owner}`] : [];
+      }));
+    assert.deepEqual(shadowed, []);
   });
 
   it('command ids are unique', () => {
@@ -116,6 +138,7 @@ describe('platform key glyphs (#5836)', () => {
   it('lists every chord of a multi-key command', () => {
     assert.equal(shortcutLabel('basket.add', false), '=, +');
     assert.equal(shortcutLabel('visibility.hideSelection', false), 'Del, Backspace');
+    assert.equal(shortcutLabel('visibility.toggleSelection', false), 'Space');
     assert.equal(shortcutLabel('ui.closeAllPanels', false), 'Esc Esc');
     assert.equal(formatChord({ key: 'n', shift: true }, false), 'Shift+N');
   });

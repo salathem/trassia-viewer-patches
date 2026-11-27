@@ -5,11 +5,12 @@
 /**
  * Coordinates of the Measure tool's live point — issue #2199 §5.
  *
- * The point is whichever one the tool is already tracking: the moving end of
- * the current drag, or the last finalized endpoint when nothing is being
- * dragged. Nothing here re-picks and nothing here adds an interaction; it is
- * the same point the georeferenced E/N/H box has always shown, expressed in
- * the frames §5 asks for.
+ * The point is whichever one the tool is already tracking: in Point mode
+ * (#8770) the hovered point, else the last clicked one; in every other mode
+ * the moving end of the current drag, or the last finalized endpoint when
+ * nothing is being dragged (`measureLivePoint`). Nothing here re-picks and
+ * nothing here adds an interaction; it is the same point the HUD readouts
+ * show, expressed in the frames §5 asks for.
  *
  * Frames are stacked from the most local outwards, and a frame is shown only
  * when it says something the one above it did not:
@@ -47,7 +48,7 @@ import { useTranslation } from '@/i18n/useTranslation';
 // object so `t('measure.*')` resolves under the real 'en' locale (see that
 // module's own doc comment).
 import { useRenderFrameOffsets } from '@/hooks/useRenderFrameOffsets';
-import { useAnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
+import { useAnchorGeoreferenceReadout } from '@/lib/geo/useAnchorGeoreference';
 import {
   pointCoordinates,
   relativeOffset,
@@ -55,8 +56,10 @@ import {
 } from './measure-modes/coordinates';
 import { viewerToIfcAxes } from '@/lib/geo/coordinate-frame';
 import { formatDistance, formatSignedTriple } from './formatDistance';
-import { projectedEnh, useProjectedLatLon, type Vec3Like } from './measure-modes/geo-readout';
-// Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-geo-status.tsx
+import { measurementCrsName, projectedEnh, useProjectedLatLon } from './measure-modes/geo-readout';
+import { useMeasureLivePoint } from './measure-modes/useMeasureLivePoint';
+import { StaleMeasurementBadge } from '../reposition/StaleMeasurementBadge';
+// Trassia overlay — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-geo-status.tsx
 import { ChGeoStatus } from './measure-modes/ch-geo-status';
 
 /** One labelled coordinate row. */
@@ -74,20 +77,16 @@ function CoordRow({ label, value, hint }: { label: string; value: string; hint?:
 
 export function MeasurePointReadout() {
   const { t } = useTranslation();
-  const activeMeasurement = useViewerStore((s) => s.activeMeasurement);
-  const measurements = useViewerStore((s) => s.measurements);
+  const tracked = useMeasureLivePoint();
   const geoReadoutEnabled = useViewerStore((s) => s.geoReadoutEnabled);
   const referencePoint = useViewerStore((s) => s.measureReferencePoint);
   const setReferencePoint = useViewerStore((s) => s.setMeasureReferencePoint);
   const unitDisplayOverrides = useViewerStore((s) => s.unitDisplayOverrides);
 
   const frame = useRenderFrameOffsets();
-  const anchor = useAnchorGeoreference();
+  const { anchor, hasCandidate } = useAnchorGeoreferenceReadout();
 
-  // The live point: the moving end of the current drag, else the most recent
-  // finalized endpoint. Same rule the georeferenced box has always used.
-  const livePoint: Vec3Like | null = activeMeasurement?.current
-    ?? (measurements.length > 0 ? measurements[measurements.length - 1].end : null);
+  const livePoint = tracked?.point ?? null;
 
   const showGeo = geoReadoutEnabled && anchor !== null;
   // Hook order is fixed: called unconditionally, gated by its arguments.
@@ -122,7 +121,8 @@ export function MeasurePointReadout() {
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1 font-mono text-2xs uppercase tracking-wider text-foreground">
           <Crosshair className="h-3 w-3" />
-          {activeMeasurement ? t('measure.point.live') : t('measure.point.last')}
+          {tracked?.live ? t('measure.point.live') : t('measure.point.last')}
+          {tracked && !tracked.live && <StaleMeasurementBadge id={tracked.id} />}
         </span>
         <div className="flex items-center gap-1">
           <IconButton
@@ -204,14 +204,10 @@ export function MeasurePointReadout() {
       {enh && anchor && (
         <div className="flex items-center gap-1 font-mono text-2xs text-muted-foreground">
           <Globe className="h-2.5 w-2.5" />
-          {anchor.eff.projectedCRS.name}
+          {measurementCrsName(anchor)}
         </div>
       )}
-
-      {/* Trassia: says out loud what upstream leaves silent — no georeference,
-          the declared vertical datum, or a point outside the declared Swiss
-          grid. Renders nothing when there is nothing to report. */}
-      <ChGeoStatus anchor={anchor} point={livePoint} enabled={geoReadoutEnabled} />
+      <ChGeoStatus anchor={anchor} point={livePoint} enabled={geoReadoutEnabled && (anchor !== null || !hasCandidate)} />
     </div>
   );
 }

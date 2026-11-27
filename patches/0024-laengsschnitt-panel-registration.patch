@@ -1,65 +1,88 @@
 diff --git a/apps/viewer/src/i18n/en.ts b/apps/viewer/src/i18n/en.ts
-index 73cdb74b8d58210599c503f3e8bb0fa6e6e0b0ca..f2ae1e076a2c4b068ac390c84b150c088697b880 100644
+index c5d94205676a4c57dc7bd29bcd8f675e5d283c07..50306d6f71d1aa30bab23d26652e8419ece82412 100644
 --- a/apps/viewer/src/i18n/en.ts
 +++ b/apps/viewer/src/i18n/en.ts
-@@ -110,6 +110,7 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
+@@ -170,6 +170,7 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
  
  /** English is assembled from feature catalogues so no locale becomes a monolith. */
  export const en = {
 +  'trassia.panel.laengsschnitt': 'Longitudinal profile',
    'trassia.panel.kubatur': 'Cut and fill',
    'trassia.panel.drape': 'Terrain drape',
-   ...analysisPanelEn,
+   ...influxEn,
+diff --git a/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts b/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts
+index e4187bf82a46ee42c1b10078f52a4c9eb4306c28..2f8d882523117c9c01c29bccfa93a4bcf7cb074d 100644
+--- a/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts
++++ b/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts
+@@ -9,6 +9,7 @@ export type AuditFamily = 'core' | 'authoring' | 'clash' | 'analytics' | 'appear
+ export const panelControlAudits: Readonly<Record<WorkspacePanelId, readonly AuditFamily[]>> = {
+   drape: [], // Trassia panel, local UI controls.
+   kubatur: [], // Trassia panel, local UI controls.
++  laengsschnitt: [], // Trassia panel, local UI controls.
+   hierarchy: ['core'], properties: ['core', 'authoring', 'coordination'], layers: ['coordination'], zones: ['authoring'],
+   model: ['authoring'], placement: ['authoring'], changes: ['authoring', 'core'], changeSets: ['authoring'],
+   clash: ['clash'], validation: ['authoring'], idsStudio: ['authoring'], compare: ['coordination'], bcf: ['coordination'],
+diff --git a/apps/viewer/src/lib/panels/availability.ts b/apps/viewer/src/lib/panels/availability.ts
+index 7ae5e5a0d0ff4e8a3d8138f3a983d20ea026feb9..91f8ba2d8e54da3618068f09e86deb9c6b7c4205 100644
+--- a/apps/viewer/src/lib/panels/availability.ts
++++ b/apps/viewer/src/lib/panels/availability.ts
+@@ -21,7 +21,7 @@ import { isCollabEnabled } from '@/lib/collab/config';
+ import { isFeatureEnabled, type FeatureId } from '@/lib/features';
+ import type { WorkspacePanelId } from './registry';
+ 
+-export const PANEL_FEATURE: Readonly<Record<Exclude<WorkspacePanelId, 'drape' | 'kubatur' | 'hierarchy' | 'properties'>, FeatureId>> = {
++export const PANEL_FEATURE: Readonly<Record<Exclude<WorkspacePanelId, 'drape' | 'kubatur' | 'laengsschnitt' | 'hierarchy' | 'properties'>, FeatureId>> = {
+   sources: 'files.sources',
+   measurements: 'tools.measure',
+   lens: 'view.lens',
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index 26da97077c87fcd1a6256cae915514786f914960..9f277beaf94946c0a697ab22f177c3f2b997bac0 100644
+index e06acf9fd985956a11dd279c285fc68f4151c1dc..6442ad4cd3b2312b33c0b0b30e4eb2fea88bccb8 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
 @@ -21,7 +21,7 @@
  // the viewer-embed bundle too, which has no unplugin-icons resolver for the
  // `~icons/viewer/*` virtual modules (#6315 broke that build).
- import { BarChart3, Box, CalendarRange, ClipboardCheck, Cloud, Coins, Crosshair, DraftingCompass, FileText, FileWarning, GitBranch, GitCompareArrows, History, Info, Layers as LayersIcon, ListTree, MessageSquare, Move3d, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
+ import { BarChart3, Bot, Box, CalendarRange, ChartLine, ClipboardCheck, ClipboardPen, Cloud, Coins, Crosshair, DraftingCompass, FileText, FileWarning, GitBranch, GitCompareArrows, History, Info, Link2, Layers as LayersIcon, ListChecks, ListTree, MessageSquare, Move3d, Paintbrush, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
 -import { Mountain } from 'lucide-react';
 +import { Mountain, ChartSpline } from 'lucide-react';
  import type { TranslationKey } from '@/i18n';
  
  /** Every panel reachable from the unified sidebar rail. `properties` is the
-@@ -61,7 +61,8 @@ export type WorkspacePanelId =
-   | 'model'
-   | 'changeSets'
+@@ -66,6 +66,7 @@ export type WorkspacePanelId =
+   | 'idsStudio'
    | 'drape'
--  | 'kubatur';
-+  | 'kubatur'
-+  | 'laengsschnitt';
+   | 'kubatur'
++  | 'laengsschnitt'
+   | 'influx';
  
  /** Shared task grouping for the rail, ribbon panel browser, and palette commands (#5873). */
- export type PanelGroup = 'coordinate' | 'check' | 'quantify' | 'automate' | 'site' | 'author';
-@@ -205,6 +206,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
-   { id: 'changeSets', titleKey: 'changeSets.panel.title', Icon: GitBranch, group: 'author', region: 'side' },
+@@ -219,6 +220,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   { id: 'idsStudio', titleKey: 'idsStudio.title', Icon: ClipboardPen, group: 'check', region: 'side', prefersWide: true },
    { id: 'drape', titleKey: 'trassia.panel.drape', Icon: Mountain, group: 'author', region: 'side' },
    { id: 'kubatur', titleKey: 'trassia.panel.kubatur', Icon: Ruler, group: 'quantify', region: 'side' },
 +  { id: 'laengsschnitt', titleKey: 'trassia.panel.laengsschnitt', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
  ];
  
- // The bottom strip (Script / Schedule / Lists) is table-driven; the id union and
+ /** How a panel opened on an empty viewer offers a way to a model
 diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-index a449320dd6e53c4878ee593bfce2def9cab8616a..fea955fc0282ad5c7481344560cf41d6f4f82523 100644
+index 26f5a8a822b7c98c8df96e6b94ebc74515d91c6b..015aad07c5b4f77a26e11eb06e3b5d35f724fb98 100644
 --- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
 +++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-@@ -41,6 +41,9 @@ import { useViewerStore } from '@/store';
+@@ -43,6 +43,9 @@ import { loadIdsStudioRuntime } from '@/lib/ids-studio/runtime-loader';
  import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
  // Trassia overlay (not upstream) — Paket V-KUBATUR, siehe ChKubaturPanel.tsx.
  import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
 +// Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT, siehe
 +// ChLaengsschnittPanel.tsx.
 +import { ChLaengsschnittPanel } from '@/components/viewer/ChLaengsschnittPanel';
+ import { useViewerStore } from '@/store';
  // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
  // dynamic chunk keeps it out of the initial bundle until first opened.
- const LayersPanel = lazy(() =>
-@@ -152,6 +155,7 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
-     case 'loadReport': return <LoadReportPanel onClose={onClose} />;
+@@ -221,6 +224,7 @@ function panelBody(id: WorkspacePanelId, onClose: () => void): ReactNode {
+     case 'idsStudio': return <IdsStudioPanelBody />;
      case 'drape': return <ChDrapePanel onClose={onClose} />;
      case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
 +    case 'laengsschnitt': return <ChLaengsschnittPanel onClose={onClose} />;
-     case 'changes': return <ChangesPanel onClose={onClose} />;
-     case 'layers': return <LayersPanelBody onClose={onClose} />;
-     case 'sources': return <SourcesPanelBody onClose={onClose} />;
+     case 'changeSets': return <ChangeSetPanel onClose={onClose} />;
+   }
+ }

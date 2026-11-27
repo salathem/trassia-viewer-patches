@@ -4,8 +4,11 @@
 
 import { usePlacementCoordinateInfo } from '@/hooks/usePlacementCoordinateInfo';
 import { useFederatedGeometry } from './useFederatedGeometry';
+import { useFilteredGeometry } from './useFilteredGeometry';
+import { withTypeHidden } from './type-hidden-index.js';
 import { modelIndices } from '@/lib/model-placement/model-indices';
-import { useMemo, useRef, useState, useCallback, useEffect, useSyncExternalStore } from 'react';
+import { Suspense, useMemo, useRef, useState, useCallback, useEffect, useSyncExternalStore } from 'react';
+import { lazyChunk } from '@/lib/lazy-chunk';
 import { createPortal } from 'react-dom';
 import { useLevelDisplayEffect } from '@/hooks/useLevelDisplayEffect';
 import { useAuthoredGridOverlay } from './useAuthoredGridOverlay';
@@ -14,13 +17,15 @@ import { Viewport } from './Viewport';
 import { useWindowFileDrop } from './useWindowFileDrop';
 import { ViewportOverlays } from './ViewportOverlays';
 import { WebGpuTroubleshootingDetails, webGpuBannerBlurb } from './WebGpuTroubleshooting';
-import { ViewportWelcomeCard } from './ViewportWelcomeCard';
+import { ViewportWelcome } from './welcome/ViewportWelcome';
+import { useReloadResume } from '@/hooks/useReloadResume';
 import { ViewportLoadErrorCard } from './ViewportLoadErrorCard';
-import { WelcomeFooterChips } from './WelcomeFooterChips';
 import { useTranslation } from '@/i18n';
 import { MergeLayersBanner } from './MergeLayersBanner';
 import { GeometryModeBanner } from './GeometryModeBanner';
 import { LandXmlUnitsRefusalPrompt } from './LandXmlUnitsRefusalPrompt';
+import { retainedKernel } from '@ifc-lite/viewer-retained';
+import { LandXmlAssumptionRefusalPromptSlot } from './LandXmlGeorefAssumptionsLazy';
 import { VisibilityChips } from '@/components/viewport-ui/hud/VisibilityChips';
 import { ToolOverlays } from './ToolOverlays';
 import { ZoneOverlay, ZoneAssignmentSyncMount } from './tools/ZoneOverlay';
@@ -29,27 +34,28 @@ import { CollabPresenceLayer } from './CollabPresenceLayer';
 import { MeasurementSceneLayer } from './scene/MeasurementSceneLayer';
 import { BasepointOverlay } from './BasepointOverlay';
 import { ChLaengsschnittNavigationMarker } from './ChLaengsschnittNavigationMarker';
+import { StructuralGlyphLayer } from './structural/StructuralGlyphLayer';
 import { SceneOverlayRoot } from '@/components/viewport-ui/scene';
 import { ChSectionWheelInput } from './ChSectionWheelInput';
 import { DrawingRuntimeHost } from './drawing/DrawingRuntimeHost';
 import { BCFOverlay } from './bcf/BCFOverlay';
 import { CesiumOverlay } from './CesiumOverlay';
 import { CesiumPlacementGizmo } from './placement/CesiumPlacementGizmo';
-// Trassia overlay (Paket UX-KOPF): eigenes Panel fuer die Schweizer Umgebung.
 import { ChUmgebungPanel } from './ChUmgebungPanel';
 import { ChDxfWorldPanel } from './ChDxfWorldPanel';
 import { ChDxfWorldStandalone } from './ChDxfWorldStandalone';
 import { useSolarEnvironment } from '@/hooks/useSolarEnvironment';
 import { useSolarSweep } from '@/hooks/useSolarSweep';
-import { getViewerStoreApi, useViewerStore } from '@/store';
-import { isTypeVisible } from '@/store/typeVisibilityFilter';
+import { getViewerStoreApi, useViewerStore, LiveViewerScope } from '@/store';
+import { isMeshTypeVisible } from '@/store/typeVisibilityFilter';
+import { useRetypedClasses } from '@/hooks/useViewerSelectors';
 import { hasInstancedShards } from '@/store/instancedShardModels';
 import { isVisibleResultEmpty } from '@/lib/visibility/effective-empty';
 import { useVisibilityIsolation } from '@/hooks/useVisibilityIsolation';
 import { EmptyVisibilityNotice } from './EmptyVisibilityNotice';
 import { useIfc } from '@/hooks/useIfc';
 import { useWebGpuOpenGuard } from '@/hooks/useWebGpuOpenGuard';
-import type { RecentFileEntry } from '@/lib/recent-files';
+import { getRecentFiles, type RecentFileEntry } from '@/lib/recent-files';
 import {
   supportsFileSystemAccess,
   openIfcFilesWithHandles,
@@ -68,26 +74,43 @@ import { sanitizeFilename } from '@/lib/export/download';
 import { enqueueSourceLoad } from '@/lib/sources/loadQueue';
 import { toast, Toaster } from '@/components/ui/toast';
 import { chDrapeTakeDroppedFiles, chDrapeUnderlayCandidates } from '@/lib/ch/drape-ingest';
-import { chVollmodus } from '@/lib/ch/modus';
+import { refuseWhileWorkflowBusy } from '@/lib/flow/workflow-busy-refusal';
+import { reloadActiveModelInPlace } from './reloadActiveModel';
 import { reportFileOpenRejected } from '@/hooks/ingest/fileOpenRejected';
 import { Upload, AlertTriangle, ChevronDown, ExternalLink, Plus } from 'lucide-react';
-import { createBlankIfcFile } from '@/utils/createBlankIfc';
-import { launchModelCommand } from '@/lib/commands/modeling/keys-workspace';
-import type { MeshData, PointCloudAsset } from '@ifc-lite/geometry';
-import { type IfcDataStore, type MapConversion } from '@ifc-lite/parser';
-import { getEffectiveGeoreference } from '@/lib/geo/effective-georef';
-import { isMeshVisibleInViewMode, meshClassIsPlaced, meshIsNonOccurrence } from '@/lib/type-view-visibility';
+import { startBlankModel } from '@/hooks/startBlankModel';
+import type { PointCloudAsset } from '@ifc-lite/geometry';
+import { type IfcDataStore } from '@ifc-lite/parser';
+import { getEffectiveGeoreference, hasDeclaredCrs, offersCesium } from '@/lib/geo/effective-georef';
+import { usePlacementProjectionKind } from '@/lib/geo/use-placement-projection-kind';
+import { markLoadIntent } from '@/lib/load-intent';
+import { isFeatureEnabled } from '@/lib/features';
 
 /**
  * The primary container for the 3D viewport, managing IFC model loading,
  * geometry streaming, scene overlays, and interaction tools.
  */
+// Lazy: the scan-to-BIM overlay (#6894) and its mesh builder stay out of the entry chunk.
+const ScanDetectionOverlay = lazyChunk(() => import('./useScanDetectionOverlay')
+  .then((m) => ({ default: m.ScanDetectionOverlay }))
+  .catch((error: unknown) => {
+    console.warn('[scan-to-bim] the detection overlay could not load', error);
+    return { default: () => null };
+  }));
+
+/** The viewport takes an edit's geometry in the edit's own task, so it reads live state (#10535). */
 export function ViewportContainer() {
+  return <LiveViewerScope><ViewportContainerLive /></LiveViewerScope>;
+}
+
+function ViewportContainerLive() {
   // Drive Stacked / Solo / Exploded level display from the slice.
   // Mount-once hook — it self-gates on mode + gap + model changes.
   useLevelDisplayEffect();
   // Grids authored this session are lines the mesher does not draw (#6232 D3).
   useAuthoredGridOverlay();
+  // Scan-to-BIM detections under review (#6894): a lazy host, mounted only while a run exists.
+  const scanRunActive = useViewerStore((s) => s.scanDetectionRun !== null);
 
   const { loadFile, loading, clearAllModels, loadFilesSequentially, addModel } = useIfc();
   // Resolves a source provider's display title for toasts; null outside the
@@ -95,6 +118,8 @@ export function ViewportContainer() {
   const sourceHost = useOptionalSourceHost();
   const releaseGeometryMemory = useViewerStore((s) => s.releaseGeometryMemory);
   const typeVisibility = useViewerStore((s) => s.typeVisibility);
+  const structuralViewMode = useViewerStore((s) => s.structuralViewMode);
+  const retypedClasses = useRetypedClasses();
   const typeViewMode = useViewerStore((s) => s.typeViewMode);
   const setHasTypeGeometry = useViewerStore((s) => s.setHasTypeGeometry);
   const hiddenEntities = useViewerStore((s) => s.hiddenEntities);
@@ -111,7 +136,7 @@ export function ViewportContainer() {
   const mutationVersion = useViewerStore((s) => s.mutationVersion);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showTroubleshooting, setShowTroubleshooting] = useState(false);
-  const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>([]);
+  const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>(getRecentFiles); // seeded: a fresh visit lists past opens
   const { webgpu, guard: guardWebGpu } = useWebGpuOpenGuard();
   // `webGpuBannerBlurb` is a plain function, not a component — pass this
   // component's own `t` so the banner headline re-renders on a live locale
@@ -144,9 +169,12 @@ export function ViewportContainer() {
   /**
    * Aggregate point clouds across visible models.
    *
-   * Phase 0: identity-stamping with modelIndex. Returns the same array
-   * reference when nothing has changed so the consumer effect skips work.
+   * Phase 0: identity-stamping with modelIndex. A type toggle over models
+   * without point clouds keeps the previous empty array, so it does not
+   * re-sync them: that recomputes the renderer's model bounds and refits the
+   * sun shadows although nothing changed (#10264).
    */
+  const pointCloudSourceRef = useRef<{ sources: readonly unknown[]; list: PointCloudAsset[] } | null>(null);
   const mergedPointClouds = useMemo(() => {
     const collected: PointCloudAsset[] = [];
     if (storeModels.size > 0) {
@@ -159,43 +187,26 @@ export function ViewportContainer() {
           // Scan-based terrain is stamped `IfcGeographicElement`; honour the
           // same type-visibility gate as the mesh path so the Site toggle hides
           // it too (issue #1480).
-          if (!isTypeVisible(asset.ifcType, typeVisibility)) continue;
+          if (!isMeshTypeVisible(asset, typeVisibility, structuralViewMode, retypedClasses)) continue;
           collected.push(asset.modelIndex === modelIndex ? asset : { ...asset, modelIndex });
         }
       }
     } else if (geometryResult?.pointClouds) {
       for (const asset of geometryResult.pointClouds) {
-        if (!isTypeVisible(asset.ifcType, typeVisibility)) continue;
+        if (!isMeshTypeVisible(asset, typeVisibility, structuralViewMode, retypedClasses)) continue;
         collected.push(asset);
       }
     }
+    const sources = [storeModels, geometryResult, modelIdToIndex];
+    const previous = pointCloudSourceRef.current;
+    if (collected.length === 0 && previous?.list.length === 0 && previous.sources.every((source, i) => source === sources[i])) return previous.list;
+    pointCloudSourceRef.current = { sources, list: collected };
     return collected;
-  }, [storeModels, geometryResult, modelIdToIndex, typeVisibility]);
+  }, [storeModels, geometryResult, modelIdToIndex, typeVisibility, structuralViewMode, retypedClasses]);
 
   // Keep the placement panel context available regardless of map/solar toggles.
   // The Cesium overlay and solar study also consume this effective georeference.
-  const georef = useMemo(() => {
-    const applyPlacementDraft = <T extends { mapConversion?: MapConversion }>(
-      modelId: string,
-      effective: T,
-    ): T & { baseMapConversion?: T['mapConversion'] } => {
-      const preview = cesiumPlacementDraftModelId === modelId ? cesiumPlacementDraft : null;
-      if (!preview || !effective.mapConversion) {
-        return {
-          ...effective,
-          baseMapConversion: effective.mapConversion,
-        };
-      }
-      return {
-        ...effective,
-        baseMapConversion: effective.mapConversion,
-        mapConversion: {
-          ...effective.mapConversion,
-          ...preview,
-        },
-      };
-    };
-
+  const sourceGeoref = useMemo(() => {
     // Check federated models, preferring the user-pinned anchor when present.
     // Matches findReferenceGeorefModel() in useIfcFederation so the Cesium bridge
     // and the parse-time alignment agree on which model drives the world frame.
@@ -204,8 +215,8 @@ export function ViewportContainer() {
     // "pinned anchor, else first model with a usable map-conversion georef"
     // selection for the basepoint overlay and the measure-tool XYZ readout. This
     // memo stays bespoke on purpose: it iterates in the store's insertion order
-    // (not loadedAt), and layers the placement-draft
-    // preview + storey elevations that only the Cesium bridge consumes.
+    // (not loadedAt), and includes the storey elevations that the Cesium
+    // bridge consumes. Draft preview is layered after CRS classification.
     const orderedModels = (() => {
       if (!anchorModelIdOverride) return Array.from(storeModels);
       const entries = Array.from(storeModels);
@@ -223,13 +234,13 @@ export function ViewportContainer() {
         georefMutations.get(modelId),
       );
       if (
-        effective?.projectedCRS?.name
-        && effective.mapConversion
+        hasDeclaredCrs(effective?.projectedCRS)
+        && effective?.mapConversion
         && effective.source !== 'siteLocation'
       ) {
-        const previewed = applyPlacementDraft(modelId, effective);
         return {
-          ...previewed,
+          ...effective,
+          mapConversion: effective.mapConversion,
           sourceModelId: modelId,
           storeyElevations: ds.spatialHierarchy?.storeyElevations,
         };
@@ -244,13 +255,13 @@ export function ViewportContainer() {
         georefMutations.get('__legacy__'),
       );
       if (
-        effective?.projectedCRS?.name
-        && effective.mapConversion
+        hasDeclaredCrs(effective?.projectedCRS)
+        && effective?.mapConversion
         && effective.source !== 'siteLocation'
       ) {
-        const previewed = applyPlacementDraft('__legacy__', effective);
         return {
-          ...previewed,
+          ...effective,
+          mapConversion: effective.mapConversion,
           sourceModelId: '__legacy__',
           storeyElevations: ifcDataStore.spatialHierarchy?.storeyElevations,
         };
@@ -267,10 +278,18 @@ export function ViewportContainer() {
     // depending on `mergedGeometryResult` re-runs this on every streamed
     // geometry batch, re-triggering the property-set georef scan each time.
     mergedGeometryResult?.coordinateInfo,
-    cesiumPlacementDraft,
-    cesiumPlacementDraftModelId,
     anchorModelIdOverride,
   ]);
+  const projectionKind = usePlacementProjectionKind(sourceGeoref?.projectedCRS);
+  const georef = useMemo(() => {
+    if (!sourceGeoref) return null;
+    // Pending classification must expose the authored anchor, while retaining
+    // a valid projected draft for its eventual preview (#7060).
+    const preview = projectionKind === 'projected'
+      && cesiumPlacementDraftModelId === sourceGeoref.sourceModelId ? cesiumPlacementDraft : null;
+    return { ...sourceGeoref, baseMapConversion: sourceGeoref.mapConversion,
+      mapConversion: preview ? { ...sourceGeoref.mapConversion, ...preview } : sourceGeoref.mapConversion };
+  }, [sourceGeoref, projectionKind, cesiumPlacementDraft, cesiumPlacementDraftModelId]);
 
   // Feed the solar study's sun position into the WebGPU lighting environment
   // (viewer-space sun direction + panel readout when Cesium is off).
@@ -291,7 +310,7 @@ export function ViewportContainer() {
           model.geometryResult?.coordinateInfo,
           georefMutations.get(modelId),
         );
-        if (effective?.projectedCRS?.name && effective.source !== 'siteLocation') return true;
+        if (offersCesium(effective)) return true;
       }
       // Fallback to legacy single-model
       if (ifcDataStore) {
@@ -300,7 +319,7 @@ export function ViewportContainer() {
           mergedGeometryResult?.coordinateInfo,
           georefMutations.get('__legacy__'),
         );
-        if (effective?.projectedCRS?.name && effective.source !== 'siteLocation') return true;
+        if (offersCesium(effective)) return true;
       }
       return false;
     }
@@ -328,6 +347,8 @@ export function ViewportContainer() {
     // Read the loaded state now, not at render: bundle preparation awaits
     // before routing, and a model that arrived meanwhile must be added to,
     // not replaced (#4476 review).
+    // Every branch's load is refused under a workflow lease; say so before any clear.
+    if (refuseWhileWorkflowBusy(t)) return;
     const current = viewerStoreApi.getState();
     const hasModelsLoaded = current.models.size > 0 || (current.geometryResult?.meshes?.length ?? 0) > 0;
     if (hasModelsLoaded) {
@@ -342,9 +363,13 @@ export function ViewportContainer() {
       clearAllModels();
       void loadFilesSequentially(files, handles);
     }
-  }, [loadFile, loadFilesSequentially, resetViewerState, clearAllModels, viewerStoreApi]);
+  }, [loadFile, loadFilesSequentially, resetViewerState, clearAllModels, viewerStoreApi, t]);
 
   const prepareAndRoute = usePreparedModelFileRoute(routeLoad, setRecentFiles);
+  // The welcome card's recent files and demo load straight through loadFile.
+  const loadWelcomeFile = useCallback(async (file: File) => {
+    if (!refuseWhileWorkflowBusy(t)) await loadFile(file);
+  }, [loadFile, t]);
 
   // Cloud source providers (Dalux Build, etc.) download bytes outside the
   // viewer and hand them off via this event rather than calling addModel()
@@ -363,6 +388,7 @@ export function ViewportContainer() {
     const handleSourceDownload = (event: Event) => {
       const detail = (event as SourceDownloadEvent).detail;
       if (detail.items.length === 0) return;
+      markLoadIntent();
       // Take ownership of the items and drop the event's own reference so
       // consumed buffers become collectable as the queue works through them.
       const batch: Array<SourceDownloadItem | null> = [...detail.items];
@@ -374,6 +400,8 @@ export function ViewportContainer() {
         // that their batch died rather than watching nothing happen.
         try {
           const store = useViewerStore.getState();
+          // Refuse on every branch: with models loaded each add would be refused one by one.
+          if (refuseWhileWorkflowBusy(t)) return;
           const anyLoaded =
             store.models.size > 0 || (store.geometryResult?.meshes?.length ?? 0) > 0;
           if (!anyLoaded) {
@@ -384,6 +412,7 @@ export function ViewportContainer() {
           for (let i = 0; i < batch.length; i++) {
             const item = batch[i];
             if (!item) continue;
+            if (refuseWhileWorkflowBusy(t)) break; // a workflow took the lease between items
             batch[i] = null; // release the buffer once this iteration owns it
             // `item.name` comes from a remote provider's file listing — it is
             // untrusted input reaching a filename position (the File
@@ -391,13 +420,6 @@ export function ViewportContainer() {
             // once and use the sanitized value everywhere downstream.
             const safeName = sanitizeFilename(item.name, { fallback: 'model.ifc' });
             const file = new File([item.buffer], safeName);
-            // Pass an explicit id and treat "registered in the store" as
-            // success: addModel returns null when a concurrent load
-            // (drag-drop, viewport picker) bumps the shared load session,
-            // even though this model finished registering — same recovery
-            // syncSourceModel uses. Without it the toast would falsely report
-            // a failure and the model would get no source tag (no sync
-            // button, no badge, no downloaded-file record).
             const providerTitle =
               sourceHost?.get(item.tag.provider)?.manifest.title ?? item.tag.provider;
             // Isolate each item: a single corrupt or unparseable file must not
@@ -405,10 +427,8 @@ export function ViewportContainer() {
             // ten throws to the outer catch and the other nine silently never
             // load — with one generic toast for the whole batch.
             try {
-              const modelId = crypto.randomUUID();
-              const added = await addModel(file, { name: safeName, modelId });
-              const registered = added !== null || useViewerStore.getState().models.has(modelId);
-              if (registered) {
+              const modelId = await addModel(file, { name: safeName });
+              if (modelId) {
                 useViewerStore.getState().setSourceTag(modelId, item.tag);
                 recordDownloadedSourceFile(item.tag, item.sourceFile);
                 toast.success(`Loaded ${safeName} from ${providerTitle}`);
@@ -434,17 +454,18 @@ export function ViewportContainer() {
     window.addEventListener(SOURCE_DOWNLOAD_EVENT, handleSourceDownload);
     return () =>
       window.removeEventListener(SOURCE_DOWNLOAD_EVENT, handleSourceDownload);
-  }, [addModel, resetViewerState, clearAllModels, sourceHost]);
+  }, [addModel, resetViewerState, clearAllModels, sourceHost, t]);
 
   // Window drops on any viewer chrome route through the same guarded loader.
   // Unsupported WebGPU reports through the shared load-error card (#5851).
   const handleDrop = useCallback((dataTransfer: DataTransfer) => {
+    markLoadIntent(); // before any await: start-screen idle work stands down (load-intent.ts)
     // Capture live handles synchronously — the DataTransferItemList is neutered
     // once the drop event returns, so this must run before any await.
     const handlesPromise = handlesFromDataTransfer(dataTransfer);
     const droppedFiles = Array.from(dataTransfer.files);
     const attempt = () => {
-      if (!guardWebGpu(attempt)) return;
+      if (!guardWebGpu(attempt, { replay: 'free' })) return;
       const { dxfFiles, modelFiles: allDropped } = splitDxfFiles(droppedFiles);
       void chDrapeTakeDroppedFiles(droppedFiles).then((forUnderlay) => {
         const candidates = chDrapeUnderlayCandidates(dxfFiles.filter(f => forUnderlay.includes(f)));
@@ -481,10 +502,11 @@ export function ViewportContainer() {
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
+    markLoadIntent();
     // Reset while the event still owns this input; Retry uses the captured Files.
     e.target.value = '';
     const attempt = () => {
-      if (!guardWebGpu(attempt)) return;
+      if (!guardWebGpu(attempt, { replay: 'free' })) return;
 
       // DXF reference underlays split off before model routing (issue #1782).
       const { dxfFiles, modelFiles } = splitDxfFiles(files);
@@ -504,6 +526,7 @@ export function ViewportContainer() {
   // live handle per file so the model can be refreshed from disk. Falls back to
   // the hidden <input type="file"> on browsers without the API.
   const handleOpenClick = useCallback(async () => {
+    markLoadIntent(); // the picker may stay open for seconds
     if (!guardWebGpu(() => { void handleOpenClick(); })) return;
     if (!supportsFileSystemAccess()) {
       fileInputRef.current?.click();
@@ -524,149 +547,34 @@ export function ViewportContainer() {
     prepareAndRoute(files, supported.map((o) => o.handle));
   }, [prepareAndRoute, isSupportedFile, guardWebGpu]);
 
+  // After a stale-deployment reload, reopen what was open (or ask for it).
+  useReloadResume(webgpu.supported && !webgpu.checking, routeLoad, () => { void handleOpenClick(); });
+
   const handleStartBlank = useCallback(async () => {
-    if (!guardWebGpu(() => { void handleStartBlank(); })) return;
-    const file = createBlankIfcFile();
-    // Must await: loadFile() calls resetViewerState() internally, which
-    // closes any Model workspace session; entering before that races.
-    await loadFile(file);
-    if (chVollmodus()) launchModelCommand('wall.place'); // straight into drawing walls (#6232)
+    markLoadIntent();
+    if (!guardWebGpu(() => { void handleStartBlank(); }, { replay: 'on-retry' })) return;
+    try { await startBlankModel(loadFile); }
+    catch (error) {
+      console.error('[ViewportContainer] Start blank failed', error);
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
   }, [guardWebGpu, loadFile]);
 
-  // Issue #540 "Merge Multilayer Walls" reload. The setting changes the produced
-  // geometry, so it only takes on a re-load. Re-load the active model IN PLACE
-  // from the File the store ALREADY retains on the model record
-  // (`getActiveModel().sourceFile`, set by upsertModel at load time) — loadFile
-  // re-snapshots `mergeLayers` from the store, so the toggle re-tessellates.
-  // The earlier recent-files-blob-cache source was unreliable (its 150 MB cap
-  // skips real models + a fire-and-forget write races the reload), so it fell to
-  // window.location.reload() which DROPPED the model — the "nothing loads" blank.
-  const handleMergeLayersReload = useCallback(async () => {
-    const st = useViewerStore.getState();
-    const file = st.getActiveModel()?.sourceFile;
-    console.log(
-      '[merge-reload] start: mergeLayers=',
-      st.mergeLayers,
-      'activeModel.sourceFile=',
-      file ? `${file.name} (${file.size}B)` : 'NONE',
-    );
-    st.clearMergeLayersPendingReload();
-    if (file) {
-      try {
-        console.log('[merge-reload] re-loading active model in place…');
-        await loadFile(file);
-        const after = useViewerStore.getState();
-        console.log(
-          '[merge-reload] loadFile resolved: meshes=',
-          after.geometryResult?.meshes?.length ?? 0,
-          'models=',
-          after.models?.size ?? 0,
-        );
-      } catch (err) {
-        console.error('[merge-reload] loadFile threw:', err);
-      }
-    } else if (typeof window !== 'undefined') {
-      // No retained File (e.g. blank/new model) — fall back to a full reload
-      // (the toggle is persisted, so the user re-opens the file).
-      console.warn('[merge-reload] no active sourceFile — falling back to window.location.reload()');
-      window.location.reload();
-    }
-  }, [loadFile]);
-
-  // Reload-to-apply for the Fast/Exact geometry mode, mirroring the merge-layers
-  // reload: re-load the active model in place so loadFile re-snapshots the mode
-  // and re-tessellates. Clears BOTH pending flags since one reload applies every
-  // load-time geometry setting.
-  const handleGeometryModeReload = useCallback(async () => {
-    const st = useViewerStore.getState();
-    const file = st.getActiveModel()?.sourceFile;
-    st.clearGeometryModePendingReload();
-    st.clearMergeLayersPendingReload();
-    if (file) {
-      try {
-        await loadFile(file);
-      } catch (err) {
-        console.error('[geom-mode-reload] loadFile threw:', err);
-      }
-    } else if (typeof window !== 'undefined') {
-      // No retained File — fall back to a full reload (the mode is persisted).
-      console.warn('[geom-mode-reload] no active sourceFile — falling back to window.location.reload()');
-      window.location.reload();
-    }
-  }, [loadFile]);
-
-
+  // Issue #540 "Merge Multilayer Walls" and the Fast/Exact mode take effect on a re-load of the
+  // active model in place; one reload applies every load-time geometry setting. The earlier
+  // recent-files-blob-cache source was unreliable (its 150 MB cap skips real models + a
+  // fire-and-forget write races the reload), so it fell to window.location.reload() which
+  // DROPPED the model — the "nothing loads" blank.
+  const serverProcessedNotice = useCallback(() => toast.info(t('mergeLayersBanner.serverProcessed')), [t]);
+  const handleGeometrySettingsReload = useCallback(
+    () => reloadActiveModelInPlace(loadFile, serverProcessedNotice),
+    [loadFile, serverProcessedNotice],
+  );
   // Check if any models are loaded (even if hidden) - used to show empty 3D vs starting UI
   const hasLoadedModels = storeModels.size > 0 || (geometryResult?.meshes && geometryResult.meshes.length > 0);
 
-  // Does the rendered geometry carry any type-library geometry? geometryClass
-  // 1 = orphan type, 2 = instanced type; class 0 = placed occurrence. The
-  // Model/Types switch is only meaningful — and "Types" only renders anything —
-  // when class 1/2 meshes exist, so we surface this to gate the toolbar control
-  // (#957 follow-up). Scanned incrementally (O(batch)) and short-circuited once
-  // any type mesh is seen, so the common occurrence-only model costs at most a
-  // single linear pass that stops early.
-  const typeGeoSourceRef = useRef<MeshData[] | null>(null);
-  const typeGeoScanLenRef = useRef(0);
-  const sawTypeGeometryRef = useRef(false);
-  const hasTypeGeometry = useMemo(() => {
-    const meshes = mergedGeometryResult?.meshes;
-    if (!meshes || meshes.length === 0) {
-      typeGeoSourceRef.current = meshes ?? null;
-      typeGeoScanLenRef.current = meshes?.length ?? 0;
-      sawTypeGeometryRef.current = false;
-      return false;
-    }
-    // New source array, or it shrank (new file / replace) → rescan from scratch.
-    if (typeGeoSourceRef.current !== meshes || meshes.length < typeGeoScanLenRef.current) {
-      typeGeoSourceRef.current = meshes;
-      typeGeoScanLenRef.current = 0;
-      sawTypeGeometryRef.current = false;
-    }
-    if (!sawTypeGeometryRef.current) {
-      for (let i = typeGeoScanLenRef.current; i < meshes.length; i++) {
-        if (meshIsNonOccurrence(meshes[i])) { sawTypeGeometryRef.current = true; break; }
-      }
-    }
-    typeGeoScanLenRef.current = meshes.length;
-    return sawTypeGeometryRef.current;
-    // geometryContentVersion bumps per streaming batch — picks up type geometry
-    // that arrives in a later batch even when the meshes array is mutated in place.
-  }, [mergedGeometryResult, geometryContentVersion]);
-
-  // Does the model carry any PLACED occurrence (class 0)? Used to decide whether
-  // orphan type-library geometry (class 1) is clutter to hide in Model view or
-  // the only geometry that must stay visible (pure type-library files). Same
-  // incremental-scan pattern as hasTypeGeometry. (#1353)
-  const occGeoSourceRef = useRef<MeshData[] | null>(null);
-  const occGeoScanLenRef = useRef(0);
-  const sawOccurrenceRef = useRef(false);
-  const hasOccurrenceGeometry = useMemo(() => {
-    const meshes = mergedGeometryResult?.meshes;
-    if (!meshes || meshes.length === 0) {
-      occGeoSourceRef.current = meshes ?? null;
-      occGeoScanLenRef.current = meshes?.length ?? 0;
-      sawOccurrenceRef.current = false;
-      return false;
-    }
-    if (occGeoSourceRef.current !== meshes || meshes.length < occGeoScanLenRef.current) {
-      occGeoSourceRef.current = meshes;
-      occGeoScanLenRef.current = 0;
-      sawOccurrenceRef.current = false;
-    }
-    if (!sawOccurrenceRef.current) {
-      for (let i = occGeoScanLenRef.current; i < meshes.length; i++) {
-        if (meshClassIsPlaced(meshes[i].geometryClass ?? 0)) { sawOccurrenceRef.current = true; break; }
-      }
-    }
-    occGeoScanLenRef.current = meshes.length;
-    return sawOccurrenceRef.current;
-  }, [mergedGeometryResult, geometryContentVersion]);
-
-  // Persisted view mode may be 'types' from a prior model; fall back to 'model'
-  // when the current geometry has no type library so "Types" never renders an
-  // empty scene (and the now-hidden switch can't be used to recover).
-  const effectiveViewMode = hasTypeGeometry ? typeViewMode : 'model';
+  const { hasTypeGeometry, sceneGeometry, geometryVersion, geometryReplacementVersion, typeHidden } = useFilteredGeometry(
+    mergedGeometryResult, geometryContentVersion, typeVisibility, typeViewMode, structuralViewMode, retypedClasses);
 
   // Publish to the store so the toolbar can hide the Model/Types switch when
   // there is no type geometry to reveal.
@@ -674,181 +582,54 @@ export function ViewportContainer() {
     setHasTypeGeometry(hasTypeGeometry);
   }, [hasTypeGeometry, setHasTypeGeometry]);
 
-  // PERF: Incremental geometry filtering using refs.
-  // Instead of creating a new 200K+ element array every batch (~200ms),
-  // we push ONLY new meshes into a cached array — O(batch_size) not O(total).
-  // A version counter triggers downstream re-renders via the Viewport prop.
-  const filteredCacheRef = useRef<MeshData[]>([]);
-  const filteredSourceLenRef = useRef(0);
-  const filteredSourceRef = useRef<MeshData[] | null>(null);
-  const filteredTypeVisRef = useRef(typeVisibility);
-  const filteredTypeModeRef = useRef(effectiveViewMode);
-  const filteredHasOccRef = useRef(hasOccurrenceGeometry);
-  const filteredVersionRef = useRef(0);
-
-  const filteredGeometry = useMemo(() => {
-    if (!mergedGeometryResult?.meshes) {
-      filteredCacheRef.current = [];
-      filteredSourceLenRef.current = 0;
-      filteredSourceRef.current = null;
-      filteredVersionRef.current = 0;
-      return null;
-    }
-
-    const allMeshes = mergedGeometryResult.meshes;
-    const cache = filteredCacheRef.current;
-
-    // Full rebuild if: type visibility changed, view mode changed, source shrunk
-    // (new file), or empty cache
-    const prevVis = filteredTypeVisRef.current;
-    const typeVisChanged =
-      prevVis.spaces !== typeVisibility.spaces ||
-      prevVis.spatialZones !== typeVisibility.spatialZones ||
-      prevVis.openings !== typeVisibility.openings ||
-      prevVis.virtualElements !== typeVisibility.virtualElements ||
-      prevVis.site !== typeVisibility.site ||
-      prevVis.ifcAnnotations !== typeVisibility.ifcAnnotations ||
-      filteredTypeModeRef.current !== effectiveViewMode ||
-      // Occurrence-presence flipping (e.g. occurrences stream in after orphan
-      // types) changes whether class-1 orphans render in Model view (#1353).
-      filteredHasOccRef.current !== hasOccurrenceGeometry;
-    const sourceChanged = filteredSourceRef.current !== allMeshes;
-    if (typeVisChanged || sourceChanged || allMeshes.length < filteredSourceLenRef.current) {
-      cache.length = 0;
-      filteredSourceLenRef.current = 0;
-      filteredSourceRef.current = allMeshes;
-      filteredTypeVisRef.current = typeVisibility;
-      filteredTypeModeRef.current = effectiveViewMode;
-      filteredHasOccRef.current = hasOccurrenceGeometry;
-    }
-
-    const needsFilter = !typeVisibility.spaces || !typeVisibility.spatialZones || !typeVisibility.openings || !typeVisibility.virtualElements || !typeVisibility.site || !typeVisibility.ifcAnnotations;
-    const prevCacheLen = cache.length;
-
-    // Only process NEW meshes since last run — O(batch_size) not O(total)
-    for (let i = filteredSourceLenRef.current; i < allMeshes.length; i++) {
-      const mesh = allMeshes[i];
-      const ifcType = mesh.ifcType;
-
-      // Model/Types view switch (#957, #1353). geometryClass: 0 = occurrence,
-      // 1 = orphan type, 2 = instanced type-library shape, 3 = material-layer
-      // slice (treated like an occurrence — it's part of the real build-up).
-      // An orphan type (class 1) renders in Model view ONLY when the model has
-      // no placed occurrences (pure type-library file); otherwise it's unplaced
-      // library clutter and belongs in the Types view. See helper for the table.
-      const geometryClass = mesh.geometryClass ?? 0;
-      if (!isMeshVisibleInViewMode(geometryClass, effectiveViewMode, hasOccurrenceGeometry)) {
-        continue;
-      }
-
-      // Type-visibility gate — shared mapping in `typeVisibilityFilter.ts`
-      // keeps the viewport, Cesium, basket and GLB export in lockstep. The
-      // `site` toggle also hides `IfcGeographicElement` terrain (issue #1480);
-      // `ifcAnnotations` also hides annotation 3D solid geometry / "Model Text"
-      // breps on top of the 2D curve overlay (issues #1354, #1480).
-      if (needsFilter && !isTypeVisible(ifcType, typeVisibility)) continue;
-
-      // Mesh alpha flows through unchanged. The previous code re-multiplied
-      // IfcSpace / IfcOpeningElement alpha down to <= 0.3 here, which stomped
-      // lens / Pset colour rules even when the user explicitly chose alpha 1.0.
-      // Defaults still come from styling.rs / default-materials.ts; the
-      // renderer promotes overridden entities to the opaque pipeline, the
-      // only draws its colour table paints (#6076). See issue #677.
-      cache.push(mesh);
-    }
-
-    filteredSourceLenRef.current = allMeshes.length;
-
-    // Only bump version when cache content actually changed — avoids
-    // unnecessary downstream re-renders when memo runs with same data.
-    if (cache.length !== prevCacheLen || typeVisChanged || sourceChanged) {
-      filteredVersionRef.current++;
-    }
-
-    // Return the same array reference — downstream change detection uses
-    // geometryVersion (which increments each batch) instead of array identity.
-    return cache;
-  }, [mergedGeometryResult, typeVisibility, effectiveViewMode, hasOccurrenceGeometry]);
-
-  // Version counter that changes every batch — triggers useGeometryStreaming
-  // without requiring a new geometry array reference.
-  const geometryVersion = filteredVersionRef.current;
-
-  // 3D-context (Cesium) geometry must honour the SAME type-visibility filter as
-  // the WebGPU viewport, or openings/spaces hidden in 2D/3D reappear in the
-  // world view. The Cesium GLB builder reads `geometryResult.meshes`, so wrap the
-  // result with the already-filtered mesh list (`filteredGeometry`) rather than
-  // the raw `mergedGeometryResult` (issue #1337: a 900 m-tall IfcOpeningElement
-  // roof-cutter rendered as a giant salmon column over the building because the
-  // Cesium path skipped the opening filter that the viewport applies). Memoised
-  // on geometryVersion so the GLB rebuilds when the visible set changes.
+  // 3D-context (Cesium) geometry must honour the SAME type visibility as the
+  // WebGPU viewport, or openings/spaces hidden in 2D/3D reappear in the world
+  // view (issue #1337: a 900 m-tall IfcOpeningElement roof-cutter rendered as
+  // a giant salmon column). The viewport hides them by id on the GPU; the
+  // Cesium GLB builder reads `geometryResult.meshes`, so it gets the list
+  // without them. A list of references, built only while the world view is on.
   const cesiumGeometryResult = useMemo(() => {
-    if (!mergedGeometryResult || !filteredGeometry) return null;
-    return { ...mergedGeometryResult, meshes: filteredGeometry };
+    if (!cesiumEnabled || !mergedGeometryResult || !sceneGeometry) return null;
+    const hidden = typeHidden.ids;
+    return { ...mergedGeometryResult, meshes: hidden.size ? sceneGeometry.filter((mesh) => !hidden.has(mesh.expressId)) : sceneGeometry };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mergedGeometryResult, filteredGeometry, geometryVersion]);
+  }, [cesiumEnabled, mergedGeometryResult, sceneGeometry, geometryVersion, typeHidden]);
 
-  // Shared pure intersection for the renderer and the empty-result notice.
   const computedIsolatedIds = useVisibilityIsolation();
 
   const visibleResultEmpty = useMemo(() => isVisibleResultEmpty({
-    models: storeModels, geometryResult, hiddenEntities,
+    ...useViewerStore.getState(), models: storeModels, geometryResult, hiddenEntities: withTypeHidden(hiddenEntities, typeHidden),
   }, {
-    meshes: filteredGeometry,
+    meshes: sceneGeometry,
     pointClouds: mergedPointClouds,
     isolatedIds: computedIsolatedIds,
     hasUnenumeratedInstances: [...storeModels].some(([id, model]) => model.visible
       && hasInstancedShards(id) && !model.geometryResult?.instancedGeometryHashes?.size),
-  }), [storeModels, geometryResult, filteredGeometry, geometryVersion, mergedPointClouds,
-    computedIsolatedIds, hiddenEntities]);
-
-  // Grid Pattern
-  const GridPattern = () => (
-    <>
-      {/* Light mode grid - subtle gray */}
-      <div 
-        className="absolute inset-0 z-0 pointer-events-none opacity-[0.06] dark:hidden"
-        style={{
-          backgroundImage: `linear-gradient(#3b4261 1px, transparent 1px), linear-gradient(90deg, #3b4261 1px, transparent 1px)`,
-          backgroundSize: '32px 32px',
-          backgroundPosition: '-1px -1px'
-        }}
-      />
-      {/* Dark mode grid - subtle blue/cyan tint */}
-      <div 
-        className="absolute inset-0 z-0 pointer-events-none opacity-[0.12] hidden dark:block"
-        style={{
-          backgroundImage: `linear-gradient(#3b4261 1px, transparent 1px), linear-gradient(90deg, #3b4261 1px, transparent 1px)`,
-          backgroundSize: '32px 32px',
-          backgroundPosition: '-1px -1px'
-        }}
-      />
-    </>
-  );
+  }), [storeModels, geometryResult, sceneGeometry, geometryVersion, mergedPointClouds,
+    computedIsolatedIds, hiddenEntities, typeHidden, structuralViewMode, mutationVersion]);
 
   // Empty state when no file is loaded at all (show starting UI)
   // But NOT when models are loaded but just hidden - in that case show empty 3D canvas
   if (!hasLoadedModels && !loading) {
     return (
       <div
-        className="relative h-full w-full bg-white dark:bg-black text-zinc-900 dark:text-zinc-50 overflow-hidden"
+        className="relative h-full w-full bg-zinc-50 dark:bg-[#111219] text-zinc-900 dark:text-zinc-50 overflow-hidden"
         data-viewport
       >
-        <GridPattern />
 
-        <input
+        {isFeatureEnabled('files.local') && <input
           ref={fileInputRef}
           type="file"
           accept={FILE_ACCEPT}
           multiple
           onChange={handleFileSelect}
           className="hidden"
-        />
+        />}
 
         {/* Drop overlay — full window, since the whole window is the drop target (#5845) */}
         {isDragging && createPortal(
           <div className="pointer-events-none fixed inset-0 z-50 bg-primary/10 backdrop-blur-[2px] flex items-center justify-center p-8">
-            <div className="border-4 border-dashed border-primary bg-white/90 dark:bg-black/90 p-12 max-w-2xl w-full text-center shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] transition-all">
+            <div className="border-4 border-dashed border-primary bg-popover/90 p-12 max-w-2xl w-full text-center shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] transition-all">
               <Upload className="h-20 w-20 mx-auto text-primary mb-6" />
               <p className="text-3xl font-black uppercase tracking-tight text-primary">{t('viewportLighting.container.emptyState.dropOverlay.title')}</p>
             </div>
@@ -929,23 +710,18 @@ export function ViewportContainer() {
             beyond scroll reach (the logo used to vanish under the toolbar
             on short viewports). Instead an inner min-h-full column centers
             when there is room and grows scrollably from the top when not. */}
-        <div className="absolute inset-0 z-10 overflow-auto p-4 md:p-8">
+        <div className={`absolute inset-0 z-10 overflow-auto p-4 md:p-8 ${!webgpu.checking && !webgpu.supported ? 'pt-[min(40vh,14rem)] md:pt-[min(40vh,14rem)]' : ''}`}>
           <div className="min-h-full w-full flex flex-col items-center justify-center">
 
-          {/* Main Card — extracted to its own module (#5119) so the privacy
-              footnote had somewhere to land without growing this file. */}
-          <ViewportWelcomeCard
+          {/* The start screen — its own modules (#5119) so this file's
+              frozen size budget never has to grow for it. */}
+          <ViewportWelcome
             webgpu={webgpu}
             onOpenClick={() => { void handleOpenClick(); }}
             onStartBlank={() => { void handleStartBlank(); }}
             recentFiles={recentFiles}
-            loadFile={loadFile}
+            loadFile={loadWelcomeFile}
           />
-          {/* The old Select / Filter / Analyze feature-card grid was
-              dropped: it repeated toolbar affordances without offering an
-              action, and its height pushed the welcome card off-screen. */}
-
-          <WelcomeFooterChips />
 
           </div>
         </div>
@@ -958,9 +734,10 @@ export function ViewportContainer() {
 
   return (
     <div
-      className="relative h-full w-full bg-zinc-50 dark:bg-black overflow-hidden"
+      className="relative h-full w-full bg-zinc-50 overflow-hidden"
       data-viewport
     >
+      {scanRunActive && <Suspense fallback={null}><ScanDetectionOverlay /></Suspense>}
       {/* Drop overlay for a loaded file - "Add Model"; `status-ok` (tokens, #5504) sets it apart from the plain overlay above. */}
       {isDragging && createPortal(
         <div className="pointer-events-none fixed inset-0 z-50 bg-status-ok/10 backdrop-blur-[2px] flex items-center justify-center">
@@ -990,7 +767,6 @@ export function ViewportContainer() {
           storeyElevations={georef.storeyElevations}
         />
       )}
-      <ChUmgebungPanel />
       {!georef && <ChDxfWorldStandalone />}
       <ChDxfWorldPanel hasUnreferencedModel={!georef && models.size > 0} />
       {georef?.mapConversion && georef.baseMapConversion && (
@@ -1005,8 +781,10 @@ export function ViewportContainer() {
         />
       )}
       <Viewport
-        geometry={filteredGeometry}
+        geometry={sceneGeometry}
+        typeHidden={typeHidden}
         geometryVersion={geometryVersion}
+        geometryReplacementVersion={geometryReplacementVersion}
         geometryContentVersion={geometryContentVersion}
         pointClouds={mergedPointClouds}
         coordinateInfo={mergedGeometryResult?.coordinateInfo}
@@ -1026,6 +804,7 @@ export function ViewportContainer() {
         {bcfOverlayVisible && <BCFOverlay />}
         <BasepointOverlay />
         <ChLaengsschnittNavigationMarker />
+        <StructuralGlyphLayer isolatedIds={computedIsolatedIds} />
         <ZoneOverlay />
         <MeasurementSceneLayer />
         <ToolOverlays />
@@ -1035,14 +814,19 @@ export function ViewportContainer() {
           top of the canvas. Only renders when the user has flipped the
           merge-layers toggle while a model is in scope. `onReload` re-loads the
           model in place (full page reload would drop it — no boot auto-restore). */}
-      <MergeLayersBanner onReload={handleMergeLayersReload} />
-      <GeometryModeBanner onReload={handleGeometryModeReload} />
+      <MergeLayersBanner onReload={handleGeometrySettingsReload} />
+      <GeometryModeBanner onReload={handleGeometrySettingsReload} />
+      {/* #7955 M2: the retained chip + panel; `null` (nothing) in a default build. */}
+      {retainedKernel && <retainedKernel.Chip reload={loadFile} />}
       {/* #5175: offers a retry with a user-chosen linear unit when a LandXML
           load refuses because the source declares no <Units>. */}
       <LandXmlUnitsRefusalPrompt />
+      {/* A federated LandXML that would align under an assumption the user can choose. */}
+      <LandXmlAssumptionRefusalPromptSlot />
       <VisibilityChips />
       <EmptyVisibilityNotice visible={visibleResultEmpty} />
       <ZoneAssignmentSyncMount />
+      <ChUmgebungPanel />
       <DrawingRuntimeHost mergedGeometry={mergedGeometryResult} computedIsolatedIds={computedIsolatedIds} />
       <Toaster variant="absolute" />
     </div>

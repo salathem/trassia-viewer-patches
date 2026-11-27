@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/StatusBar.tsx b/apps/viewer/src/components/viewer/StatusBar.tsx
-index a3853d4a34a35f8ca1295edabbad114cb1176070..a37fe98a5a71432696c47910b18ae0294aac7436 100644
+index 13fc29f2c2919da02d623ae7b0b69627e40f65d0..5c7172ae5d2067b912e079a5a32caf181f9d5c50 100644
 --- a/apps/viewer/src/components/viewer/StatusBar.tsx
 +++ b/apps/viewer/src/components/viewer/StatusBar.tsx
-@@ -39,6 +39,10 @@ interface CountedModel {
+@@ -41,6 +41,10 @@ interface CountedModel {
    meshedIds: Set<number>;
    geometryReady: boolean;
  }
@@ -13,16 +13,16 @@ index a3853d4a34a35f8ca1295edabbad114cb1176070..a37fe98a5a71432696c47910b18ae029
  
  export function StatusBar() {
    const { t } = useTranslation();
-@@ -228,7 +232,7 @@ export function StatusBar() {
+@@ -220,7 +224,7 @@ export function StatusBar() {
    return (
-     <div className="h-7 px-3 border-t bg-muted/30 flex items-center justify-between text-xs text-muted-foreground">
+     <div className="h-7 px-3 border-t border-divider bg-panel flex items-center justify-between text-xs text-muted-foreground">
        {/* Left: Status */}
 -      <div className="flex items-center gap-3">
 +      <div className="flex min-w-0 flex-1 items-center gap-3">
          {/* A load error shows once, in the viewport's load-error card
              (#5851) — not here too. */}
          {loading ? (
-@@ -281,10 +285,12 @@ export function StatusBar() {
+@@ -275,10 +279,12 @@ export function StatusBar() {
              </span>
            </>
          )}
@@ -35,8 +35,8 @@ index a3853d4a34a35f8ca1295edabbad114cb1176070..a37fe98a5a71432696c47910b18ae029
 +      <div className="flex shrink-0 items-center gap-4">
          <div className="flex items-center gap-1.5">
            <Boxes className="h-3.5 w-3.5" />
-           <span>
-@@ -305,7 +311,7 @@ export function StatusBar() {
+           {/* A dash until the load settles, never a provisional 0. Tabular figures and a
+@@ -303,7 +309,7 @@ export function StatusBar() {
        </div>
  
        {/* Right: Performance */}
@@ -46,109 +46,77 @@ index a3853d4a34a35f8ca1295edabbad114cb1176070..a37fe98a5a71432696c47910b18ae029
            <>
              <FpsMemoryStats />
 diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-index 78ce87e2da5866e1672b166b813beac83993e3bc..e0e63e81c34b3fcd2c4355952761b43f4a38bb22 100644
+index 919bb7be9d5f80733efbcb8c675cdf21592acd0e..e371cd84fac715fbc079ef7640daca16c56044ff 100644
 --- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
 +++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-@@ -42,13 +42,16 @@ import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
- // Trassia overlay (Phase 1.1) — `?project=<slug>` opens a curated set of
- // models from a manifest instead of one file. See hooks/useChProjectLoader.ts.
- import { useChProjectLoader } from '@/hooks/useChProjectLoader';
--import { ChProjectBanner } from './ChProjectBanner';
- import { ChLensEngine } from './ChLensEngine';
--// Trassia overlay (not upstream) — Paket V-UX: die Zeile der benannten
--// Ansichten (U3), der Hinweis auf schmalen Schirmen (P6/U4) und der
--// Beobachter, der ein verdraengtes Werkzeugpanel in den zweiten Stapelplatz
--// legt statt es hinauszuwerfen (P4).
+@@ -67,7 +67,7 @@ import {
+ import { dockedBottomPanel as dockedBottomPanelOf } from '@/lib/panels/rendered-panels';
+ import { useBottomPanelFlags } from '@/hooks/useBottomPanelFlags';
+ import { usePanelControls } from '@/hooks/usePanelControls';
 -import { ChViewsBar } from './ChViewsBar';
-+// Trassia overlay (not upstream) — Paket V-UX: der Hinweis auf schmalen
-+// Schirmen (P6/U4) und der Beobachter, der ein verdraengtes Werkzeugpanel in
-+// den zweiten Stapelplatz legt statt es hinauszuwerfen (P4).
-+// Seit Paket UX-KOPF (Marco-Befund 2026-09-02: zwei Kopfzeilen ohne Mehrwert
-+// kosteten Bildflaeche) wohnen der Projektstreifen in der Fusszeile
-+// (StatusBar -> ChProjektFuss) und die benannten Ansichten im View-Tab des
-+// Ribbons (ChViewsGroup) — hier haengt nur noch die Mobil-Fassung des
-+// Status (Tester-Auflage M-1: Telefone haben keine Fusszeile).
 +import { ChProjektFuss } from './ChProjektFuss';
  import { ChMobileHint } from './ChMobileHint';
  import { ChPanelStackKeeper } from './ChPanelStackKeeper';
- import { chReadProjectParam } from '@/lib/ch/project-manifest';
-@@ -279,11 +282,15 @@ export function ViewerLayout() {
-             </span>
-           </div>
-         )}
--        <ChProjectBanner />
--
--        {/* Trassia: benannte Ansichten dieser Mappe (U3). Nur bei `?project=`,
--            weil die Ablage am Mappen-Slug haengt. */}
+ import { useMobileLayoutMode } from '@/hooks/useMobileLayoutMode';
+@@ -247,7 +247,11 @@ export function ViewerLayout() {
+         <FlavorDialogHost />
+         <AgentBridgeHost />
+         <ConfirmDialogHost />
 -        <ChViewsBar />
-+        {/* Trassia (UX-KOPF, Tester-Auflage M-1): auf Telefonen gibt es keine
-+            Fusszeile — ohne diese schmale Zeile waere ein Mappen-Fehler dort
-+            NIRGENDS sichtbar. Nur mobil; am Desktop wohnt der Status in der
-+            StatusBar. */}
 +        {isMobile && (
 +          <div className="flex items-center border-b border-border/60 bg-muted/20 px-3 py-1 text-xs">
 +            <ChProjektFuss />
 +          </div>
 +        )}
- 
-         {/* Trassia: unter 30 rem blendet die Anwendung ihre Werkzeuge aus.
-             Das darf sie — aber nicht stumm (U4). */}
+         <ChMobileHint />
+         <ChPanelStackKeeper />
+         <EntityContextMenu />
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index 4c1608c66f6c4011c3fd37c1e1afdc19f4d0d354..ad0e4edbd6804b07981591dd8d739026dc26f58f 100644
+index 4a01a21cfb4488e7a29bbae8e894c605fb68919b..cc286b1809da93736ad1622e2eb72c3830eb3882 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -33,6 +33,8 @@ import { DrawingRuntimeHost } from './drawing/DrawingRuntimeHost';
+@@ -39,6 +39,7 @@ import { DrawingRuntimeHost } from './drawing/DrawingRuntimeHost';
  import { BCFOverlay } from './bcf/BCFOverlay';
  import { CesiumOverlay } from './CesiumOverlay';
  import { CesiumPlacementGizmo } from './placement/CesiumPlacementGizmo';
-+// Trassia overlay (Paket UX-KOPF): eigenes Panel fuer die Schweizer Umgebung.
 +import { ChUmgebungPanel } from './ChUmgebungPanel';
  import { useSolarEnvironment } from '@/hooks/useSolarEnvironment';
  import { useSolarSweep } from '@/hooks/useSolarSweep';
- import { getViewerStoreApi, useViewerStore } from '@/store';
-@@ -982,6 +984,7 @@ export function ViewportContainer() {
-           storeyElevations={georef.storeyElevations}
-         />
-       )}
+ import { getViewerStoreApi, useViewerStore, LiveViewerScope } from '@/store';
+@@ -815,6 +816,7 @@ function ViewportContainerLive() {
+       <VisibilityChips />
+       <EmptyVisibilityNotice visible={visibleResultEmpty} />
+       <ZoneAssignmentSyncMount />
 +      <ChUmgebungPanel />
-       {georef?.mapConversion && georef.baseMapConversion && (
-         <CesiumPlacementGizmo
-           modelId={georef.sourceModelId}
+       <DrawingRuntimeHost mergedGeometry={mergedGeometryResult} computedIsolatedIds={computedIsolatedIds} />
+       <Toaster variant="absolute" />
+     </div>
 diff --git a/apps/viewer/src/components/viewer/ribbon/tabs/ViewTab.tsx b/apps/viewer/src/components/viewer/ribbon/tabs/ViewTab.tsx
-index 3b6a096ae5ba85f34d9b3b307710613bd41c8c2d..4130a4e97fe6d2c68535687788eae8c9af214851 100644
+index 42d25e482de47132532e8dbba7e689595a3a5589..c4e2109f75f4a4b7a23e79cd2fdc68f90e5fc536 100644
 --- a/apps/viewer/src/components/viewer/ribbon/tabs/ViewTab.tsx
 +++ b/apps/viewer/src/components/viewer/ribbon/tabs/ViewTab.tsx
-@@ -21,6 +21,12 @@ import {
+@@ -21,6 +21,8 @@ import {
    RibbonSmallStack,
  } from '../primitives';
  import { RibbonCommandLargeButton, RibbonCommandSmallButton } from '../command-button';
-+// Trassia overlay (Paket UX-KOPF, Marco-Befund 2026-09-02): die benannten
-+// Ansichten als Ribbon-Gruppe (vorher eigene Kopfzeile ueber dem Bild) und
-+// der eigene Umgebungs-Knopf (vorher steckten swisstopo-Umgebung und WFS im
-+// Lighting-Panel — unter einem Blitz suchte sie niemand).
 +import { ChViewsGroup } from '../../ChViewsGroup';
 +import { ChUmgebungKnopf } from '../../ChUmgebungKnopf';
+ import { StructuralRibbonGroup } from './StructuralRibbonGroup';
  
  export function ViewTab() {
-   const { t } = useTranslation();
-@@ -115,6 +121,10 @@ export function ViewTab() {
+@@ -116,6 +118,7 @@ export function ViewTab() {
            ))}
        </RibbonGroup>
  
-+      {/* Trassia (UX-KOPF): benannte Ansichten der Projektmappe — rendert
-+          Divider + Gruppe selbst und nichts ohne `?project=`. */}
 +      <ChViewsGroup />
-+
        <RibbonGroupDivider />
  
        <RibbonGroup label={t('ribbon.view.contextGroup')}>
-@@ -142,6 +152,9 @@ export function ViewTab() {
-           active={activeWorkspacePanels.has('environment') || solarEnabled || envSkyEnabled || envPreset !== 'default'}
-           activeClassName="bg-amber-500/20 text-foreground ring-1 ring-inset ring-amber-500/50"
-         />
-+        {/* Trassia (UX-KOPF): Schweizer Umgebung (swisstopo + WFS) — eigener
-+            Knopf statt versteckt im Lighting-Panel; nur im Weltmodus. */}
+@@ -140,6 +143,7 @@ export function ViewTab() {
+             of the model's Georeference panel, which say what a model still
+             needs when it cannot host them yet (#10603). */}
+         <RibbonCommandLargeButton commandId="view:site-context" icon={SiteContext} disabled={!hasModels} />
 +        <ChUmgebungKnopf />
-         <RibbonSmallStack>
-           {cesiumAvailable && cesiumEnabled && (
-             <RibbonCommandSmallButton
+         <RibbonCommandLargeButton commandId="view:flood-check" icon={FloodCheck} disabled={!hasModels} />
+         <RibbonCommandLargeButton
+           commandId="view:lighting"

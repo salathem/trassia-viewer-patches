@@ -1,17 +1,17 @@
 diff --git a/apps/viewer/src/components/viewer/Viewport.tsx b/apps/viewer/src/components/viewer/Viewport.tsx
-index 849d113698a0e3da903aa9d12b1d8254f7194e91..7864e237aadc1fb1852c0cd3e5ed4a87d35c1311 100644
+index 0a8825b4455fb5248ff0c452b3215cb72f38878d..de5870c5036e36d8341b9a68120f9259479b1b02 100644
 --- a/apps/viewer/src/components/viewer/Viewport.tsx
 +++ b/apps/viewer/src/components/viewer/Viewport.tsx
-@@ -74,6 +74,8 @@ import { useLandXmlRendererOverlay } from '../../hooks/useLandXmlOverlayLines.js
- import { useCentrelineRendererOverlay } from '../../hooks/useCentrelineRendererOverlay.js';
+@@ -81,6 +81,8 @@ import { useCentrelineRendererOverlay } from '../../hooks/useCentrelineRendererO
  import { selectPickedGlobalId, toggleGlobalIdInSelection } from './viewport-selection.js';
- import { uploadDxfLines3DGuarded } from './dxf-lines-3d-upload.js';
+ import { useDxfRendererOverlay } from './dxf-lines-3d-upload.js';
+ import { useViewportSymbolicUploads } from './useViewportSymbolicUploads.js';
 +// Trassia overlay (not upstream) — Paket V-DRAPE, siehe hooks/useChDrapeLines.ts.
 +import { chDrapeMergeLines, useChDrapeLines } from '@/hooks/useChDrapeLines';
  import { subscribeViewportHealth } from './device-loss-report.js';
  import { useAuthoringOverlay } from './useAuthoringOverlay.js';
- import { anchorWorldLineVertices, rendererLineVertexData } from '@/lib/renderer/line-overlay-rte';
-@@ -1325,7 +1327,20 @@ export function Viewport({
+ import { useClashRendererOverlays } from './useClashRendererOverlays';
+@@ -1200,7 +1202,20 @@ export function Viewport({
    // a load-time choice — see DxfUnderlayPanel.tsx), independent of the 2D
    // drawing panel's underlay. Only line paths are lifted to 3D; fills/text
    // are not (see dxfUnderlayToWorldLines3D's doc).
@@ -30,24 +30,24 @@ index 849d113698a0e3da903aa9d12b1d8254f7194e91..7864e237aadc1fb1852c0cd3e5ed4a87
 +    () => chDrapeMergeLines(dxfLines3DUpstream, chDrape.positions),
 +    [dxfLines3DUpstream, chDrape.positions],
 +  );
-   useEffect(() => {
-     const renderer = rendererRef.current;
-     if (!renderer || !isInitialized) return;
+   useDxfRendererOverlay(rendererRef, dxfLines3D, isInitialized, gpuRecoveryEpoch);
+   useLandXmlRendererOverlay(rendererRef, isInitialized, gpuRecoveryEpoch);
+   useCentrelineRendererOverlay(rendererRef, isInitialized, gpuRecoveryEpoch);
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index ba3b2aeb24b140483ad0b137383e4c65f6e1a2d4..4c1608c66f6c4011c3fd37c1e1afdc19f4d0d354 100644
+index 339421164a4ae134a2d352ed0e49c0f64243fefd..4a01a21cfb4488e7a29bbae8e894c605fb68919b 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -61,6 +61,7 @@ import { recordDownloadedSourceFile } from '@/lib/sources/persistence';
+@@ -68,6 +68,7 @@ import { recordDownloadedSourceFile } from '@/lib/sources/persistence';
  import { sanitizeFilename } from '@/lib/export/download';
  import { enqueueSourceLoad } from '@/lib/sources/loadQueue';
  import { toast, Toaster } from '@/components/ui/toast';
 +import { chDrapeTakeDroppedFiles, chDrapeUnderlayCandidates } from '@/lib/ch/drape-ingest';
+ import { refuseWhileWorkflowBusy } from '@/lib/flow/workflow-busy-refusal';
+ import { reloadActiveModelInPlace } from './reloadActiveModel';
  import { reportFileOpenRejected } from '@/hooks/ingest/fileOpenRejected';
- import { Upload, AlertTriangle, ChevronDown, ExternalLink, Plus } from 'lucide-react';
- import { createBlankIfcFile } from '@/utils/createBlankIfc';
-@@ -438,7 +439,10 @@ export function ViewportContainer() {
+@@ -461,7 +462,10 @@ function ViewportContainerLive() {
      const attempt = () => {
-       if (!guardWebGpu(attempt)) return;
+       if (!guardWebGpu(attempt, { replay: 'free' })) return;
        const { dxfFiles, modelFiles: allDropped } = splitDxfFiles(droppedFiles);
 -      if (dxfFiles.length > 0) void ingestDxfFiles(dxfFiles);
 +      void chDrapeTakeDroppedFiles(droppedFiles).then((forUnderlay) => {

@@ -1,13 +1,19 @@
-diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index 77c37f7e4fb0a0cfdcd383f753cfb0cb713d7660..32f738642c102c4b81bcd1a36014e705f44e3fca 100644
---- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
-+++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -526,7 +526,7 @@ export function ViewportContainer() {
-     // Must await: loadFile() calls resetViewerState() internally, which
-     // closes any Model workspace session; entering before that races.
-     await loadFile(file);
--    launchModelCommand('wall.place'); // straight into drawing walls (#6232)
-+    if (chVollmodus()) launchModelCommand('wall.place'); // straight into drawing walls (#6232)
-   }, [guardWebGpu, loadFile]);
+diff --git a/apps/viewer/src/hooks/startBlankModel.ts b/apps/viewer/src/hooks/startBlankModel.ts
+index e501e4782068ec4ed3332d1e171b200e817c2811..933281d42d93f5ecdc389da3cdcadda85f9ecca1 100644
+--- a/apps/viewer/src/hooks/startBlankModel.ts
++++ b/apps/viewer/src/hooks/startBlankModel.ts
+@@ -11,6 +11,7 @@ import type { TranslationKey } from '@/i18n';
+ import { resolve } from '@/i18n/registry';
+ import { createBlankIfcFile } from '@/utils/createBlankIfc';
+ import { launchModelCommand } from '@/lib/commands/modeling/keys-workspace';
++import { chVollmodus } from '@/lib/ch/modus';
  
-   // Issue #540 "Merge Multilayer Walls" reload. The setting changes the produced
+ export function blankModelUnavailable(s: ViewerState = useViewerStore.getState()): TranslationKey | null {
+   if (!s.canCollabEdit()) return 'commandPalette.availability.editor';
+@@ -33,5 +34,5 @@ export async function startBlankModel(loadFile: ReturnType<typeof useIfcLoader>[
+   const state = useViewerStore.getState();
+   if (!isCurrent() || state.loading || !state.canCollabEdit()
+     || state.activeModelId !== modelId || state.models.get(modelId)?.loadState !== 'complete') return;
+-  if (state.enterModelWorkspace({ modelId })) launchModelCommand('wall.place');
++  if (chVollmodus() && state.enterModelWorkspace({ modelId })) launchModelCommand('wall.place');
+ }

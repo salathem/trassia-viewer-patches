@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/i18n/en.ts b/apps/viewer/src/i18n/en.ts
-index c2725ff0988a91a23b65757c3d72d93f2cbfb89f..8eab734749321768cdceb3607a85c9fe2014440c 100644
+index 4c3590a05de481aa3cb2fffcdecb8253e52009ab..df9e7bad6a41b3de18625dd6d49a46b0e5b6a87e 100644
 --- a/apps/viewer/src/i18n/en.ts
 +++ b/apps/viewer/src/i18n/en.ts
-@@ -111,9 +111,9 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
+@@ -171,9 +171,9 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
  /** English is assembled from feature catalogues so no locale becomes a monolith. */
  export const en = {
    'trassia.panel.entwurf': 'Alignment design (spike)',
@@ -12,25 +12,25 @@ index c2725ff0988a91a23b65757c3d72d93f2cbfb89f..8eab734749321768cdceb3607a85c9fe
 +  'trassia.panel.laengsschnitt': 'Längsprofil',
 +  'trassia.panel.kubatur': 'Auftrag / Abtrag (Kubatur)',
 +  'trassia.panel.drape': 'Drape auf Gelände (DXF, GeoJSON, WFS)',
-   ...analysisPanelEn,
-   ...annotationsEn,
-   ...anonymizedExportEn,
+   ...influxEn,
+   ...zoneEmissionEn,
+   ...newIfcEn,
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index 468e31d77960035e65d7fb1758709cff4c50c0e2..302d0817eee5eec7f06d51cbf834b5fec8b33346 100644
+index 8937f451568ca9c5bd75590720bd6cf4b255767f..a930bd354cc6010de27ebc3f7ce406364bbaa75c 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
 @@ -22,7 +22,7 @@
  // `~icons/viewer/*` virtual modules (#6315 broke that build).
- import { BarChart3, Box, CalendarRange, ClipboardCheck, Cloud, Coins, Crosshair, DraftingCompass, FileText, FileWarning, GitBranch, GitCompareArrows, History, Info, Layers as LayersIcon, ListTree, MessageSquare, Move3d, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
+ import { BarChart3, Bot, Box, CalendarRange, ChartLine, ClipboardCheck, ClipboardPen, Cloud, Coins, Crosshair, DraftingCompass, FileText, FileWarning, GitBranch, GitCompareArrows, History, Info, Link2, Layers as LayersIcon, ListChecks, ListTree, MessageSquare, Move3d, Paintbrush, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
  import { chEntwurfAktiv } from '@/lib/ch/entwurf/entwurf-flag';
 -import { Mountain, ChartSpline, Route } from 'lucide-react';
 +import { Mountain, ChartSpline, Route, ArrowUpDown } from 'lucide-react';
  import type { TranslationKey } from '@/i18n';
  
  /** Every panel reachable from the unified sidebar rail. `properties` is the
-@@ -207,7 +207,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
-   // import as files. Flag-free like 'changes' / 'model'. APPENDED (no Alt shortcut).
-   { id: 'changeSets', titleKey: 'changeSets.panel.title', Icon: GitBranch, group: 'author', region: 'side' },
+@@ -221,7 +221,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   { id: 'influx', titleKey: 'influx.title', Icon: ChartLine, group: 'site', region: 'side' },
+   { id: 'idsStudio', titleKey: 'idsStudio.title', Icon: ClipboardPen, group: 'check', region: 'side', prefersWide: true },
    { id: 'drape', titleKey: 'trassia.panel.drape', Icon: Mountain, group: 'author', region: 'side' },
 -  { id: 'kubatur', titleKey: 'trassia.panel.kubatur', Icon: Ruler, group: 'quantify', region: 'side' },
 +  { id: 'kubatur', titleKey: 'trassia.panel.kubatur', Icon: ArrowUpDown, group: 'quantify', region: 'side' },

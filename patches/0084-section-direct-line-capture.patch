@@ -1,21 +1,21 @@
 diff --git a/apps/viewer/src/components/viewer/selectionHandlers.ts b/apps/viewer/src/components/viewer/selectionHandlers.ts
-index d56fd1753df8fa966eb56ad7f4d65d5f0b4eadd9..035b2678560c6f0c1d3aed3874893b7fa6dfc047 100644
+index 932f4a4fd4e9ff4b31b2503eaf997ad16b997ef6..9e51f99653b788538b6f2a3e7f59dda9b07210b2 100644
 --- a/apps/viewer/src/components/viewer/selectionHandlers.ts
 +++ b/apps/viewer/src/components/viewer/selectionHandlers.ts
-@@ -7,6 +7,7 @@
-  * Handles click/double-click selection and context menu interactions.
-  * Pure functions operating on a MouseHandlerContext — no React dependency.
+@@ -9,6 +9,7 @@
   */
-+import { chLineCaptureActive, chAppendLineCapturePoint } from '@/lib/ch/section-line-capture';
  import { isTouchSelectionClick, selectViewportTarget } from './referenceSelection.js';
  import type { PickResult } from '@ifc-lite/renderer';
++import { chLineCaptureActive, chAppendLineCapturePoint } from '@/lib/ch/section-line-capture';
  import type { MouseHandlerContext } from './mouseHandlerTypes.js';
-@@ -60,6 +61,16 @@ export async function handleSelectionClick(ctx: MouseHandlerContext, e: MouseEve
-   // corrupt each other's state (see `setMeasureMode` in measurementSlice.ts).
-   if (tool === 'measure') return handleMeasureClickAt(ctx, x, y);
+ import { openContextMenuAt } from './contextMenuSelection.js';
+ import { useViewerStore } from '@/store';
+@@ -77,6 +78,17 @@ export async function handleSelectionClick(ctx: MouseHandlerContext, e: MouseEve
+   // A press from before Esc or a mode or tool switch belongs to the gesture that was reset (#8786).
+   if (tool === 'measure') return pressOutlivedReset(mouseState) ? undefined : handleMeasureClickAt(ctx, x, y);
  
-+  // Trassia: same magnetic measurement pick, transaction owned by Section.
 +  if (tool === 'section' && chLineCaptureActive()) {
++    if (pressOutlivedReset(mouseState)) return;
 +    const picked = raycastForPolylinePoint(ctx, x, y);
 +    if (picked) {
 +      ctx.setSnapTarget(picked.snapTarget);
@@ -24,6 +24,7 @@ index d56fd1753df8fa966eb56ad7f4d65d5f0b4eadd9..035b2678560c6f0c1d3aed3874893b7f
 +    return;
 +  }
 +
-   // Section-tool face-pick (issue #243): clicking any visible face places
-   // the clip plane through it. Intercept BEFORE the generic select path
-   // so the click doesn't also flip the selection.
++
+   // Section face-pick (#243), a running modeling command (#6232) and an
+   // Annotate pin take the click BEFORE the generic select path, so it doesn't
+   // also flip the selection.

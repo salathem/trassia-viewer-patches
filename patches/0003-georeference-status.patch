@@ -1,48 +1,123 @@
 diff --git a/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx b/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx
-index b2b2df30ba382e520dc7ce9e25076b52f5f26c5c..166edaef3245e99b7d98d72c2693a4c16eb2b385 100644
+index fe13777cd2a8af93890000d6a35a18c9d795d6a4..61df04b6a182064ed2a1bb77001ff5f66a074f0f 100644
 --- a/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx
 +++ b/apps/viewer/src/components/viewer/tools/MeasureHudReadouts.tsx
-@@ -16,6 +16,8 @@ import { useAnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
+@@ -14,14 +14,16 @@
+ import { Crosshair, Globe } from 'lucide-react';
+ import { useViewerStore } from '@/store';
+ import { useTranslation } from '@/i18n/useTranslation';
+-import { useAnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
++import { useAnchorGeoreferenceReadout } from '@/lib/geo/useAnchorGeoreference';
+ import { useRenderFrameOffsets } from '@/hooks/useRenderFrameOffsets';
  import { HudHint, HudItem, HudSurface } from '../../viewport-ui/hud';
  import { measureHintKey } from './measure-modes/readouts';
- import { projectedEnh, useProjectedLatLon, type Vec3Like } from './measure-modes/geo-readout';
-+// Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-geo-status.tsx
+-import { projectedEnh, useProjectedLatLon } from './measure-modes/geo-readout';
++import { measurementCrsName, projectedEnh, useProjectedLatLon } from './measure-modes/geo-readout';
+ import { formatCoordinateTriple, pointCoordinates } from './measure-modes/coordinates';
+ import { useMeasureLivePoint } from './measure-modes/useMeasureLivePoint';
+ import { StaleMeasurementBadge } from '../reposition/StaleMeasurementBadge';
++// Trassia overlay — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-geo-status.tsx
 +import { ChGeoBannerHud } from './measure-modes/ch-geo-status';
  
  export function MeasureHint() {
    const { t } = useTranslation();
-@@ -50,7 +52,8 @@ export function MeasureGeoReadout() {
+@@ -66,13 +68,15 @@ export function MeasureGeoReadout() {
+   const { t } = useTranslation();
+   const tracked = useMeasureLivePoint();
+   const geoReadoutEnabled = useViewerStore((s) => s.geoReadoutEnabled);
+-  const anchor = useAnchorGeoreference();
++  const { anchor, hasCandidate } = useAnchorGeoreferenceReadout();
+   const showGeo = geoReadoutEnabled && anchor !== null;
+   const livePoint = tracked?.point ?? null;
    // Hook order is fixed: called unconditionally, gated by its arguments.
    // Non-blocking: null until proj4 resolves, so E/N/H is unaffected.
    const latLon = useProjectedLatLon(showGeo ? livePoint : null, showGeo ? anchor : null);
 -  if (!showGeo || !anchor || !livePoint) return null;
-+  // Trassia: ohne IfcMapConversion statt Stille ein sichtbarer Hinweis.
-+  if (!showGeo || !anchor || !livePoint) return <ChGeoBannerHud anchor={anchor} point={livePoint} enabled={geoReadoutEnabled} />;
++  if (!showGeo || !anchor || !livePoint) {
++    return <ChGeoBannerHud anchor={anchor} point={livePoint} enabled={geoReadoutEnabled && !hasCandidate} />;
++  }
    const enh = projectedEnh(livePoint, anchor);
  
    return (
+@@ -92,7 +96,7 @@ export function MeasureGeoReadout() {
+           </span>}
+         </div>
+         <div className="mt-0.5 pl-5 text-2xs tabular-nums text-muted-foreground">
+-          {anchor.eff.projectedCRS.name}
++          {measurementCrsName(anchor)}
+           {latLon && (
+             <span className="ml-2">
+               {t('measure.readout.latLon', { lat: latLon.lat.toFixed(6), lon: latLon.lon.toFixed(6) })}
 diff --git a/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx b/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx
-index 0144007d795674eb7e63cc77e34aa1165569ad62..84d8c136f1d78828f8154517f1887e2a710003d8 100644
+index c01ed4a7b2fdb830ca8c4d925ffe823a4ed98100..aed65565499c2e69626ce1faa69185e1bb7048cc 100644
 --- a/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx
 +++ b/apps/viewer/src/components/viewer/tools/MeasurePointReadout.tsx
-@@ -56,6 +56,8 @@ import {
+@@ -48,7 +48,7 @@ import { useTranslation } from '@/i18n/useTranslation';
+ // object so `t('measure.*')` resolves under the real 'en' locale (see that
+ // module's own doc comment).
+ import { useRenderFrameOffsets } from '@/hooks/useRenderFrameOffsets';
+-import { useAnchorGeoreference } from '@/lib/geo/useAnchorGeoreference';
++import { useAnchorGeoreferenceReadout } from '@/lib/geo/useAnchorGeoreference';
+ import {
+   pointCoordinates,
+   relativeOffset,
+@@ -56,9 +56,11 @@ import {
+ } from './measure-modes/coordinates';
  import { viewerToIfcAxes } from '@/lib/geo/coordinate-frame';
  import { formatDistance, formatSignedTriple } from './formatDistance';
- import { projectedEnh, useProjectedLatLon, type Vec3Like } from './measure-modes/geo-readout';
-+// Trassia overlay (not upstream) — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-geo-status.tsx
+-import { projectedEnh, useProjectedLatLon } from './measure-modes/geo-readout';
++import { measurementCrsName, projectedEnh, useProjectedLatLon } from './measure-modes/geo-readout';
+ import { useMeasureLivePoint } from './measure-modes/useMeasureLivePoint';
+ import { StaleMeasurementBadge } from '../reposition/StaleMeasurementBadge';
++// Trassia overlay — see overlay/apps/viewer/src/components/viewer/tools/measure-modes/ch-geo-status.tsx
 +import { ChGeoStatus } from './measure-modes/ch-geo-status';
  
  /** One labelled coordinate row. */
  function CoordRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
-@@ -205,6 +207,11 @@ export function MeasurePointReadout() {
-           {anchor.eff.projectedCRS.name}
+@@ -82,7 +84,7 @@ export function MeasurePointReadout() {
+   const unitDisplayOverrides = useViewerStore((s) => s.unitDisplayOverrides);
+ 
+   const frame = useRenderFrameOffsets();
+-  const anchor = useAnchorGeoreference();
++  const { anchor, hasCandidate } = useAnchorGeoreferenceReadout();
+ 
+   const livePoint = tracked?.point ?? null;
+ 
+@@ -202,9 +204,10 @@ export function MeasurePointReadout() {
+       {enh && anchor && (
+         <div className="flex items-center gap-1 font-mono text-2xs text-muted-foreground">
+           <Globe className="h-2.5 w-2.5" />
+-          {anchor.eff.projectedCRS.name}
++          {measurementCrsName(anchor)}
          </div>
        )}
-+
-+      {/* Trassia: says out loud what upstream leaves silent — no georeference,
-+          the declared vertical datum, or a point outside the declared Swiss
-+          grid. Renders nothing when there is nothing to report. */}
-+      <ChGeoStatus anchor={anchor} point={livePoint} enabled={geoReadoutEnabled} />
++      <ChGeoStatus anchor={anchor} point={livePoint} enabled={geoReadoutEnabled && (anchor !== null || !hasCandidate)} />
      </div>
    );
+ }
+diff --git a/apps/viewer/src/lib/geo/useAnchorGeoreference.ts b/apps/viewer/src/lib/geo/useAnchorGeoreference.ts
+index 1da4d2d719bee1c9ad2331bac22fb145bace50d9..433d157b0c829da1880c7c532459cea049e2aa11 100644
+--- a/apps/viewer/src/lib/geo/useAnchorGeoreference.ts
++++ b/apps/viewer/src/lib/geo/useAnchorGeoreference.ts
+@@ -44,6 +44,11 @@ export interface AnchorGeoreference extends AnchorGeorefSelection {
+  * `mutationVersion`), never per camera frame or per measurement.
+  */
+ export function useAnchorGeoreference(): AnchorGeoreference | null {
++  return useAnchorGeoreferenceReadout().anchor;
++}
++
++/** The readout distinguishes absent metadata from pending or unresolved CRS definitions. */
++export function useAnchorGeoreferenceReadout(): { anchor: AnchorGeoreference | null; hasCandidate: boolean } {
+   const models = useViewerStore((s) => s.models);
+   const ifcDataStore = useViewerStore((s) => s.ifcDataStore);
+   const geometryResult = useViewerStore((s) => s.geometryResult);
+@@ -70,5 +75,8 @@ export function useAnchorGeoreference(): AnchorGeoreference | null {
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [models, ifcDataStore, geometryResult, anchorModelIdOverride, georefMutations, mutationVersion]);
+   const kind = useProjectionKind(anchor?.eff.projectedCRS);
+-  return useMemo(() => anchor && (kind === 'projected' || kind === 'geographic') ? { ...anchor, geographic: kind === 'geographic' } : null, [anchor, kind]);
++  return useMemo(() => ({
++    anchor: anchor && (kind === 'projected' || kind === 'geographic') ? { ...anchor, geographic: kind === 'geographic' } : null,
++    hasCandidate: anchor !== null,
++  }), [anchor, kind]);
  }

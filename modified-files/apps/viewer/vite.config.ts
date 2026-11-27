@@ -2,7 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { defineConfig } from 'vite';
+import { registryProxy } from './registry-proxy.ts';
+import { viewerAliases } from './vite-aliases';
+import { a2uiNodeBuiltins } from './vite-a2ui-node-builtins';
+import { collectPackageVersions } from './vite-package-versions';
+import { bundleAnalysis } from './vite-bundle-analysis';
+import { appearanceWorkflowsChunkGroup, drawingLeavesChunkGroup, drawingSharedChunkGroup, legacyManualChunk, mergedExportChunkGroup, preloadHelperChunkGroup, processedModelRefChunkGroup, quickjsRuntimeChunkGroup, stepExportChunkGroup, tslibChunkGroup, wasmPrewarmChunkGroup } from './vite-chunks';
+import { defineConfig, loadEnv } from 'vite';
+import { retainedEngine } from './vite-plugins/retained-engine';
 import react from '@vitejs/plugin-react';
 import Icons from 'unplugin-icons/vite';
 import { FileSystemIconLoader } from 'unplugin-icons/loaders';
@@ -13,13 +20,17 @@ import path from 'path';
 import fs from 'fs';
 import { cesiumStaticAssets } from './vite-plugins/cesium-assets';
 import { oauthCallbackRoutes } from './vite-plugins/oauth-callback';
+import { viewerHostConfig } from './vite-plugins/viewer-host-config';
 // Same allowlist the production relay uses, so dev and prod cannot disagree
 // about which Dalux node a request reaches (#2792).
 import { daluxRelayRoute } from './vite-plugins/dalux-relay';
+import { bimcollabRelayRoute } from './vite-plugins/bimcollab-relay';
+import { bcfTokenRelayRoute } from './vite-plugins/bcf-token-relay';
+import { buildagilRelayRoute } from './vite-plugins/buildagil-relay';
 import { deploymentAssetsDir } from '../../scripts/lib/deployment-assets-dir.mjs';
 // Trassia: Knockout (in CesiumJS) greift per eval nach dem globalen Objekt —
 // unter unserer CSP ein EvalError, der das ganze Cesium-Modul mitnimmt.
-import { chKnockoutCsp } from './vite-plugins/ch-knockout-csp';
+import { chKnockoutCsp, chZodCsp } from './vite-plugins/ch-knockout-csp';
 
 // --- Build-time changelog parser ---
 interface ReleaseHighlight {
@@ -35,11 +46,6 @@ interface PackageRelease {
 interface PackageChangelog {
   name: string;
   releases: PackageRelease[];
-}
-
-interface PackageVersion {
-  name: string;
-  version: string;
 }
 
 const SKIP_BOLD_LOWER = new Set([
@@ -179,30 +185,6 @@ function parseChangelogs(): PackageChangelog[] {
   });
 }
 
-// Collect all package versions
-function collectPackageVersions(): PackageVersion[] {
-  const packagesDir = path.resolve(__dirname, '../../packages');
-  let dirs: string[];
-  try {
-    dirs = fs.readdirSync(packagesDir);
-  } catch {
-    return [];
-  }
-
-  const versions: PackageVersion[] = [];
-  for (const dir of dirs) {
-    const pkgPath = path.join(packagesDir, dir, 'package.json');
-    if (!fs.existsSync(pkgPath)) continue;
-    try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-      if (pkg.name && pkg.version) {
-        versions.push({ name: pkg.name, version: pkg.version });
-      }
-    } catch { /* skip unreadable packages */ }
-  }
-  return versions.sort((a, b) => a.name.localeCompare(b.name));
-}
-
 // Read version from viewer package.json (primary app version) with root fallback
 const viewerPkg = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, './package.json'), 'utf-8')
@@ -216,8 +198,22 @@ const appVersion = viewerPkg.version || rootPkg.version;
 // GITHUB_SHA; falls back to 'dev' for local builds.
 const buildSha = (process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'dev').slice(0, 12);
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = { ...loadEnv(mode, __dirname, ['VITE_RETAINED_GEOMETRY', 'IFCLITE_RETAINED_ENGINE', 'VERCEL', 'VITE_REGISTRY_ENABLED', 'IFC_REGISTRY_TARGET']), ...process.env };
+  // #7955: `on` (retained preview: the retained module is eager), `lazy`
+  // (production opt-in: only a choice and dynamic imports are eager) or off.
+  const retainedMode = env.VITE_RETAINED_GEOMETRY === 'on' || env.VITE_RETAINED_GEOMETRY === 'lazy' ? env.VITE_RETAINED_GEOMETRY : 'off';
+  const retained = {
+    enabled: retainedMode !== 'off',
+    mode: retainedMode === 'lazy' ? 'lazy' : 'on',
+    directory: env.IFCLITE_RETAINED_ENGINE,
+    vercel: env.VERCEL,
+  } as const;
+  return {
   plugins: [
+    ...(process.env.VITE_BUNDLE_ANALYSIS === '1' ? [bundleAnalysis()] : []),
+    a2uiNodeBuiltins(),
+    retainedEngine(retained),
     react(),
     Icons({
       compiler: 'jsx',
@@ -239,57 +235,48 @@ export default defineConfig({
       },
     }),
     wasm(),
-    topLevelAwait(),
+    // No vite-plugin-top-level-await here: the target is `esnext`, so top-level
+    // await is emitted natively. The plugin wrapped every chunk with a dynamic
+    // import() in one async function, which the browser parses on the main
+    // thread when it runs, inside the app-start task. The worker build below
+    // keeps it; scripts/check-tla-chunk-await.mjs fails if a chunk evaluated
+    // at app start is wrapped again.
     cesiumStaticAssets(),
     oauthCallbackRoutes(),
+    // features.json beside index.html, and the hosted entry when a config URL is set.
+    viewerHostConfig(),
     // Dalux's API sends no CORS headers, so it must go through a same-origin
     // relay. Dev runs the SAME handler production does (#2792), rather than a
     // second proxy config that can drift from it.
     daluxRelayRoute(),
+    bimcollabRelayRoute(),
+    // buildagil's API and token endpoint send CORS headers only to origins
+    // buildagil allowlisted (not previews or localhost); the
+    // token route forwards grants for the deployment's client (adding a
+    // secret server-side only for a confidential one).
+    buildagilRelayRoute(),
+    // Confidential-client token exchange for BIMcollab (#4919): the same
+    // handler as api/bcf/oauth/token.ts, secret from .env.local or the shell.
+    bcfTokenRelayRoute(),
     // Trassia (Paket CSP-WELTMODUS): schreibt Knockouts `this || (0,eval)("this")`
     // auf `globalThis` um. Ohne das wirft `import('cesium')` unter unserer CSP
     // (script-src ohne 'unsafe-eval') einen EvalError bei der Modulauswertung —
     // der Weltmodus war in der Produktion tot. Begruendung und Tore im Plugin.
-    chKnockoutCsp(),
+    chKnockoutCsp(), chZodCsp(),
   ],
   define: {
+    ...(env.VITE_REGISTRY_ENABLED === 'true' ? {
+      'import.meta.env.VITE_REGISTRY_ADDRESS': JSON.stringify(env.IFC_REGISTRY_TARGET || 'http://127.0.0.1:5000'),
+    } : {}),
     __APP_VERSION__: JSON.stringify(appVersion),
     __BUILD_SHA__: JSON.stringify(buildSha),
     __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
     __RELEASE_HISTORY__: JSON.stringify(parseChangelogs()),
-    __PACKAGE_VERSIONS__: JSON.stringify(collectPackageVersions()),
+    __PACKAGE_VERSIONS__: JSON.stringify(collectPackageVersions(path.resolve(__dirname, '../../packages'))),
     CESIUM_BASE_URL: JSON.stringify('/cesium'),
   },
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@ifc-lite/parser/browser': path.resolve(__dirname, '../../packages/parser/src/browser.ts'),
-      '@ifc-lite/parser': path.resolve(__dirname, '../../packages/parser/src'),
-      '@ifc-lite/geometry': path.resolve(__dirname, '../../packages/geometry/src'),
-      '@ifc-lite/renderer': path.resolve(__dirname, '../../packages/renderer/src'),
-      '@ifc-lite/query': path.resolve(__dirname, '../../packages/query/src'),
-      '@ifc-lite/server-client': path.resolve(__dirname, '../../packages/server-client/src'),
-      '@ifc-lite/spatial': path.resolve(__dirname, '../../packages/spatial/src'),
-      '@ifc-lite/data': path.resolve(__dirname, '../../packages/data/src'),
-      '@ifc-lite/export': path.resolve(__dirname, '../../packages/export/src'),
-      '@ifc-lite/cache': path.resolve(__dirname, '../../packages/cache/src'),
-      '@ifc-lite/collab': path.resolve(__dirname, '../../packages/collab/src'),
-      '@ifc-lite/ifcx': path.resolve(__dirname, '../../packages/ifcx/src'),
-      '@ifc-lite/pointcloud': path.resolve(__dirname, '../../packages/pointcloud/src'),
-      '@ifc-lite/wasm': path.resolve(__dirname, '../../packages/wasm/pkg/ifc-lite.js'),
-      '@ifc-lite/sdk': path.resolve(__dirname, '../../packages/sdk/src'),
-      '@ifc-lite/create': path.resolve(__dirname, '../../packages/create/src'),
-      '@ifc-lite/sandbox/schema': path.resolve(__dirname, '../../packages/sandbox/src/bridge-schema.ts'),
-      '@ifc-lite/sandbox': path.resolve(__dirname, '../../packages/sandbox/src'),
-      '@ifc-lite/lens': path.resolve(__dirname, '../../packages/lens/src'),
-      '@ifc-lite/mutations': path.resolve(__dirname, '../../packages/mutations/src'),
-      '@ifc-lite/bcf': path.resolve(__dirname, '../../packages/bcf/src'),
-      '@ifc-lite/bcf-api': path.resolve(__dirname, '../../packages/bcf-api/src'),
-      '@ifc-lite/oauth-pkce': path.resolve(__dirname, '../../packages/oauth-pkce/src'),
-      '@ifc-lite/drawing-2d': path.resolve(__dirname, '../../packages/drawing-2d/src'),
-      '@ifc-lite/encoding': path.resolve(__dirname, '../../packages/encoding/src'),
-      '@ifc-lite/ids': path.resolve(__dirname, '../../packages/ids/src'),
-      '@ifc-lite/lists': path.resolve(__dirname, '../../packages/lists/src'),    },
+    alias: { ...viewerAliases, '@ifc-lite/viewer-retained': path.resolve(__dirname, `src/lib/retained/${{ on: 'index.ts', lazy: 'lazy.tsx', off: 'off.ts' }[retainedMode]}`) },
   },
   server: {
     port: 3000,
@@ -303,6 +290,8 @@ export default defineConfig({
       allow: ['../..'],
     },
     proxy: {
+      ...(env.VITE_REGISTRY_ENABLED === 'true' ? registryProxy(env.IFC_REGISTRY_TARGET || 'http://127.0.0.1:5000') : {}),
+      '/api/autodesk': { target: 'http://127.0.0.1:3002', changeOrigin: false },
       '/api/chat': {
         // Single API source of truth lives at repo-root `api/chat.ts`.
         // For local dev, run `pnpm dev:api` from repo root.
@@ -357,40 +346,40 @@ export default defineConfig({
         popout: path.resolve(__dirname, 'popout.html'),
       },
       output: {
-        manualChunks(id) {
-          if (id.includes('/packages/sandbox/')) return 'sandbox';
-          if (id.includes('/packages/export/')) return 'exporters';
-          if (id.includes('/packages/server-client/')) return 'server-client';
-          if (id.includes('/packages/bcf-api/')) return 'bcf-api';
-          if (id.includes('/packages/bcf/')) return 'bcf';
-          if (id.includes('/packages/ids/')) return 'ids';
-          if (id.includes('/packages/lens/')) return 'lens';
-          if (id.includes('/packages/drawing-2d/')) return 'drawing-2d';
-          if (id.includes('/node_modules/jszip/')) return 'zip';
-          if (id.includes('/node_modules/apache-arrow/')) return 'arrow';
-          if (id.includes('/node_modules/parquet-wasm/')) return 'parquet';
-          if (id.includes('/node_modules/cesium/')) return 'cesium';
-          // ECharts (+ zrender) and the dashboard grid: reached only through the lazy Charts panel (#3944).
-          if (id.includes('/node_modules/echarts/') || id.includes('/node_modules/zrender/')) return 'echarts';
-          if (id.includes('/node_modules/react-grid-layout/')) return 'grid-layout';
-          // @radix-ui/@floating-ui run synchronous, top-level module-init
-          // code (e.g. react-tooltip's `createPopperScope()` at module
-          // scope). The default chunker otherwise merges them into whatever
-          // chunk also touches @/store, and the store transitively pulls in
-          // WASM modules that use real top-level await — vite-plugin-top-level-await
-          // then wraps that WHOLE merged chunk's body in a deferred
-          // `.then()`, so the synchronous radix init runs late. A sibling
-          // chunk that imports the same merged chunk but has no async taint
-          // of its own evaluates synchronously and calls into the
-          // not-yet-populated binding — "C is not a function" at module
-          // scope (issue #2243). Keep radix/floating-ui in their own chunk,
-          // clear of the store's async taint, so their module-init always
-          // finishes before anything can import from them.
-          if (id.includes('/node_modules/@radix-ui/') || id.includes('/node_modules/@floating-ui/')) return 'radix-ui';
-          // three.js + addons — only the /mcp landing imports them, keep
-          // the main viewer / pages off the hook.
-          if (id.includes('/node_modules/three/') || id.includes('/node_modules/.pnpm/three@')) return 'three';
-          return undefined;
+        // Rolldown's legacy `manualChunks` pulls every dependency of a chunk's
+        // modules into that chunk. packages/export -> packages/parser ->
+        // @ifc-lite/ifcx therefore dragged the IFCX parser entry points and the
+        // generated imported-geometry kernel (~600 KB) into the eager
+        // 'exporters' chunk. The higher-priority group below claims them first,
+        // without recursion, so they stay a lazy chunk reached only through the
+        // dynamic imports of '@ifc-lite/ifcx' (eager code uses the lightweight
+        // ifcx modules: types, composition, provenance, appearance-wire,
+        // detect-format). The QuickJS runtime group does the same for the
+        // 'sandbox' chunk (#9200). All other chunks keep the previous recursive
+        // behaviour.
+        codeSplitting: {
+          groups: [
+            {
+              name: 'ifcx-parser',
+              priority: 100,
+              includeDependenciesRecursively: false,
+              test: /\/packages\/ifcx\/src\/(index|imported-[^/]*|geometry-extractor|pointcloud-extractor|generated\/[^/]*)\.(ts|js)$/,
+            },
+            tslibChunkGroup,
+            quickjsRuntimeChunkGroup,
+            mergedExportChunkGroup,
+            stepExportChunkGroup,
+            preloadHelperChunkGroup,
+            processedModelRefChunkGroup,
+            wasmPrewarmChunkGroup,
+            drawingSharedChunkGroup,
+            drawingLeavesChunkGroup,
+            appearanceWorkflowsChunkGroup,
+            {
+              name: legacyManualChunk,
+              priority: 0,
+            },
+          ],
         },
       },
     },
@@ -403,6 +392,11 @@ export default defineConfig({
       'quickjs-emscripten',
       '@jitl/quickjs-wasmfile-release-asyncify',
       'esbuild-wasm',
+      // Pre-bundling missed it at startup and found it on the first model load,
+      // then reloaded the page mid-session (dev only; validation-colors e2e).
+      // Excluded, not included: the browser entry is one ESM file whose wasm the
+      // worker locates by URL, as with the emscripten builds above.
+      'rhino3dm',
       // maplibre-gl v6 resolves its worker as a SIBLING FILE of its own module:
       //
       //   new URL(`./maplibre-gl-worker.mjs`, import.meta.url)
@@ -419,6 +413,7 @@ export default defineConfig({
   },
   worker: {
     format: 'es',
-    plugins: () => [wasm(), topLevelAwait()],
+    plugins: () => [retainedEngine(retained), wasm(), topLevelAwait()],
   },
+  };
 });

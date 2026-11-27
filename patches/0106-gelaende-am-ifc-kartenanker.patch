@@ -1,0 +1,36 @@
+diff --git a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
+index f21bfeed8d9ec48b11e22dc852d1aa6c7bb32f41..424057e912ed7498cb26eb40d9c4d1fe682ba15c 100644
+--- a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
++++ b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
+@@ -164,14 +164,15 @@ export function useCesiumBridge({
+         return;
+       }
+       const swissFrame = chSwisstopoSr(projectedCRS.name) !== null;
+-      const queryAt = async (bridge: CesiumBridge) => {
++      const queryAt = async (bridge: CesiumBridge, conversion: MapConversion) => {
+         if (!CH_AUTOMATIC_TERRAIN_HEIGHT) return null;
+         try {
+           if (swissFrame) {
+             // Trassia (Marco 2026-09-27, TODO 5/58): swisstopo LN02 at the IFC origin.
++            // The bridge's modelOrigin is the render-frame geometry centre.
++            // Using it here would move the query as model bounds stream in.
+             return await chQueryTerrainHeight({
+-              lat: bridge.modelOrigin.latitude, lon: bridge.modelOrigin.longitude,
+-              projectedCRS, isCancelled,
++              conversion, projectedCRS, lengthUnitScale, isCancelled,
+             });
+           }
+           // Outside the Swiss grids, preserve the admissible Cesium source.
+@@ -186,10 +187,10 @@ export function useCesiumBridge({
+           return null;
+         }
+       };
+-      const modelSample = queryAt(modelTentative);
++      const modelSample = queryAt(modelTentative, mapConversion);
+       const [terrainSample, cameraTerrainSample] = await Promise.all([
+         modelSample,
+-        usesSeparateCameraBridge ? queryAt(cameraTentative) : modelSample,
++        usesSeparateCameraBridge ? queryAt(cameraTentative, cameraConversion) : modelSample,
+       ]);
+       if (isCancelled()) return;
+       const terrainH = terrainSample?.height ?? null;

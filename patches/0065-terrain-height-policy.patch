@@ -1,19 +1,46 @@
 diff --git a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
-index 70c967feb6dd77ff5551d051ea8d381bd896b7aa..2a02a361e18501913247f382a205938582566c40 100644
+index a95fce9e4626ad3f0fe2b91d23a9b3284e666e56..f21bfeed8d9ec48b11e22dc852d1aa6c7bb32f41 100644
 --- a/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
 +++ b/apps/viewer/src/components/viewer/cesium/useCesiumBridge.ts
-@@ -19,6 +19,7 @@
+@@ -19,12 +19,13 @@
  
  import { useEffect, useRef, useState, type RefObject } from 'react';
  import { useViewerStore } from '@/store';
-+import { chQueryTerrainHeight } from '@/lib/ch/kontext/terrain-policy';
++import { CH_AUTOMATIC_TERRAIN_HEIGHT, chQueryTerrainHeight } from '@/lib/ch/kontext/terrain-policy';
++import { chSwisstopoSr } from '@/lib/ch/kontext/swisstopo-hoehe';
  import type { MapConversion, ProjectedCRS } from '@ifc-lite/parser';
  import type { CoordinateInfo } from '@ifc-lite/geometry';
  import { createCesiumBridge, type CesiumBridge } from '@/lib/geo/cesium-bridge';
-@@ -106,6 +107,11 @@ export function useCesiumBridge({
+ import {
+   computeCesiumPlacement,
+-  shouldPreferOrthometricTerrain,
+   shouldApplyGeoidUndulation,
+   orthometricTargetForTerrain,
+ } from '@/lib/geo/cesium-placement';
+@@ -74,6 +75,7 @@ export function useCesiumBridge({
+   storeyElevations,
+ }: UseCesiumBridgeParams): UseCesiumBridgeResult {
+   const terrainEnabled = useViewerStore((s) => s.cesiumTerrainEnabled);
++  const sourceModelId = useViewerStore((s) => s.cesiumSourceModelId);
+   const heightsAreEllipsoidal = useViewerStore((s) => s.cesiumHeightsAreEllipsoidal);
+   const dataSource = useViewerStore((s) => s.cesiumDataSource);
+   const setCesiumTerrainHeight = useViewerStore((s) => s.setCesiumTerrainHeight);
+@@ -89,6 +91,7 @@ export function useCesiumBridge({
+   // camera Y by the inverse so the user perceives the model moving instead
+   // of the camera being dragged along.
+   const prevPlacementRef = useRef<ViewerHeightFrame | null>(null);
++  const prevSourceModelRef = useRef(sourceModelId);
+ 
+   // Tracks bridge readiness as state (not just a ref) so dependants re-run.
+   const [bridgeVersion, setBridgeVersion] = useState(0);
+@@ -109,6 +112,15 @@ export function useCesiumBridge({
    //   5. Push terrain-derived state (height, clip Y) and
    //      install the bridge.
    useEffect(() => {
++    if (prevSourceModelRef.current !== sourceModelId) {
++      prevSourceModelRef.current = sourceModelId;
++      prevPlacementRef.current = null;
++    }
 +    // Clear old model/provider samples before any asynchronous bridge work.
 +    setCesiumTerrainHeight(null);
 +    setCesiumTerrainSource(null);
@@ -22,10 +49,35 @@ index 70c967feb6dd77ff5551d051ea8d381bd896b7aa..2a02a361e18501913247f382a2059385
      if (status !== 'ready' || !mapConversion || !projectedCRS) {
        bridgeRef.current = null;
        cameraBridgeRef.current = null;
-@@ -142,17 +148,13 @@ export function useCesiumBridge({
-       const preferOrthometricTerrain = shouldPreferOrthometricTerrain(projectedCRS);
-       let terrainSample = null;
-       try {
+@@ -124,6 +136,8 @@ export function useCesiumBridge({
+       const viewer = viewerRef.current;
+       const lifetime = viewerLifetimeRef.current;
+       if (!Cesium || !viewer || !lifetime?.isLive(viewer)) return;
++      const isCancelled = () => cancelled || !lifetime.isLive(viewer)
++        || useViewerStore.getState().cesiumSourceModelId !== sourceModelId;
+ 
+       const cameraConversion = cameraMapConversion ?? mapConversion;
+       const usesSeparateCameraBridge = cameraConversion !== mapConversion;
+@@ -131,48 +145,54 @@ export function useCesiumBridge({
+         cameraConversion, projectedCRS, coordinateInfo, lengthUnitScale,
+         undefined, heightsAreEllipsoidal, globePlacement,
+       );
+-      if (cancelled || !lifetime.isLive(viewer)) return;
++      if (isCancelled()) return;
+       if (!cameraTentative) {
+         bridgeRef.current = null;
+         cameraBridgeRef.current = null;
+         return;
+       }
+ 
+-      // Query terrain at the model's location. queryTerrainHeight tries
+-      // Cesium's sync sources first (globe.getHeight, scene.sampleHeight),
+-      // then Open-Meteo as a fast network fallback that works even with
+-      // Google Photorealistic 3D Tiles (where there's no Cesium terrain
+-      // provider for getHeight to read). Cached per-session.
+-      const preferOrthometricTerrain = shouldPreferOrthometricTerrain(projectedCRS);
+-      let terrainSample = null;
+-      try {
 -        terrainSample = await cameraTentative.queryTerrainHeight(Cesium, viewer, {
 -          cacheNamespace: [
 -            terrainEnabled ? 'terrain' : 'ellipsoid',
@@ -37,18 +89,109 @@ index 70c967feb6dd77ff5551d051ea8d381bd896b7aa..2a02a361e18501913247f382a2059385
 -            isCancelled: () => cancelled || !lifetime.isLive(viewer),
 -            onCancel: (stop) => lifetime.onRetire(stop),
 -          },
-+        // Trassia (Marco 2026-09-27, TODO 5/58): Gelaendehoehe vom swisstopo-
-+        // Hoehendienst (LN02) am Modellursprung statt der Upstream-Kette.
-+        terrainSample = await chQueryTerrainHeight({
-+          lat: cameraTentative.modelOrigin.latitude,
-+          lon: cameraTentative.modelOrigin.longitude,
-+          projectedCRS,
-+          isCancelled: () => cancelled || !lifetime.isLive(viewer),
-         });
+-        });
+-      }
+-      catch (err) { console.warn('[CesiumOverlay] terrain query failed:', err); }
+-      if (cancelled || !lifetime.isLive(viewer)) return;
+-      const terrainH = terrainSample?.height ?? null;
+       const modelTentative = usesSeparateCameraBridge
+         ? await createCesiumBridge(
+             mapConversion, projectedCRS, coordinateInfo, lengthUnitScale,
+             undefined, heightsAreEllipsoidal, globePlacement,
+           )
+         : cameraTentative;
+-      if (cancelled || !lifetime.isLive(viewer)) return;
++      if (isCancelled()) return;
+       if (!modelTentative) {
+         bridgeRef.current = null;
+         return;
        }
-       catch (err) { console.warn('[CesiumOverlay] terrain query failed:', err); }
++      const swissFrame = chSwisstopoSr(projectedCRS.name) !== null;
++      const queryAt = async (bridge: CesiumBridge) => {
++        if (!CH_AUTOMATIC_TERRAIN_HEIGHT) return null;
++        try {
++          if (swissFrame) {
++            // Trassia (Marco 2026-09-27, TODO 5/58): swisstopo LN02 at the IFC origin.
++            return await chQueryTerrainHeight({
++              lat: bridge.modelOrigin.latitude, lon: bridge.modelOrigin.longitude,
++              projectedCRS, isCancelled,
++            });
++          }
++          // Outside the Swiss grids, preserve the admissible Cesium source.
++          // The Trassia net allowlist does not include Open-Meteo or ion.
++          return await bridge.queryTerrainHeight(Cesium, viewer, {
++            cacheNamespace: [terrainEnabled ? 'terrain' : 'ellipsoid', dataSource].join(':'),
++            residentGlobeOnly: true,
++            cancellation: { isCancelled, onCancel: (stop) => lifetime.onRetire(stop) },
++          });
++        } catch (err) {
++          console.warn('[CesiumOverlay] terrain query failed:', err);
++          return null;
++        }
++      };
++      const modelSample = queryAt(modelTentative);
++      const [terrainSample, cameraTerrainSample] = await Promise.all([
++        modelSample,
++        usesSeparateCameraBridge ? queryAt(cameraTentative) : modelSample,
++      ]);
++      if (isCancelled()) return;
++      const terrainH = terrainSample?.height ?? null;
+       // Placement is purely IFC-authored — no terrain/storey clamp. The
+       // tentative bridges already carry the model's authored altitude
+       // (IfcMapConversion.OrthogonalHeight + geometry origin), so they ARE
+@@ -198,7 +218,7 @@ export function useCesiumBridge({
+             coordinateInfo,
+             projectedCRS,
+             ifcOriginHeight: cameraTentative.modelOrigin.height,
+-            terrainHeight: terrainHForFrame,
++            terrainHeight: cameraTerrainSample?.height ?? null,
+             storeyElevations,
+             viewerUpScale: cameraTentative.viewerUpScale,
+           })
+@@ -224,29 +244,17 @@ export function useCesiumBridge({
+         // Siehe `lib/ch/kontext/hoehenbezug.ts`.
+         const appliedGeoidN = shouldApplyGeoidUndulation(heightsAreEllipsoidal)
+           ? chCesiumGeoidAnteil(
+-            egm96Undulation(modelTentative.modelOrigin.latitude, modelTentative.modelOrigin.longitude))
++            egm96Undulation(modelTentative.modelOrigin.latitude, modelTentative.modelOrigin.longitude), swissFrame)
+           : 0;
+         setCesiumTerrainSaveHeight(
+           terrainHForFrame !== null
+             ? orthometricTargetForTerrain(terrainHForFrame, appliedGeoidN)
+             : null,
+         );
+-        // terrainClipY stays in viewer-space; it represents the world terrain
+-        // altitude expressed in the camera bridge's committed frame. Draft
+-        // placement edits must not move this floor, or the camera will drift.
+-        // Exact placement bends the model with the Earth (r²/2R below the
+-        // anchor's tangent plane at its ends), so a flat viewer-space floor
+-        // would cut it; the clip is off there, unless the model stays within
+-        // the Auto threshold of that plane (a small IfcRigidOperation).
+-        setCesiumTerrainClipY(bendsAwayFromAnchorPlane(bridge.placement) ? null : cameraPlacement.terrainClipY);
+-      } else {
+-        // Failed re-query (offline, API down) — clear stale store fields so
+-        // the clip plane doesn't drift relative to the new bridge.
+-        setCesiumTerrainHeight(null);
+-        setCesiumTerrainSource(null);
+-        setCesiumTerrainSaveHeight(null);
+-        setCesiumTerrainClipY(null);
+       }
++      // The camera floor uses the committed camera frame, independent of a
++      // model draft. A flat floor would cut a model bent away from that plane.
++      setCesiumTerrainClipY(bendsAwayFromAnchorPlane(bridge.placement) ? null : cameraPlacement.terrainClipY);
+ 
+       // World-camera stability: when this rebuild changes the placement
+       // altitude (surface floor or OrthogonalHeight edited), shift the IFC
+@@ -306,6 +314,7 @@ export function useCesiumBridge({
+     coordinateInfo,
+     lengthUnitScale,
+     terrainEnabled,
++    sourceModelId,
+     heightsAreEllipsoidal,
+     dataSource,
+     storeyElevations,
 diff --git a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.a11y.test.tsx b/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.a11y.test.tsx
-index 33949fccc192b6972391efe21bc52b32e0ccf92f..557b281ae5719512fa3d6846359d28ebcf2448bc 100644
+index 52db6d4bfe2cef556d75c2f04171be4fa37d38b8..dceba3677ba6f577dec7b178185612abf9adac57 100644
 --- a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.a11y.test.tsx
 +++ b/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.a11y.test.tsx
 @@ -19,10 +19,11 @@
@@ -76,19 +219,24 @@ index 33949fccc192b6972391efe21bc52b32e0ccf92f..557b281ae5719512fa3d6846359d28eb
    cleanup();
    useViewerStore.setState(initialState, true);
 diff --git a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx b/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx
-index 4701b172b5cb40de5a38047e86a695dfff16d7f5..d8df96e54af74ee0f5f5d998f148eb24515ba551 100644
+index 679566719a3efe2085040d5ee5085c65904a7a4a..44af7100ffc8af2a4334d1c61168f0219e1689e4 100644
 --- a/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx
 +++ b/apps/viewer/src/components/viewer/properties/GeoreferencingPanel.tsx
-@@ -18,6 +18,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
- import { Checkbox } from '@/components/ui/checkbox';
+@@ -13,11 +13,13 @@
+ import { newMutationBatchId } from '@/store/slices/mutation-batch-tags';
+ import { useState, useCallback, useMemo } from 'react';
+ import { Globe, MapPin, Search, ChevronRight, AlertTriangle, Info } from 'lucide-react';
++import { toast } from '@/components/ui/toast';
+ import { Button } from '@/components/ui/button';
+ import { TEXT_LINK_CLASS } from '@/components/ui/text-link';
+ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
  import { computeAngleToGridNorth, type GeoreferenceInfo, type MapConversion, type ProjectedCRS } from '@ifc-lite/parser';
  import { useViewerStore } from '@/store';
 +import { mutationPermission, mutationDenialKey } from '@/store/mutation-permission';
-+import { CH_AUTOMATIC_TERRAIN_HEIGHT, CH_TERRAIN_HEIGHT_NOTICE } from '@/lib/ch/kontext/terrain-policy';
  import { posthog } from '@/lib/analytics';
  import type { CoordinateInfo, GeometryResult } from '@ifc-lite/geometry';
  import { EpsgLookupDialog, type EpsgResult } from './EpsgLookupDialog';
-@@ -62,6 +64,10 @@ export interface GeoreferencingPanelProps {
+@@ -71,6 +73,10 @@ export interface GeoreferencingPanelProps {
  
  export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVersion, coordinateInfo, geometryResult, lengthUnitScale, storeyElevations }: GeoreferencingPanelProps) {
    const { t, locale } = useTranslation();
@@ -99,7 +247,7 @@ index 4701b172b5cb40de5a38047e86a695dfff16d7f5..d8df96e54af74ee0f5f5d998f148eb24
    const georefMutations = useViewerStore(s => s.georefMutations);
    const setGeorefField = useViewerStore(s => s.setGeorefField);
    const setGeorefFields = useViewerStore(s => s.setGeorefFields);
-@@ -245,13 +251,15 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
+@@ -188,13 +194,15 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
  
    const handleSave = useCallback((entity: 'projectedCRS' | 'mapConversion', field: string, value: string | number) => {
      if (!modelId || !setGeorefField) return;
@@ -116,57 +264,50 @@ index 4701b172b5cb40de5a38047e86a695dfff16d7f5..d8df96e54af74ee0f5f5d998f148eb24
  
    // Handle angle edit: compute and set both XAxisAbscissa and XAxisOrdinate
    const handleAngleChange = useCallback((abscissa: number, ordinate: number) => {
-@@ -339,7 +347,7 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
+@@ -284,11 +292,23 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
    }, [modelId, setGeorefFields, mergedCRS, mergedConversion, mutations, initializeMapConversionDefaults, requestAlignmentReload]);
  
    const hasData = mergedCRS || mergedConversion;
--  const editable = enableEditing && !!modelId && canUseStandardGeoreferencing;
-+  const editable = enableEditing && !!modelId && canUseStandardGeoreferencing && mutationDenied === null;
+-  const editable = enableEditing && !!modelId && canUseStandardGeoreferencing && !isReadOnlyCoordinateOperation(georef);
++  const editable = enableEditing && !!modelId && canUseStandardGeoreferencing && !isReadOnlyCoordinateOperation(georef) && mutationDenied === null;
++  const mutationNotice = enableEditing && modelId && mutationDenied && (
++    <div className="px-3 py-2 text-xs text-muted-foreground">
++      {mutationDenied === 'edit-mode' ? (
++        <button type="button" className="min-h-8 underline underline-offset-2" onClick={() => useViewerStore.getState().toggleEditEnabled()}>
++          Bearbeitungsmodus einschalten
++        </button>
++      ) : <output>{t(mutationDenialKey(mutationDenied))}</output>}
++    </div>
++  );
  
-   // When no georef data exists, show "Add Georeferencing" in edit mode
+   // No georeferencing: the add row (or why it cannot be added) and the sections that need it (#10603).
    if (!hasData && !georef?.hasGeoreference) {
-@@ -402,6 +410,15 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
-           </span>
+-    return <GeorefEmptyState georef={georef} modelId={modelId} editable={editable === true} schemaNotice={!canUseStandardGeoreferencing} onEpsgSelect={handleEpsgSelect} />;
++    return <>
++      {mutationNotice}
++      <GeorefEmptyState georef={georef} modelId={modelId} editable={editable === true} schemaNotice={!canUseStandardGeoreferencing} onEpsgSelect={handleEpsgSelect} />
++    </>;
+   }
+ 
+   return (
+@@ -314,6 +334,7 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
          </div>
        )}
-+      {enableEditing && mutationDenied && (
-+        <div className="px-3 py-2 text-xs text-muted-foreground">
-+          {mutationDenied === 'edit-mode' ? (
-+            <button type="button" className="min-h-8 underline underline-offset-2" onClick={() => useViewerStore.getState().toggleEditEnabled()}>
-+              Bearbeitungsmodus einschalten
-+            </button>
-+          ) : <output>{t(mutationDenialKey(mutationDenied))}</output>}
-+        </div>
-+      )}
-       {/* Federation alignment badge + anchor / re-align controls.
-           Hidden when only one model is loaded — alignment is a federation concept. */}
+       <GeorefReadOnlyNotices georef={georef} schemaNotice={!canUseStandardGeoreferencing && !mergedCRS && !mergedConversion} />
++      {mutationNotice}
+       {/* Federation alignment badge + anchor / re-align controls; hidden for one model (alignment is a federation concept). */}
        {modelId && models.size > 1 && <FederationAlignmentControls modelId={modelId} />}
-@@ -594,7 +611,7 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
-           <div className="flex items-center gap-2">
-             <Mountain className="h-3 w-3 text-teal-500 shrink-0" />
-             <span className="text-xs text-zinc-600 dark:text-zinc-400 flex-1">{t('properties.georef.visibleSurfaceHeight')}</span>
--            {cesiumTerrainHeight !== null ? (
-+            {!CH_AUTOMATIC_TERRAIN_HEIGHT ? <span>{CH_TERRAIN_HEIGHT_NOTICE}</span> : cesiumTerrainHeight !== null ? (
-               <span className="text-xs font-mono text-teal-500" title={cesiumTerrainSource ?? undefined}>
-                 {t('properties.georef.heightMeters', { value: formatLocaleNumber(locale, cesiumTerrainHeight, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })}
-               </span>
-@@ -602,12 +619,12 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
-               <span className="text-xs font-mono text-zinc-400">{t('properties.georef.queryingEllipsis')}</span>
-             )}
-           </div>
--          {cesiumTerrainSource && (
-+          {CH_AUTOMATIC_TERRAIN_HEIGHT && cesiumTerrainSource && (
-             <div className="ml-5 text-xs text-zinc-500 dark:text-zinc-400">
-               {t('properties.georef.sampledVia', { source: cesiumTerrainSource })}
-             </div>
-           )}
--          {cesiumTerrainHeight !== null && cesiumTerrainSaveHeight !== null && editable && modelId && (
-+          {CH_AUTOMATIC_TERRAIN_HEIGHT && cesiumTerrainHeight !== null && cesiumTerrainSaveHeight !== null && editable && modelId && (
-             <div className="flex items-center gap-1 ml-5">
-               <button
-                 onClick={() => handleSave('mapConversion', 'orthogonalHeight', oHeightForBaseAltitude(cesiumTerrainSaveHeight))}
+       {/* CRS summary — always visible */}
+@@ -484,6 +505,7 @@ export function GeoreferencingPanel({ georef, modelId, enableEditing, schemaVers
+       {/* World-view settings — only when the Cesium overlay is active */}
+       {cesiumEnabled && isActiveCesiumModel && mergedConversion && (
+         <WorldViewSettings
++          modelId={modelId}
+           onSetOrthogonalHeight={editable && modelId ? (h) => handleSave('mapConversion', 'orthogonalHeight', oHeightForBaseAltitude(h)) : undefined}
+         />
+       )}
 diff --git a/apps/viewer/src/components/viewer/properties/georef-terrain-height-button.tsx b/apps/viewer/src/components/viewer/properties/georef-terrain-height-button.tsx
-index 06d139738295df01635c4bb9a697f7cb7f02d28e..15cbc215a229fc27dda09b14da98e7ab709d99d2 100644
+index 7cd1c50e1861cf2aab4b308283851b9ab33f8a3b..b95bb93394d54e0cddfa58d78fe23c91ce13f48e 100644
 --- a/apps/viewer/src/components/viewer/properties/georef-terrain-height-button.tsx
 +++ b/apps/viewer/src/components/viewer/properties/georef-terrain-height-button.tsx
 @@ -2,6 +2,7 @@
@@ -176,8 +317,8 @@ index 06d139738295df01635c4bb9a697f7cb7f02d28e..15cbc215a229fc27dda09b14da98e7ab
 +import { CH_AUTOMATIC_TERRAIN_HEIGHT } from '@/lib/ch/kontext/terrain-policy';
  import { Mountain } from 'lucide-react';
  import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
- import { useViewerStore } from '@/store';
-@@ -23,7 +24,7 @@ export function TerrainHeightButton({ modelId, editable, onApply }: {
+ import { TEXT_LINK_CLASS } from '@/components/ui/text-link';
+@@ -24,7 +25,7 @@ export function TerrainHeightButton({ modelId, editable, onApply }: {
    const sourceModelId = useViewerStore(s => s.cesiumSourceModelId);
  
    // Only the active Cesium model, once the geoid-corrected snap target is ready (#1456).
@@ -186,3 +327,117 @@ index 06d139738295df01635c4bb9a697f7cb7f02d28e..15cbc215a229fc27dda09b14da98e7ab
  
    return (
      <Tooltip>
+@@ -32,7 +33,10 @@ export function TerrainHeightButton({ modelId, editable, onApply }: {
+         <button
+           onClick={(e) => {
+             e.stopPropagation();
+-            onApply(terrainSaveHeight);
++            const current = useViewerStore.getState();
++            if (current.cesiumSourceModelId === modelId && current.cesiumTerrainSaveHeight !== null) {
++              onApply(current.cesiumTerrainSaveHeight);
++            }
+           }}
+           className={`mt-0.5 flex items-center gap-0.5 text-2xs ${TEXT_LINK_CLASS}`}
+         >
+diff --git a/apps/viewer/src/components/viewer/properties/world-view-settings.tsx b/apps/viewer/src/components/viewer/properties/world-view-settings.tsx
+index e6ab903b88c29726ab1256894d9e0efbdf0e94ba..574075a452612de1b96b1d38de65f2bf9ab34c45 100644
+--- a/apps/viewer/src/components/viewer/properties/world-view-settings.tsx
++++ b/apps/viewer/src/components/viewer/properties/world-view-settings.tsx
+@@ -16,10 +16,12 @@ import { TEXT_LINK_CLASS } from '@/components/ui/text-link';
+ import { useViewerStore } from '@/store';
+ import { useTranslation } from '@/i18n';
+ import { formatLocaleNumber } from '@/i18n/intlFormat';
++import { CH_AUTOMATIC_TERRAIN_HEIGHT, CH_TERRAIN_HEIGHT_NOTICE } from '@/lib/ch/kontext/terrain-policy';
+ 
+ const GlobePlacementControl = lazyChunk(() => import('./GlobePlacementControl'));
+ 
+-export function WorldViewSettings({ onSetOrthogonalHeight }: {
++export function WorldViewSettings({ modelId, onSetOrthogonalHeight }: {
++  modelId?: string;
+   /** Snap OrthogonalHeight to the sampled terrain; omitted when the georeference is not editable. */
+   onSetOrthogonalHeight?: (terrainSaveHeight: number) => void;
+ }) {
+@@ -39,7 +41,7 @@ export function WorldViewSettings({ onSetOrthogonalHeight }: {
+       <div className="flex items-center gap-2">
+         <Mountain className="h-3 w-3 text-muted-foreground shrink-0" />
+         <span className="text-xs text-muted-foreground flex-1">{t('properties.georef.visibleSurfaceHeight')}</span>
+-        {terrainHeight !== null ? (
++        {!CH_AUTOMATIC_TERRAIN_HEIGHT ? <span>{CH_TERRAIN_HEIGHT_NOTICE}</span> : terrainHeight !== null ? (
+           <span className="text-xs font-mono text-foreground" title={cesiumTerrainSource ?? undefined}>
+             {t('properties.georef.heightMeters', { value: terrainHeight })}
+           </span>
+@@ -47,15 +49,20 @@ export function WorldViewSettings({ onSetOrthogonalHeight }: {
+           <span className="text-xs font-mono text-muted-foreground">{t('properties.georef.queryingEllipsis')}</span>
+         )}
+       </div>
+-      {cesiumTerrainSource && (
++      {CH_AUTOMATIC_TERRAIN_HEIGHT && cesiumTerrainSource && (
+         <div className="ml-5 text-xs text-muted-foreground">
+           {t('properties.georef.sampledVia', { source: cesiumTerrainSource })}
+         </div>
+       )}
+-      {terrainHeight !== null && cesiumTerrainSaveHeight !== null && onSetOrthogonalHeight && (
++      {CH_AUTOMATIC_TERRAIN_HEIGHT && terrainHeight !== null && cesiumTerrainSaveHeight !== null && onSetOrthogonalHeight && (
+         <div className="flex items-center gap-1 ml-5">
+           <button
+-            onClick={() => onSetOrthogonalHeight(cesiumTerrainSaveHeight)}
++            onClick={() => {
++              const current = useViewerStore.getState();
++              if (modelId && current.cesiumSourceModelId === modelId && current.cesiumTerrainSaveHeight !== null) {
++                onSetOrthogonalHeight(current.cesiumTerrainSaveHeight);
++              }
++            }}
+             className={`flex items-center gap-0.5 text-xs ${TEXT_LINK_CLASS}`}
+           >
+             <Mountain className="h-2.5 w-2.5" />
+diff --git a/apps/viewer/src/lib/geo/cesium-bridge.ts b/apps/viewer/src/lib/geo/cesium-bridge.ts
+index a434eeed52f4b787dabebe7bd14dc3e649687739..a7f794684faddd4cd4814c77a16380261d5b4e8c 100644
+--- a/apps/viewer/src/lib/geo/cesium-bridge.ts
++++ b/apps/viewer/src/lib/geo/cesium-bridge.ts
+@@ -43,6 +43,7 @@ import { shouldApplyGeoidUndulation } from './cesium-placement';
+ import { egm96Undulation } from '@ifc-lite/geo';
+ // Trassia (V-WELT-FIX-2): in dieser Szene ist die Cesium-Hoehenachse LN02.
+ import { chCesiumGeoidAnteil } from '@/lib/ch/kontext/hoehenbezug';
++import { chSwisstopoSr } from '@/lib/ch/kontext/swisstopo-hoehe';
+ import { viewerToEnuRotation, type ViewerToEnuRotation } from './viewer-enu-rotation';
+ import { ecefCameraFrame } from './ecef-camera-frame';
+ import { viewBasis } from '@ifc-lite/renderer';
+@@ -202,7 +203,7 @@ export async function computeCesiumModelOrigin(
+     // Undulation von der Umgebung abheben. Begruendung und Messung:
+     // `lib/ch/kontext/hoehenbezug.ts`.
+     const geoidUndulation = shouldApplyGeoidUndulation(heightsAreEllipsoidal)
+-      ? chCesiumGeoidAnteil(egm96Undulation(lat, lon))
++      ? chCesiumGeoidAnteil(egm96Undulation(lat, lon), chSwisstopoSr(projectedCRS.name) !== null)
+       : 0;
+     const frame = computeGridFrame(projDef, easting, northing, lat);
+     const kc = geographic ? 1 : combinedScaleFactor(frame.pointScale, lat, height + geoidUndulation);
+diff --git a/apps/viewer/src/lib/geo/terrain-elevation.ts b/apps/viewer/src/lib/geo/terrain-elevation.ts
+index d0a3b2fb2cc8086bccd1a8034bf94285b2548834..43ebc94f04c382aa62a00cd8283bac2c78f40746 100644
+--- a/apps/viewer/src/lib/geo/terrain-elevation.ts
++++ b/apps/viewer/src/lib/geo/terrain-elevation.ts
+@@ -32,6 +32,8 @@ export interface TerrainElevationSample {
+ export interface ResolveTerrainElevationOptions {
+   cacheNamespace?: string;
+   preferOrthometric?: boolean;
++  /** Sample only terrain already loaded in the globe; never request detailed tiles or a remote DEM. */
++  residentGlobeOnly?: boolean;
+   /** Cancels fallbacks and detailed sampling when the owning Viewer retires. */
+   cancellation?: TerrainElevationCancellation;
+ }
+@@ -248,7 +250,7 @@ export async function resolveTerrainElevationDetailed(
+   const cancellation = options.cancellation;
+   if (cancellation?.isCancelled()) return null;
+   const preferOrthometric = options.preferOrthometric ?? false;
+-  const cacheKey = terrainCacheKey(lat, lon, cacheNamespace);
++  const cacheKey = terrainCacheKey(lat, lon, `${options.residentGlobeOnly ? 'resident-globe:' : ''}${cacheNamespace}`);
+   const cached = terrainElevationCache.get(cacheKey);
+   if (cached !== undefined) {
+     console.debug(
+@@ -264,6 +266,7 @@ export async function resolveTerrainElevationDetailed(
+   };
+ 
+   for (const candidate of getTerrainSourceCandidates(preferOrthometric)) {
++    if (options.residentGlobeOnly && candidate.source !== 'globe.getHeight') continue;
+     if (cancellation?.isCancelled()) return null;
+     try {
+       const { height, elapsedMs, skipped } = await candidate.resolve(

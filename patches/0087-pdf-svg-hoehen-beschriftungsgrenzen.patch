@@ -1,104 +1,154 @@
 diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
-index a22d9d71c8c4944c5e2f6dd7bbbe437cb0a8c5ce..8f01cf8c86029306dd39353eb4f6e4fd3a035004 100644
+index 30d72bb8f83d8fcf67639d43250fb5917fe179d9..342c3693484f10128c87b7d6717b05ad41b58d94 100644
 --- a/apps/viewer/src/hooks/useDrawingExport.ts
 +++ b/apps/viewer/src/hooks/useDrawingExport.ts
-@@ -2,7 +2,7 @@
-  * License, v. 2.0. If a copy of the MPL was not distributed with this
+@@ -3,7 +3,13 @@
   * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
  
--import { registerChSeriesExport } from '@/lib/ch/qp-serie-export';
-+import { registerChSeriesExport, chSvgIncludeAnnotationBounds, chSvgPaperSize, chPdfAnnotationPaper } from '@/lib/ch/qp-serie-export';
+ import { useEffect, useMemo } from 'react';
+-import { registerChSeriesExport, type ChSeriesExportBridge } from '@/lib/ch/qp-serie-export';
++import {
++  chPdfAnnotationPaper,
++  chSvgIncludeAnnotationBounds,
++  chSvgPaperSize,
++  registerChSeriesExport,
++  type ChSeriesExportBridge,
++} from '@/lib/ch/qp-serie-export';
  import { useChQpHeightAnnotations } from '@/hooks/useChQpHeightAnnotations';
- import { useCallback, useEffect } from 'react';
- import { buildDxfUnderlaySvg, drawDxfUnderlaysPdf, mappedDxfUnderlayOptions } from '@/lib/export/drawing-vector-underlays';
-@@ -653,7 +653,7 @@ function useDrawingExport({
-     }
- 
+ import { resolvedElementTags, elementTagsSvg } from '@/lib/drawing/element-tags';
+ import { escapeTagXml as escapeXml, elementTagsDxf, drawElementTagsPdf } from '@/lib/drawing/element-tag-export';
+@@ -139,6 +145,13 @@ export interface NativeDrawingArtifact { blob: Blob; filename: string; warnings:
+ class NoNativeDrawingError extends Error { constructor() { super('No completed native drawing is available.'); } }
+ /** A requested 1:N scale whose page layout is out of range (shown with the scale-specific message). */
+ class InvalidPdfScaleError extends Error {}
++
++function assertPdfPageSize(doc: import('jspdf').jsPDF, width: number, height: number): void {
++  const page = doc.internal.pageSize;
++  if (Math.abs(page.getWidth() - width) > 0.001 || Math.abs(page.getHeight() - height) > 0.001) {
++    throw new InvalidPdfScaleError('Das PDF-Blatt mit Höhenbeschriftung überschreitet die Seitengrenze.');
++  }
++}
+ export interface UseDrawingExportResult {
+   seriesExport: ChSeriesExportBridge | null;
+   createSvgArtifact(): NativeDrawingArtifact;
+@@ -458,7 +471,7 @@ export function createDrawingExport({
+     svg += elementTagsSvg(resolvedElementTags(drawing), (x, y) => ({ x: flipX ? -x : x, y: flipY ? -y : y }), mmToModel(3.5));
+     svg += dimensionsToSvg(dims, (x, y) => ({ x: flipX ? -x : x, y: flipY ? -y : y }), mmToModel);
      svg += '</svg>';
 -    return svg;
-+    return chSvgIncludeAnnotationBounds(svg);
-   }, [drawing, displayOptions, activePresetId, entityColorMap, overridesEnabled, overrideEngine, measure2DResults, polygonArea2DResults, exportTextAnnotations, cloudAnnotations2D, sectionPlane.axis, dxfUnderlays, scanSection, ifcDataStore, storeModels]);
++    return exportTextAnnotations.some((annotation) => annotation.text.trim()) ? chSvgIncludeAnnotationBounds(svg) : svg;
+   };
  
    // Generate SVG with drawing sheet (frame, title block, scale bar)
-@@ -868,10 +868,6 @@ function useDrawingExport({
-     svg += '    </g>\n';
- 
-     // POINT-CLOUD SCAN OVERLAY (issue #1805) — on top, inside the clipped
--    for (const annotation of heightAnnotations) {
--      const p = modelToPaper(annotation.position.x, annotation.position.y);
--      svg += `<text x="${p.x.toFixed(4)}" y="${p.y.toFixed(4)}" font-size="2.5" fill="#174a68">${escapeXml(annotation.text)}</text>\n`;
--    }
-     // drawing-content group like everything else. `modelToPaper` already
-     // applies the same flip + scale/translate the rest of the sheet uses.
-     if (displayOptions.showScanSection && displayOptions.scanSectionIncludeInExport) {
-@@ -885,6 +881,12 @@ function useDrawingExport({
- 
-     svg += '  </g>\n\n';
- 
-+    // Height labels are paper annotations: geometric cropping must not cut glyphs.
-+    for (const annotation of heightAnnotations) {
-+      const p = modelToPaper(annotation.position.x, annotation.position.y);
-+      svg += `<text x="${p.x.toFixed(4)}" y="${p.y.toFixed(4)}" font-size="2.5" fill="#174a68">${escapeXml(annotation.text)}</text>\n`;
-+    }
-+
-     // Render frame (on top of drawing content)
-     const frameResult = renderFrame(activeSheet.paper, activeSheet.frame);
-     svg += frameResult.svgElements;
-@@ -911,7 +913,7 @@ function useDrawingExport({
+@@ -680,7 +693,7 @@ export function createDrawingExport({
      svg += '\n';
  
      svg += '</svg>';
 -    return svg;
-+    return chSvgIncludeAnnotationBounds(svg);
-     // `sectionPlane.axis` and `isPinned` are read INSIDE this callback (via
-     // `resolveSheetTransform`) and so must be here. Both were previously
-     // held up only by invariants elsewhere — `drawing` happens to change
-@@ -1076,7 +1078,8 @@ function useDrawingExport({
++    return heightAnnotations.length > 0 ? chSvgIncludeAnnotationBounds(svg) : svg;
+   };
+   const createSvgArtifact = (): NativeDrawingArtifact => {
+     const svg = sheetEnabled && activeSheet ? generateSheetSVG() : generateExportSVG();
+@@ -854,16 +867,17 @@ export function createDrawingExport({
      if (sheetEnabled && activeSheet) {
-       const svg = tryDrawingSvg(generateSheetSVG);
-       if (!svg) return;
+       const svg = generateSheetSVG();
+       if (!svg) throw new Error('No completed native sheet is available.');
 -      const { widthMm, heightMm } = activeSheet.paper;
-+      const paper = chSvgPaperSize(svg);
-+      const widthMm = paper.width, heightMm = paper.height;
-       void (async () => {
-         try {
++      const { width: widthMm, height: heightMm } = chSvgPaperSize(svg);
+       return recordActivity({ kind: 'export', title: 'activityTray.job.export', panel: 'drawing',
+         subject: `${activeSheet.name} · PDF` }, async () => {
            const { jsPDF } = await import('jspdf');
-@@ -1141,7 +1144,7 @@ function useDrawingExport({
-       toast.error(err instanceof Error ? t('section2d.export.invalidScaleDetail', { error: err.message }) : t('section2d.export.invalidScale'));
-       return;
-     }
+-          const { dataUrl, fit } = await rasterizeSvgToPngDataUrl(svg, widthMm, heightMm);
+           const doc = new jsPDF({
+             unit: 'mm',
+             format: [widthMm, heightMm],
+             orientation: widthMm >= heightMm ? 'landscape' : 'portrait',
+           });
++          if (heightAnnotations.length > 0) assertPdfPageSize(doc, widthMm, heightMm);
++          const { dataUrl, fit } = await rasterizeSvgToPngDataUrl(svg, widthMm, heightMm);
+           // Full paper rectangle, deliberately NOT `fit.widthPx / dpi`: the
+           // image must span the sheet whatever the raster cost, or a capped
+           // export would print a smaller sheet at the same nominal scale.
+@@ -914,26 +928,57 @@ export function createDrawingExport({
+     let layout: PdfScaleLayout;
+     try { layout = computePdfSectionLayout(boundsWithDimensions(drawing.bounds, dimensionSnapshot), currentAxis, effectiveScale, 10); }
+     catch (err) { throw new InvalidPdfScaleError(err instanceof Error ? err.message : String(err)); }
 -    const mapPoint = makeSectionMapPoint(currentAxis, layout);
 +    const baseMapPoint = makeSectionMapPoint(currentAxis, layout);
  
-     let referenceSnapshot: ReturnType<typeof snapshotDrawingReferences>;
-     try { referenceSnapshot = snapshotDrawingReferences(useViewerStore.getState(), drawing.config.plane); }
-@@ -1153,7 +1156,28 @@ function useDrawingExport({
-     void (async () => {
+-    // Prepared before the reference snapshot is taken, so a throw here cannot
+-    // strand it.
+-    const cutPolygons = prepareCutPolygonsPdf(drawing.cutPolygons, cutPolygonStyleContext(), mapPoint);
+-    const referenceSnapshot = snapshotDrawingReferences(useViewerStore.getState(), drawing.config.plane);
+     // Own mapped vectors at click time; model/reference edits during async export
+     // cannot replace the geometry whose bounds/scale were used above.
++    const baseCutPolygons = prepareCutPolygonsPdf(drawing.cutPolygons, cutPolygonStyleContext(), baseMapPoint);
+     const vectorSnapshot = structuredClone(dxfUnderlays);
+     const tagSnapshot = resolvedElementTags(drawing);
++    const referenceSnapshot = snapshotDrawingReferences(useViewerStore.getState(), drawing.config.plane);
+     return recordActivity({ kind: 'export', title: 'activityTray.job.export', panel: 'drawing',
+       subject: `section-${sectionPlane.axis}-${sectionPlane.position} · PDF` }, async () => {
        try {
          const { jsPDF } = await import('jspdf');
 -        const { widthMm, heightMm } = layout.page;
-+        let widthMm = layout.page.widthMm, heightMm = layout.page.heightMm;
-+        let offsetX = 0, offsetY = 0;
-+        if (heightAnnotations.length) {
++        let { widthMm, heightMm } = layout.page;
++        let mapPoint = baseMapPoint;
++        let cutPolygons = baseCutPolygons;
++        if (heightAnnotations.length > 0) {
 +          const measure = new jsPDF({ unit: 'mm' });
 +          measure.setFontSize(7);
 +          const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 +          for (const annotation of heightAnnotations) {
-+            const p = baseMapPoint(annotation.position.x, annotation.position.y);
-+            const size = measure.getTextDimensions(annotation.text);
-+            bounds.minX = Math.min(bounds.minX, p.x);
-+            bounds.maxX = Math.max(bounds.maxX, p.x + size.w);
-+            bounds.minY = Math.min(bounds.minY, p.y - size.h);
-+            bounds.maxY = Math.max(bounds.maxY, p.y + size.h * 0.3);
++            const point = baseMapPoint(annotation.position.x, annotation.position.y);
++            const { w, h } = measure.getTextDimensions(annotation.text);
++            bounds.minX = Math.min(bounds.minX, point.x);
++            bounds.minY = Math.min(bounds.minY, point.y - h);
++            bounds.maxX = Math.max(bounds.maxX, point.x + w);
++            bounds.maxY = Math.max(bounds.maxY, point.y + h * 0.3);
 +          }
 +          const paper = chPdfAnnotationPaper(widthMm, heightMm, bounds);
-+          widthMm = paper.width; heightMm = paper.height;
-+          offsetX = paper.offsetX; offsetY = paper.offsetY;
++          widthMm = paper.width;
++          heightMm = paper.height;
++          mapPoint = (x, y) => {
++            const point = baseMapPoint(x, y);
++            return { x: point.x + paper.offsetX, y: point.y + paper.offsetY };
++          };
++          // Translate the captured page geometry without re-reading live
++          // style or model data after loading the PDF writer.
++          if (paper.offsetX || paper.offsetY) {
++            cutPolygons = baseCutPolygons.map((entry) => ({
++              ...entry,
++              rings: entry.rings.map((ring) => ring.map((point) => ({
++                x: point.x + paper.offsetX, y: point.y + paper.offsetY,
++              }))),
++            }));
++          }
 +        }
-+        const mapPoint = (x: number, y: number) => {
-+          const p = baseMapPoint(x, y);
-+          return { x: p.x + offsetX, y: p.y + offsetY };
-+        };
          const doc = new jsPDF({
            unit: 'mm',
            format: [widthMm, heightMm],
+           orientation: widthMm >= heightMm ? 'landscape' : 'portrait',
+         });
++        if (heightAnnotations.length > 0) assertPdfPageSize(doc, widthMm, heightMm);
+ 
+         const raster = await rasterizeReferenceLayer(referenceSnapshot, widthMm, heightMm, mapPoint);
+         if (raster) doc.addImage(raster, 'PNG', 0, 0, widthMm, heightMm);
+@@ -985,11 +1030,13 @@ export function createDrawingExport({
+         doc.setLineDashPattern([], 0);
+         drawElementTagsPdf(doc, tagSnapshot, mapPoint);
+         drawDimensionsPdf(doc, dimensionSnapshot, mapPoint);
+-        doc.setFontSize(7);
+-        doc.setTextColor('#174a68');
+-        for (const annotation of heightAnnotations) {
+-          const point = mapPoint(annotation.position.x, annotation.position.y);
+-          if (isPagePoint(point)) doc.text(annotation.text, point.x, point.y);
++        if (heightAnnotations.length > 0) {
++          doc.setFontSize(7);
++          doc.setTextColor('#174a68');
++          for (const annotation of heightAnnotations) {
++            const point = mapPoint(annotation.position.x, annotation.position.y);
++            if (isPagePoint(point)) doc.text(annotation.text, point.x, point.y);
++          }
+         }
+         // v1 has no title block, so this filename is the SOLE record of the
+         // sheet's scale — round-tripping through Math.round() here would

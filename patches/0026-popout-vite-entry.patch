@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/vite.config.ts b/apps/viewer/vite.config.ts
-index 0e273db7e56fba73e3de6b685cfcde9de8f5093d..bf7ebaeb9bafd83f2868df5ac1c6d128ec76c70e 100644
+index 825b452bdb7d149f8232cbaaf08faa706c3ddbe5..f92292b17b815acfe9b9731d82d48092bd2c636c 100644
 --- a/apps/viewer/vite.config.ts
 +++ b/apps/viewer/vite.config.ts
-@@ -336,6 +336,17 @@ export default defineConfig({
+@@ -325,6 +325,17 @@ export default defineConfig(({ mode }) => {
          // asset pipeline through the real build so
          // tests/e2e/laz-wasm.e2e.spec.ts can assert it end to end (#2097).
          lazProbe: path.resolve(__dirname, 'laz-probe.html'),
@@ -19,4 +19,4 @@ index 0e273db7e56fba73e3de6b685cfcde9de8f5093d..bf7ebaeb9bafd83f2868df5ac1c6d128
 +        popout: path.resolve(__dirname, 'popout.html'),
        },
        output: {
-         manualChunks(id) {
+         // Rolldown's legacy `manualChunks` pulls every dependency of a chunk's

@@ -22,37 +22,20 @@ import { useViewerStore } from '@/store';
 import { useTranslation } from '@/i18n';
 import { ActivityBar } from './ActivityBar';
 import { SidebarPanelHost } from './SidebarPanelHost';
-// Trassia overlay (not upstream) — Paket V-UX (P4): der Platz, in den das
-// Schnittpanel andockt. Eine eigene Zeile ueber dem Panelwirt, damit es weder
-// Drape noch Kubatur noch die Attribute verdraengt.
 import { ChSectionDockSlot } from '@/components/viewer/ChSectionDockSlot';
+import { sidebarPaneDrawn } from '@/lib/panels/rendered-panels';
+import { useEmptyStartFoldsSidebarPane } from '../welcome/useEmptyStartFold';
 
 const ACTIVITY_BAR_PX = 48; // w-12
-// Mirrors the clamp in sidebarSlice so the live drag matches what is persisted.
 const MIN_WIDTH_PCT = 14;
-const MAX_WIDTH_PCT = 60;
-// Trassia (Paket V-PFLEGE, Teil A): Pixelboden neben dem Prozentboden.
-//
-// Ein Prozentboden skaliert falsch herum — je breiter der Bildschirm, desto
-// breiter das erzwungene Minimum, obwohl der Platzbedarf des Inhalts in
-// Pixeln konstant ist. 14 % sind auf 1600 px 224 px, auf 2560 px aber 358 px
-// und auf 3440 px 482 px. Auf einem grossen Schirm liess sich die Leiste
-// dadurch nicht mehr schmal ziehen, ohne dass ein Grund sichtbar war (Marcos
-// Befund vom 2026-09-01).
-//
-// 240 px ist gemessen, nicht geraten: unterhalb davon laeuft im schmalsten
-// Upstream-Panel (Clash) die Knopfreihe aus dem Kasten — Protokoll
-// Business/tests/20260903_ui-dichte/audit-vorher.json.
-//
-// Der Boden ist das MINIMUM aus beiden Werten, nie das Maximum: auf schmalen
-// Fenstern bleibt alles wie bisher (dort sind 14 % ohnehin weniger als
-// 240 px), auf breiten wird der Prozentboden geloest. Diese Aenderung kann
-// den erlaubten Bereich also nur vergroessern, nie verkleinern.
 const MIN_WIDTH_PX = 240;
+const MAX_WIDTH_PCT = 60;
 
 export function SidebarDock() {
   const { t } = useTranslation();
   const mode = useViewerStore((s) => s.sidebarMode);
+  // The start screen folds a Properties-only pane; the stored mode is untouched.
+  const foldedForStart = useEmptyStartFoldsSidebarPane();
   const widthPct = useViewerStore((s) => s.sidebarWidthPct);
   const setSidebarWidthPct = useViewerStore((s) => s.setSidebarWidthPct);
 
@@ -82,16 +65,15 @@ export function SidebarDock() {
       const parent = rootRef.current?.parentElement;
       if (!parent) return;
       const rect = parent.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      // The limit depends on the measured dock row, not the persisted percentage.
+      const minPct = Math.min(MIN_WIDTH_PCT, (MIN_WIDTH_PX / rect.width) * 100);
       const move = (ev: MouseEvent) => {
         // The content pane's right edge is fixed against the activity bar;
         // dragging its left edge sets the width. Clamp live to the same range
         // the store enforces so the pane doesn't rubber-band past the limits.
         const contentPx = rect.right - ACTIVITY_BAR_PX - ev.clientX;
         const pct = (contentPx / rect.width) * 100;
-        // Trassia: der kleinere der beiden Boeden gewinnt (siehe MIN_WIDTH_PX).
-        const minPct = rect.width > 0
-          ? Math.min(MIN_WIDTH_PCT, (MIN_WIDTH_PX / rect.width) * 100)
-          : MIN_WIDTH_PCT;
         setDragPct(Math.max(minPct, Math.min(MAX_WIDTH_PCT, pct)));
       };
       const teardown = () => {
@@ -122,24 +104,23 @@ export function SidebarDock() {
 
   return (
     <div ref={rootRef} className="flex h-full shrink-0">
-      {mode === 'expanded' && (
+      {sidebarPaneDrawn(mode, foldedForStart) && (
         <>
           {/* Resize handle */}
           <div
             onMouseDown={onResizeStart}
-            className="w-1.5 shrink-0 cursor-col-resize bg-border hover:bg-primary/50 active:bg-primary/70 transition-colors"
+            className="shell-splitter-v"
+            data-dragging={dragPct !== null}
             role="separator"
             aria-orientation="vertical"
             aria-label={t('shellChrome.sidebarDock.resizeAriaLabel')}
           />
           <div
-            className="h-full min-w-0 overflow-hidden panel-container flex flex-col"
+            className="shell-dock-right h-full min-w-0 overflow-hidden panel-container flex flex-col"
             style={{ width: contentPx ?? `${effectivePct}%` }}
           >
             <ChSectionDockSlot />
-            <div className="min-h-0 flex-1">
-              <SidebarPanelHost />
-            </div>
+            <div className="min-h-0 flex-1"><SidebarPanelHost /></div>
           </div>
         </>
       )}

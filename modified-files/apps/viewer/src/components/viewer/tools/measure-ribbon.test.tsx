@@ -186,7 +186,7 @@ function assertNoMeasurePanel(container: HTMLElement, name: string): void {
   assert.deepEqual(modeControls(container), [], `${name} hosts measurement UI of its own`);
   assert.deepEqual(panelTabs(container), [], `${name} hosts measurement UI of its own`);
   assert.equal(
-    container.textContent?.includes('Drag to measure'),
+    container.textContent?.includes('Click to set the start point'),
     false,
     `${name} hosts measurement UI of its own`,
   );
@@ -297,7 +297,6 @@ beforeEach(() => {
     activeTool: 'measure',
     measurements: [],
     activeMeasurement: null,
-    pendingMeasurePoint: null,
     measureReferencePoint: null,
     selectedEntity: null,
     selectedEntitiesSet: new Set<string>(),
@@ -319,7 +318,7 @@ describe('measure tool is hosted once for the ribbon (#5874)', () => {
     useViewerStore.setState({ activeTool: 'select' });
     const container = render();
     assert.deepEqual(modeControls(container), []);
-    assert.equal(container.textContent?.includes('Drag to measure'), false);
+    assert.equal(container.textContent?.includes('Click to set the start point'), false);
   });
 
   it("the bar's List button opens the measurements panel in the sidebar (#5502)", () => {
@@ -1011,18 +1010,13 @@ describe('guard sanity', () => {
 
       const container = renderNode(<PropertiesPanel />);
       const text = container.textContent ?? '';
-      // Trassia: the NUMBERS this test is about are unchanged — the frame
-      // resolution it pins is untouched. The LETTERS are not: this row used to
-      // print `E 12.000  N 16.000  Z 33.000`, i.e. model coordinates under
-      // national-coordinate labels, which on a georeferenced Swiss model was
-      // wrong by the whole map anchor (QA 2026-08-26, B-01). The model
-      // coordinate is now labelled `X / Y / Z`, and `E / N / H` is reserved
-      // for a coordinate that has actually been through the IfcMapConversion.
-      assert.match(text, /X\s12\.000\s+Y\s16\.000\s+Z\s33\.000/, `wrong world centre: ${text.slice(0, 200)}`);
-      // The fixture models carry no IfcMapConversion, so there must be no
-      // projected row and no CRS chip — only the honest `local` marker.
-      assert.match(text, /local/, `expected the un-georeferenced marker: ${text.slice(0, 200)}`);
-      assert.doesNotMatch(text, /EPSG:/, `no CRS may be claimed here: ${text.slice(0, 200)}`);
+      // `\s` and not a literal space: `CoordVal` separates the axis letter from
+      // its value with U+2009 THIN SPACE, which an ASCII space does not match.
+      // This federation has no map conversion: the model centre keeps its
+      // numerical reference but may not be labelled as projected coordinates.
+      assert.match(text, /X\s12\.000\s+Y\s16\.000\s+Z\s33\.000/, `wrong model centre: ${text.slice(0, 200)}`);
+      assert.match(text, /local/);
+      assert.doesNotMatch(text, /EPSG:/);
     });
   });
 

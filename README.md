@@ -7,7 +7,20 @@ modified** in its deployment of the IFC-Lite viewer application
 It exists to satisfy the source-availability obligation of the MPL 2.0 (§3.2) for the
 executable form served at https://viewer.trassia.com.
 
-## Contents
+## Current source offer — IFC-Lite 13.1.0
+
+The 90 numbered patches in `patches/` apply in order to IFC-Lite upstream commit
+`1d53ce243af25c7144c1fdb9bac45eea31c434ed` (tag `@ifc-lite/wasm@13.1.0`).
+The resulting tree is `1c346f15f11a20a10ad48578c23c93164b7c0585`. The 144 files in
+`modified-files/` contain the full resulting text of every patch target.
+`LICENSE` contains the unchanged Mozilla Public License 2.0.
+
+## Historical source-offer notes — IFC-Lite 10.3.0
+
+The list and notes below describe the previous offer. Its original files are
+available at commit `49470e1dde8099c3056445b7766103c70fe41efb`.
+
+### Previous contents
 
 - `patches/` — the exact patches (`0001`–`0099`, numbers no longer in use are listed below)
   applied, in numeric order, on top of upstream commit

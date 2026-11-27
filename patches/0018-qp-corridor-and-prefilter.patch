@@ -1,134 +1,60 @@
 diff --git a/apps/viewer/src/hooks/useDrawingGeneration.ts b/apps/viewer/src/hooks/useDrawingGeneration.ts
-index ca9900a309ce4599410dcc1eea9300cb10279c0c..314ddbcbca12892607399be660c586973ff50388 100644
+index 1fb4f2e78a1d8baa76aec3a1250b4f3ff5bbab9a..588aee8b997cc1ff233d68ddea37363065186648 100644
 --- a/apps/viewer/src/hooks/useDrawingGeneration.ts
 +++ b/apps/viewer/src/hooks/useDrawingGeneration.ts
-@@ -39,6 +39,11 @@ import * as IfcWasm from '@ifc-lite/wasm';
- import { customPlaneCenter, useViewerStore } from '@/store';
- import { notifyDrawing2DSectionConfig, consumeRestoredSectionConfig } from './useDrawing2DPersistence.js';
- import { buildModelViewIdFilter, selectModelMeshes } from '@/lib/type-view-visibility';
-+// Trassia overlay (not upstream) — Querprofil-Ansicht, Paket V-QP.
-+// Der Korridor begrenzt die ZEICHNUNG (siehe lib/ch/qp-corridor.ts), der
-+// Vorfilter die Dreiecke, die ueberhaupt geschnitten werden.
+@@ -144,6 +144,9 @@ interface UseDrawingGenerationResult {
+   isRegenerating: boolean;
+ }
+ 
 +import { chQpShapeDrawing, useChQpView } from '@/lib/ch/qp-corridor';
-+import { corridorPlanRect, narrowMeshesToCorridor } from '@/lib/ch/qp-prefilter';
- import { isTypeVisible, type TypeVisibilityGate } from '@/store/typeVisibilityFilter';
- import { roomDrawingSymbolic } from '@/lib/collab/room-drawing-symbolic';
- import { ifcToViewerAxes } from '@/lib/geo/coordinate-frame';
-@@ -154,6 +159,9 @@ export function useDrawingGeneration({
-   setDrawingProgress,
-   setDrawingError,
- }: UseDrawingGenerationParams): UseDrawingGenerationResult {
-+  // Trassia: Korridorbreite und Ueberhoehung. Als Abonnement, damit eine
-+  // geaenderte Breite dieselbe Neuberechnung ausloest wie eine neue Station.
-+  const chQp = useChQpView();
- 
-   // The legacy primary path can publish only `loading: false` when it finishes
-   // without exact RTC metadata. Subscribe to all provenance publication
-@@ -544,6 +552,22 @@ export function useDrawingGeneration({
-         );
-       }
- 
-+      // Trassia (Paket V-QP): raeumlicher Vorfilter auf den Querprofil-Korridor.
-+      // Ohne ihn laeuft der CPU-Cutter je Station ueber jedes Dreieck des
-+      // Gelaendes, obwohl der Korridor davon ein 60-m-Streifen ist; MIT ihm
-+      // haengt der Preis eines Stationswechsels an der Korridorgroesse statt an
-+      // der Modellgroesse. Kein Korridor oder keine eigene Ebene => unveraendert.
-+      if (chQp.halfWidthM !== null && sectionPlane.custom) {
-+        meshesToProcess = narrowMeshesToCorridor(
-+          meshesToProcess,
-+          corridorPlanRect(
-+            sectionPlane.custom.pickedAt,
-+            sectionPlane.custom.normal,
-+            chQp.halfWidthM,
-+          ),
-+        );
-+      }
++import { corridorPlanRect, chCorridorDrawingSource } from '@/lib/ch/qp-prefilter';
 +
-       // If all meshes were filtered out by visibility, clear the drawing
-       if (meshesToProcess.length === 0) {
-         setDrawing(null);
-@@ -871,6 +895,9 @@ export function useDrawingGeneration({
+ export function useDrawingGeneration({
+   geometryResult,
+   ifcDataStore,
+@@ -164,6 +167,7 @@ export function useDrawingGeneration({
+ }: UseDrawingGenerationParams): UseDrawingGenerationResult {
+   const structuralViewMode = useViewerStore((s) => s.structuralViewMode);
+   const retypedClasses = useRetypedClasses();
++  const chQp = useChQpView();
+   // Subscribe to all provenance channels so pending → standalone/explicit retriggers the drawing.
+   const { context: drawingRtcContext, key: drawingRtcContextKey } =
+     useDrawingRtcContext(ifcDataStore);
+@@ -559,8 +563,11 @@ export function useDrawingGeneration({
+ 
+       // GPU-instanced occurrences are cut like flat geometry, one entity (or
+       // one bounded read-back group) at a time; they were missing before.
++      const corridor = chQp.halfWidthM !== null && sectionPlane.custom
++        ? corridorPlanRect(sectionPlane.custom.pickedAt, sectionPlane.custom.normal, chQp.halfWidthM)
++        : null;
+       const result = drawingWithMaterialLayerFills(await generator.generateFromSource(
+-        geometry.source(keep, { instanced: true }),
++        chCorridorDrawingSource(geometry.source(keep, { instanced: true }), corridor),
+         config,
+         {
+           // Always classify projection occlusion. Hidden Lines controls whether
+@@ -833,6 +840,7 @@ export function useDrawingGeneration({
  
          completedDrawing = hybridDrawing;
        }
-+      // Trassia: shape both normal and hybrid output before publishing the
-+      // same completed drawing to the store and generation bookkeeping.
 +      completedDrawing = chQpShapeDrawing(completedDrawing, chQp, Boolean(sectionPlane.custom));
-       setDrawing(completedDrawing); markActiveDrawingGenerationCompleted(completedDrawing);
+       setDrawing(completedDrawing, sectionPlane); markActiveDrawingGenerationCompleted(completedDrawing);
  
        // Remember the SectionConfig that produced this view so the markup
-@@ -889,6 +916,7 @@ export function useDrawingGeneration({
-       generator?.dispose();
-     }
-   }, [
+@@ -869,6 +877,7 @@ export function useDrawingGeneration({
+     models,
+     drawingRtcContext,
+     drawingRtcContextKey,
 +    chQp,
-     geometryResult,
-     ifcDataStore,
-     sectionPlane,
-@@ -911,12 +939,15 @@ export function useDrawingGeneration({
-   if (!queueRef.current) queueRef.current = createDrawingRequestQueue();
-   const queue = queueRef.current;
-   const [isRegenerating, setIsRegenerating] = useState(false);
-+  // Trassia (NM1): laufende Anfragen, damit das Oeffnen des Panels keine zweite
-+  // Erzeugung neben einer schon laufenden startet.
-+  const chLaufend = useRef(0);
-   const generateDrawing = useCallback((isRegenerate = false) => {
--    markActiveDrawingGenerationStarted(); return queue.request(async isCurrent => {
-+    markActiveDrawingGenerationStarted(); chLaufend.current += 1; return queue.request(async isCurrent => {
-       setIsRegenerating(isRegenerate);
-       try { await computeDrawing(isRegenerate, isCurrent); }
-       finally { setIsRegenerating(false); }
--    }); }, [computeDrawing, queue]);
-+    }).finally(() => { chLaufend.current -= 1; }); }, [computeDrawing, queue]);
-   const doRegenerate = useCallback(() => generateDrawing(true), [generateDrawing]);
- 
-   // Restore the persisted section cut on reload (issue #4153 gap):
-@@ -997,6 +1028,11 @@ export function useDrawingGeneration({
-   const drawingActive = panelVisible || (activeTool === 'section' && displayOptions.show3DOverlay);
-   const previousInputs = useRef<unknown[]>([]);
-   const wasActive = useRef(false);
-+  // Trassia (Pin 10.x, Tester-Befund NM1): der 2D-Knopf der Schnittleiste loescht
-+  // die Zeichnung und oeffnet das Panel. War die Erzeugung schon aktiv (3D-Overlay
-+  // des Schnittwerkzeugs), gab es kein `activated` — die Flaeche blieb leer bis
-+  // «Regenerate». Das Sichtbarwerden des Panels loest darum selbst aus.
-+  const wasPanelVisible = useRef(false);
-   const previousPlane = useRef('');
-   useEffect(() => () => {
-     queue.cancel();
-@@ -1004,8 +1040,11 @@ export function useDrawingGeneration({
-     previousInputs.current = [];
+     setDrawing,
+     setDrawingStatus,
+     setDrawingProgress,
+@@ -961,7 +970,7 @@ export function useDrawingGeneration({
    }, [queue]);
    useEffect(() => {
-+    // Trassia: `chQp.key` haengt mit im Ebenenschluessel. Eine geaenderte
-+    // Korridorbreite laesst die Ebene unveraendert — ohne diesen Anteil wuerde
-+    // das Panel die alte Zeichnung behalten und der Regler waere wirkungslos.
      const plane = JSON.stringify([sectionPlane.axis, sectionPlane.position, sectionPlane.flipped,
 -      sectionPlane.custom]);
 +      sectionPlane.custom, chQp.key]);
      const inputs = [geometryResult, geometryResult?.meshes.length, ifcDataStore,
-       displayOptions, typeVisibility, combinedHiddenIds, combinedIsolatedIds,
-       computedIsolatedIds, models, drawingRtcContextKey];
-@@ -1013,17 +1052,21 @@ export function useDrawingGeneration({
-     const planeChanged = plane !== previousPlane.current;
-     const activated = drawingActive && !wasActive.current;
-     const deactivated = !drawingActive && wasActive.current;
-+    // Nur wenn es nichts zu zeigen gibt und nichts unterwegs ist: ein zweiter
-+    // Betrachter einer fertigen Zeichnung braucht keine neue (Upstream-Test).
-+    const panelOpened = panelVisible && !wasPanelVisible.current && !drawing && chLaufend.current === 0;
-     previousInputs.current = inputs;
-     previousPlane.current = plane;
-     wasActive.current = drawingActive;
-+    wasPanelVisible.current = panelVisible;
-     if (!drawingActive) { if (deactivated) queue.cancel(); return; }
-     if (!geometryResult?.meshes.length) {
-       queue.cancel();
-       if (drawing) { setDrawing(null); setDrawingStatus('idle'); }
-       return;
-     }
--    if (activated || changed || planeChanged) {
--      const regenerate = !activated && !changed && planeChanged;
-+    if (activated || panelOpened || changed || planeChanged) {
-+      const regenerate = !activated && !panelOpened && !changed && planeChanged;
-       void generateDrawing(regenerate).catch(error => {
-         console.error('Automatic drawing request failed:', error);
-         setDrawingError(error instanceof Error ? error.message : 'Generation failed');
+       displayOptions, typeVisibility, structuralViewMode, retypedClasses, combinedHiddenIds, combinedIsolatedIds,
+       computedIsolatedIds, models, drawingRtcContextKey, isGeometryHeld(useViewerStore.getState()), instancedRevision];
