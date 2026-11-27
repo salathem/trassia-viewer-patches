@@ -1,0 +1,284 @@
+diff --git a/apps/viewer/src/lib/drawing/element-tag-export.ts b/apps/viewer/src/lib/drawing/element-tag-export.ts
+index d272440267850d70f56e805daf7f162ac5af9cd7..f946872e5464740fd6cc9d715812cd3bbae399be 100644
+--- a/apps/viewer/src/lib/drawing/element-tag-export.ts
++++ b/apps/viewer/src/lib/drawing/element-tag-export.ts
+@@ -6,6 +6,7 @@ import type { DXFUnderlayOptions, Drawing2D } from '@ifc-lite/drawing-2d';
+ import type { jsPDF } from 'jspdf';
+ import type { Point2D, TextAnnotation2D } from '@/store/slices/drawing2DSlice';
+ import { resolvedElementTags } from './element-tags';
++import { toStandardFontText } from '@/lib/document/standard-font-text';
+ 
+ export const escapeTagXml = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char]!);
+ 
+@@ -22,7 +23,8 @@ export function drawElementTagsPdf(doc: jsPDF, tags: readonly TextAnnotation2D[]
+   doc.setTextColor(0, 0, 0);
+   for (const tag of tags) {
+     const point = map(tag.position.x, tag.position.y);
+-    // Built-in PDF fonts support Latin-1 (including m²) but do not have ≈.
+-    doc.text(tag.text.replace(/≈/g, '~'), point.x, point.y);
++    // Built-in PDF fonts encode WinAnsi only: ≈ becomes ~, ș/ț/ă/č/ł keep their base letter.
++    // One code point above U+00FF would otherwise make jsPDF write the WHOLE string as two-byte garbage.
++    doc.text(toStandardFontText(tag.text).text, point.x, point.y);
+   }
+ }
+diff --git a/apps/viewer/src/lib/export/dimension-export.test.ts b/apps/viewer/src/lib/export/dimension-export.test.ts
+index 2ef95d428287fc4fa8930ccff481dc2736bc487e..edcfded8a6dfcd7efb6bac79ddeb4eade7f269e1 100644
+--- a/apps/viewer/src/lib/export/dimension-export.test.ts
++++ b/apps/viewer/src/lib/export/dimension-export.test.ts
+@@ -206,6 +206,14 @@ describe('dimension PDF export', () => {
+     assert.match(pdf, /\(4000\) Tj/);
+     assert.doesNotMatch(pdf, /\/Subtype \/Image/);
+   });
++
++  it('prints a readable label containing non-WinAnsi text (#11449)', () => {
++    const doc = new jsPDF({ unit: 'mm', format: [100, 100] });
++    const [dimension] = graphics([horizontal], 100);
++    const annotated = { ...dimension, text: { ...dimension.text, value: 'Lățime 4000' } };
++    drawDimensionsPdf(doc, [annotated], (x, y) => ({ x: x * 10, y: y * 10 }));
++    assert.match(doc.output(), /\(Latime 4000\) Tj/);
++  });
+ });
+ 
+ describe('placeDimensionText', () => {
+diff --git a/apps/viewer/src/lib/export/dimension-export.ts b/apps/viewer/src/lib/export/dimension-export.ts
+index e9d39bb804944c6146785e136c227b0fb4de13dd..2b9e9c6d85bd806137c17ab3e0d438411e6fd4e0 100644
+--- a/apps/viewer/src/lib/export/dimension-export.ts
++++ b/apps/viewer/src/lib/export/dimension-export.ts
+@@ -22,6 +22,7 @@ import type { jsPDF } from 'jspdf';
+ import { isDxfDimensionExportable } from '@ifc-lite/drawing-2d';
+ import type { Dimension2D } from '@/store/slices/drawing2DDimensions';
+ import { pdfRotatedTextStart } from './pdf-text-placement';
++import { toStandardFontText } from '@/lib/document/standard-font-text';
+ import {
+   dimensionGraphics,
+   type DimensionGraphics,
+@@ -145,10 +146,11 @@ export function drawDimensionsPdf(doc: jsPDF, graphics: readonly DimensionGraphi
+     // jsPDF applies `align`/`baseline` along the page axes, not along a
+     // rotated baseline, so place the start of the baseline centred along it
+     // and half a cap height down across it.
+-    const start = pdfRotatedTextStart(t, (t.angleDeg * Math.PI) / 180, doc.getTextWidth(g.text.value), t.size,
++    const label = toStandardFontText(g.text.value).text;
++    const start = pdfRotatedTextStart(t, (t.angleDeg * Math.PI) / 180, doc.getTextWidth(label), t.size,
+       'center', 'middle');
+     // jsPDF angles turn counter-clockwise as seen on the page.
+-    doc.text(g.text.value, start.x, start.y, { angle: -t.angleDeg });
++    doc.text(label, start.x, start.y, { angle: -t.angleDeg });
+   }
+   doc.restoreGraphicsState();
+ }
+diff --git a/apps/viewer/src/lib/export/drawing-vector-underlays.ts b/apps/viewer/src/lib/export/drawing-vector-underlays.ts
+index b2614a3d5dbd636f5b339bc0c26553aa8cbe44dd..48e33e65ada17c84c7ffc318db89dbcbbde1eeca 100644
+--- a/apps/viewer/src/lib/export/drawing-vector-underlays.ts
++++ b/apps/viewer/src/lib/export/drawing-vector-underlays.ts
+@@ -7,6 +7,7 @@ import type { DxfUnderlayRenderData } from '@/hooks/useDxfUnderlay';
+ import type { DXFUnderlayOptions } from '@ifc-lite/drawing-2d';
+ import type { jsPDF } from 'jspdf';
+ import { pdfRotatedTextStart } from './pdf-text-placement';
++import { toStandardFontText } from '@/lib/document/standard-font-text';
+ 
+ /** Map a DXF vertical justification onto an SVG dominant-baseline. */
+ function dxfValignToBaseline(valign: 'baseline' | 'bottom' | 'middle' | 'top'): string {
+@@ -93,7 +94,7 @@ export function drawDxfUnderlaysPdf(doc: jsPDF, underlays: readonly DxfUnderlayR
+         // jsPDF's align/baseline shift along the page axes, so each line's
+         // baseline start is placed along/across the rotated baseline here,
+         // stacking lines about the block's attachment like the canvas renderer.
+-        const lines = text.text.split('\n');
++        const lines = toStandardFontText(text.text).text.split('\n');
+         lines.forEach((line, i) => {
+           if (!line) return;
+           // Aligned/fit text stretches horizontally (PDF Tz); justification uses the stretched width.
+diff --git a/apps/viewer/src/lib/export/pdf-diacritics.test.ts b/apps/viewer/src/lib/export/pdf-diacritics.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..9a90b13a2f5edfae2d834e789097323e7a5d3d8c
+--- /dev/null
++++ b/apps/viewer/src/lib/export/pdf-diacritics.test.ts
+@@ -0,0 +1,97 @@
++/* This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
++
++/**
++ * Text that reaches the PDF writers' standard fonts (WinAnsi). jsPDF encodes a
++ * string holding any code point above U+00FF as two bytes per character, so
++ * ONE `ș` turns the whole string (ASCII included) into NUL-interleaved bytes.
++ * These tests drive the exported writers and read the text operators back.
++ */
++import { describe, it } from 'node:test';
++import assert from 'node:assert/strict';
++import { jsPDF } from 'jspdf';
++import type { ColumnDefinition, ListRow } from '@ifc-lite/lists';
++import type { DxfUnderlayRenderData } from '@/hooks/useDxfUnderlay.js';
++import type { TextAnnotation2D } from '@/store/slices/drawing2DSlice';
++import { drawElementTagsPdf } from '@/lib/drawing/element-tag-export';
++import { buildExportModel } from '@/lib/lists/export/model';
++import { createListArtifact } from '@/lib/lists/export';
++import { drawDxfUnderlaysPdf } from './drawing-vector-underlays.js';
++import { browserReportSeams } from './report/generate-report-pdf.js';
++
++const ROOM = 'Sală de ședințe – Etaj 2, 25 m²';
++// ă ș ț are outside WinAnsi, so they keep their base letter; the en dash and m² are WinAnsi and stay.
++// jsPDF writes the WinAnsi byte for the en dash (0x96) and m² (0xB2) as one raw character each.
++const PRINTED = 'Sala de sedinte \x96 Etaj 2, 25 m²';
++
++function tag(text: string): TextAnnotation2D {
++  return { id: 'space', position: { x: 1, y: 1 }, text, fontSize: 10,
++    color: '#000000', backgroundColor: '#ffffff', borderColor: '#000000' };
++}
++
++/** The string operands of every Tj in a PDF's raw text, as jsPDF wrote them. */
++function shown(raw: string): string[] {
++  return [...raw.matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)].map((m) => m[1]);
++}
++/** What a viewer would show: the operand with its escapes undone. */
++function printed(operand: string): string {
++  return operand.replace(/\\(.)/g, '$1');
++}
++function assertPrinted(raw: string, expected: string): void {
++  const found = shown(raw).map(printed);
++  assert.ok(found.includes(expected), `expected a Tj of ${JSON.stringify(expected)}, got ${JSON.stringify(found)}`);
++  assert.ok(!raw.includes('\u0000'), 'no NUL-interleaved (two-byte) text in the page');
++}
++
++describe('PDF text with characters outside WinAnsi (#11449)', () => {
++  it('element tags (space names) print readable text', () => {
++    const doc = new jsPDF();
++    drawElementTagsPdf(doc, [tag(ROOM)], (x, y) => ({ x, y }));
++    assertPrinted(doc.output(), PRINTED);
++  });
++
++  it('DXF underlay text prints readable text', () => {
++    const doc = new jsPDF({ unit: 'mm', format: [100, 100] });
++    const data: DxfUnderlayRenderData[] = [{ id: 'dxf', opacity: 1, lines: [], fills: [], texts: [{
++      x: 2, y: 3, dirX: 1, dirY: 0, height: 0.5, text: ROOM, color: '#000000', align: 'left', valign: 'baseline' }] }];
++    drawDxfUnderlaysPdf(doc, data, (x, y) => ({ x: 50 + x * 10, y: 50 - y * 10 }), 10);
++    assertPrinted(doc.output(), PRINTED);
++  });
++
++  it('list (schedule) PDF prints title, headers and cells readable', async () => {
++    const columns: ColumnDefinition[] = [{ id: 'name', source: 'attribute', propertyName: 'Nume' }];
++    const rows: ListRow[] = [{ entityId: 1, modelId: 'm', values: [ROOM] }];
++    const model = buildExportModel({ title: 'Săli și birouri', columns, rows, numericCols: [false], columnWidths: [120], generatedAt: 'now' });
++    const { blob } = await createListArtifact('pdf', model);
++    const raw = Buffer.from(await blob.arrayBuffer()).toString('latin1');
++    const found = shown(raw).map(printed);
++    assert.ok(found.includes(PRINTED), JSON.stringify(found));
++    assert.ok(found.includes('Sali si birouri'), JSON.stringify(found));
++    assert.ok(!raw.includes('\u0000'));
++  });
++
++  it('report PDF text and tables print readable text', async (t) => {
++    // The seam builds a DOMParser eagerly; no chart SVG is drawn here, so a bare stand-in will do.
++    if (typeof DOMParser === 'undefined') {
++      Object.defineProperty(globalThis, 'DOMParser', { value: class {}, configurable: true });
++      t.after(() => Reflect.deleteProperty(globalThis, 'DOMParser'));
++    }
++    const doc = await (await browserReportSeams(null)).createDoc('a4', 'portrait');
++    assert.ok(doc.textWidth);
++    assert.equal(doc.textWidth(ROOM), doc.textWidth('Sala de sedinte – Etaj 2, 25 m²'));
++    doc.text(ROOM, 40, 40);
++    doc.table({ startY: 60, margin: { left: 40, right: 40 }, head: [['Etaj', 'Număr']], body: [[ROOM, '3']] });
++    const raw = Buffer.from(await doc.output().arrayBuffer()).toString('latin1');
++    const found = shown(raw).map(printed);
++    assert.ok(found.includes(PRINTED), JSON.stringify(found));
++    assert.ok(found.includes('Numar'), JSON.stringify(found));
++    assert.ok(!raw.includes('\u0000'));
++  });
++
++  it('control: WinAnsi-only text is untouched', () => {
++    const doc = new jsPDF();
++    drawElementTagsPdf(doc, [tag('Büro Größe 25 m²')], (x, y) => ({ x, y }));
++    assertPrinted(doc.output(), 'Büro Größe 25 m²');
++  });
++});
+diff --git a/apps/viewer/src/lib/export/report/generate-report-pdf.ts b/apps/viewer/src/lib/export/report/generate-report-pdf.ts
+index 2c61399915d1f583c9d91834b9fa2a6594f8c5ae..971fb2218b816faacdca314e4340ab740d015323 100644
+--- a/apps/viewer/src/lib/export/report/generate-report-pdf.ts
++++ b/apps/viewer/src/lib/export/report/generate-report-pdf.ts
+@@ -18,6 +18,7 @@ import { drawChartSourceMessage } from './render-source-message.js';
+ import { renderChartSvg, type Aggregation, type ChartTheme, DEFAULT_THEME } from '@ifc-lite/charts';
+ import { composeReport, REPORT_MARGIN, type ComposeReportInput, type ReportChartBlock, type ReportLayout } from './compose.js';
+ import type { SnapshotCapture } from './snapshots.js';
++import { toStandardFontText } from '@/lib/document/standard-font-text';
+ 
+ /** The subset of jsPDF the generator drives; a test records the calls. */
+ export interface ReportDoc {
+@@ -109,9 +110,9 @@ export async function browserReportSeams(capture: SnapshotCapture | null, theme:
+           if (typeof grayOrRgb === 'string') doc.setTextColor(grayOrRgb);
+           else doc.setTextColor(grayOrRgb);
+         },
+-        text: (t, x, y) => { doc.text(t, x, y); },
++        text: (t, x, y) => { doc.text(toStandardFontText(t).text, x, y); },
+         fillRect: (x, y, w, h, color) => { doc.setFillColor(color); doc.rect(x, y, w, h, 'F'); },
+-        textWidth: (t) => doc.getTextWidth(t),
++        textWidth: (t) => doc.getTextWidth(toStandardFontText(t).text),
+         addImage: (bytes, format, x, y, w, h) => { doc.addImage(bytes, format, x, y, w, h); },
+         svg: async (svg, x, y, w, h) => {
+           const { svg2pdf } = await import('svg2pdf.js/dist/svg2pdf.es.min.js');
+@@ -139,7 +140,9 @@ export async function browserReportSeams(capture: SnapshotCapture | null, theme:
+             ? Object.fromEntries(columns.map((c, i) => [i, { halign: c.align, cellWidth: c.width }]))
+             : { 1: { halign: 'right' }, 2: { halign: 'right' } };
+           autoTable(doc, {
+-            startY, margin: { ...margin, top: REPORT_MARGIN, bottom: REPORT_MARGIN }, head, body,
++            startY, margin: { ...margin, top: REPORT_MARGIN, bottom: REPORT_MARGIN },
++            head: head.map((row) => row.map((c) => toStandardFontText(c).text)),
++            body: body.map((row) => row.map((c) => toStandardFontText(c).text)),
+             // `pageBreak: 'avoid'` is the belt to `AUTOTABLE_ROW_HEIGHT`: the document composer only
+             // ever hands over a chunk that fits.
+             styles: { fontSize: 8 * scale, cellPadding: 2 * scale, minCellHeight: AUTOTABLE_ROW_HEIGHT * scale, overflow: 'ellipsize', lineColor: [226, 232, 240], lineWidth: 0.5 * scale },
+diff --git a/apps/viewer/src/lib/lists/export/pdf.ts b/apps/viewer/src/lib/lists/export/pdf.ts
+index 076f495a707f00ed59006af162fb89956ef125bf..382db512cd46cbbb88cdba6d50d62226fc8e5571 100644
+--- a/apps/viewer/src/lib/lists/export/pdf.ts
++++ b/apps/viewer/src/lib/lists/export/pdf.ts
+@@ -3,12 +3,16 @@
+  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ 
+ import type { CellValue } from '@ifc-lite/lists';
++import { toStandardFontText } from '@/lib/document/standard-font-text';
+ import { displayCell, groupHeaderLabel, totalsRowCells, type ExportModel } from './model';
+ 
+ /** Quality tabular PDF report: title + meta, dark header, grouped sections
+  *  (bold group rows carrying per-group count + subtotals), right-aligned
+  *  numerics, a grand-total foot, and page numbers. */
+ export async function toPdf(model: ExportModel): Promise<Blob> {
++  // The standard PDF fonts are WinAnsi: text outside it (ș ț ă č ł …) is printed with its base letter, never
++  // handed to jsPDF raw, which would write the whole string as two-byte garbage.
++  const pdfText = (s: string) => toStandardFontText(s).text;
+   const { jsPDF } = await import('jspdf');
+   const autoTable = (await import('jspdf-autotable')).default;
+ 
+@@ -20,13 +24,13 @@ export async function toPdf(model: ExportModel): Promise<Blob> {
+   const doc = new jsPDF({ orientation: landscape ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' });
+ 
+   doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+-  doc.text(model.title || 'List', 40, 42);
++  doc.text(pdfText(model.title || 'List'), 40, 42);
+   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(130);
+-  doc.text(`${model.totals.count.toLocaleString()} elements · ${model.generatedAt}`, 40, 58);
++  doc.text(pdfText(`${model.totals.count.toLocaleString()} elements · ${model.generatedAt}`), 40, 58);
+   doc.setTextColor(0);
+ 
+-  const head = [cols.map((c) => c.label)];
+-  const cell = (vals: CellValue[], i: number) => displayCell(vals[i]);
++  const head = [cols.map((c) => pdfText(c.label))];
++  const cell = (vals: CellValue[], i: number) => pdfText(displayCell(vals[i]));
+   const body: Array<Array<string | { content: string; styles: Record<string, unknown> }>> = [];
+ 
+   if (model.schedule) {
+@@ -36,7 +40,7 @@ export async function toPdf(model: ExportModel): Promise<Blob> {
+     // level and carry their own count; member rows sit on leaf groups only.
+     for (const g of model.groups) {
+       body.push(model.columns.map((c, i) => ({
+-        content: i === 0 ? groupHeaderLabel(g) : (c.summed ? displayCell(g.sums[c.id]) : ''),
++        content: pdfText(i === 0 ? groupHeaderLabel(g) : (c.summed ? displayCell(g.sums[c.id]) : '')),
+         styles: { fontStyle: 'bold', fillColor: [226, 232, 240] as unknown as number[] },
+       })));
+       for (const r of g.rows) body.push(model.columns.map((_, i) => cell(r, i)));
+@@ -46,7 +50,7 @@ export async function toPdf(model: ExportModel): Promise<Blob> {
+   }
+ 
+   const foot = model.sumColumnIds.length > 0
+-    ? [totalsRowCells(model, cols, `Total (${model.totals.count})`).map(displayCell)]
++    ? [totalsRowCells(model, cols, `Total (${model.totals.count})`).map((v) => pdfText(displayCell(v)))]
+     : undefined;
+ 
+   const columnStyles: Record<number, { halign: 'right' }> = {};

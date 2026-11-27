@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/EnvironmentPanel.tsx b/apps/viewer/src/components/viewer/EnvironmentPanel.tsx
-index 143c0c43a298632901196608d20c7a34002220ef..5ebf10dc208881c8d30f87036ca12e6e9a26806a 100644
+index f9498c4470fc9f06c5d4180f327b9959e1772b86..3be0dd39a4d1c808eadf8c821f4c5b413966ff72 100644
 --- a/apps/viewer/src/components/viewer/EnvironmentPanel.tsx
 +++ b/apps/viewer/src/components/viewer/EnvironmentPanel.tsx
-@@ -29,6 +29,9 @@ import { cn } from '@/lib/utils';
+@@ -30,6 +30,9 @@ import { cn } from '@/lib/utils';
  import type { CesiumDataSource } from '@/store/slices/cesiumSlice';
  import { CustomBasemapEditor } from './CustomBasemapEditor';
  import { CustomTilesetEditor } from './CustomTilesetEditor';
@@ -12,7 +12,7 @@ index 143c0c43a298632901196608d20c7a34002220ef..5ebf10dc208881c8d30f87036ca12e6e
  import type { SolarSweepMode } from '@/store/slices/solarSlice';
  import { LIGHTING_PRESETS, LIGHTING_PRESET_ORDER, isLightingPresetId } from '@/lib/lighting-presets';
  import { LightingTrimControls } from './LightingTrimControls';
-@@ -143,23 +146,34 @@ export function EnvironmentPanel({ onClose }: EnvironmentPanelProps) {
+@@ -144,23 +147,34 @@ export function EnvironmentPanel({ onClose }: EnvironmentPanelProps) {
              {/* Base map — pick the real-world backdrop. Photorealistic can
                  be overwhelming; the plain OSM map is a simple flat
                  alternative (#1744). Lives here (not just in the sun study)

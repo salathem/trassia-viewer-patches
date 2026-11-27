@@ -19,17 +19,18 @@
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useViewerStore } from '@/store';
-import { chQueryTerrainHeight } from '@/lib/ch/kontext/terrain-policy';
+import { CH_AUTOMATIC_TERRAIN_HEIGHT, chQueryTerrainHeight } from '@/lib/ch/kontext/terrain-policy';
+import { chSwisstopoSr } from '@/lib/ch/kontext/swisstopo-hoehe';
 import type { MapConversion, ProjectedCRS } from '@ifc-lite/parser';
 import type { CoordinateInfo } from '@ifc-lite/geometry';
 import { createCesiumBridge, type CesiumBridge } from '@/lib/geo/cesium-bridge';
 import {
   computeCesiumPlacement,
-  shouldPreferOrthometricTerrain,
   shouldApplyGeoidUndulation,
   orthometricTargetForTerrain,
 } from '@/lib/geo/cesium-placement';
-import { egm96Undulation } from '@/lib/geo/egm96-undulation';
+import { egm96Undulation } from '@ifc-lite/geo';
+import { bendsAwayFromAnchorPlane } from '@/lib/geo/globe-placement';
 import { holdCameraY, type ViewerHeightFrame } from '@/lib/geo/viewer-up-scale';
 // Trassia (V-WELT-FIX-2): in dieser Szene ist die Cesium-Hoehenachse LN02.
 import { chCesiumGeoidAnteil } from '@/lib/ch/kontext/hoehenbezug';
@@ -74,12 +75,15 @@ export function useCesiumBridge({
   storeyElevations,
 }: UseCesiumBridgeParams): UseCesiumBridgeResult {
   const terrainEnabled = useViewerStore((s) => s.cesiumTerrainEnabled);
+  const sourceModelId = useViewerStore((s) => s.cesiumSourceModelId);
   const heightsAreEllipsoidal = useViewerStore((s) => s.cesiumHeightsAreEllipsoidal);
   const dataSource = useViewerStore((s) => s.cesiumDataSource);
   const setCesiumTerrainHeight = useViewerStore((s) => s.setCesiumTerrainHeight);
   const setCesiumTerrainSource = useViewerStore((s) => s.setCesiumTerrainSource);
   const setCesiumTerrainSaveHeight = useViewerStore((s) => s.setCesiumTerrainSaveHeight);
   const setCesiumTerrainClipY = useViewerStore((s) => s.setCesiumTerrainClipY);
+  const globePlacement = useViewerStore((s) => s.cesiumGlobePlacement);
+  const setGlobePlacementStatus = useViewerStore((s) => s.setCesiumGlobePlacementStatus);
   // Last-known placement altitude (in metres) used to keep the user's WORLD
   // camera position stable across bridge rebuilds. When the user toggles the
   // clamp or edits OrthogonalHeight, the model placement changes and the
@@ -87,6 +91,7 @@ export function useCesiumBridge({
   // camera Y by the inverse so the user perceives the model moving instead
   // of the camera being dragged along.
   const prevPlacementRef = useRef<ViewerHeightFrame | null>(null);
+  const prevSourceModelRef = useRef(sourceModelId);
 
   // Tracks bridge readiness as state (not just a ref) so dependants re-run.
   const [bridgeVersion, setBridgeVersion] = useState(0);
@@ -107,6 +112,10 @@ export function useCesiumBridge({
   //   5. Push terrain-derived state (height, clip Y) and
   //      install the bridge.
   useEffect(() => {
+    if (prevSourceModelRef.current !== sourceModelId) {
+      prevSourceModelRef.current = sourceModelId;
+      prevPlacementRef.current = null;
+    }
     // Clear old model/provider samples before any asynchronous bridge work.
     setCesiumTerrainHeight(null);
     setCesiumTerrainSource(null);
@@ -116,6 +125,7 @@ export function useCesiumBridge({
       bridgeRef.current = null;
       cameraBridgeRef.current = null;
       prevPlacementRef.current = null;
+      setGlobePlacementStatus(null);
       return;
     }
 
@@ -126,51 +136,64 @@ export function useCesiumBridge({
       const viewer = viewerRef.current;
       const lifetime = viewerLifetimeRef.current;
       if (!Cesium || !viewer || !lifetime?.isLive(viewer)) return;
+      const isCancelled = () => cancelled || !lifetime.isLive(viewer)
+        || useViewerStore.getState().cesiumSourceModelId !== sourceModelId;
 
       const cameraConversion = cameraMapConversion ?? mapConversion;
       const usesSeparateCameraBridge = cameraConversion !== mapConversion;
       const cameraTentative = await createCesiumBridge(
         cameraConversion, projectedCRS, coordinateInfo, lengthUnitScale,
-        undefined, heightsAreEllipsoidal,
+        undefined, heightsAreEllipsoidal, globePlacement,
       );
-      if (cancelled || !lifetime.isLive(viewer)) return;
+      if (isCancelled()) return;
       if (!cameraTentative) {
         bridgeRef.current = null;
         cameraBridgeRef.current = null;
         return;
       }
 
-      // Query terrain at the model's location. queryTerrainHeight tries
-      // Cesium's sync sources first (globe.getHeight, scene.sampleHeight),
-      // then Open-Meteo as a fast network fallback that works even with
-      // Google Photorealistic 3D Tiles (where there's no Cesium terrain
-      // provider for getHeight to read). Cached per-session.
-      const preferOrthometricTerrain = shouldPreferOrthometricTerrain(projectedCRS);
-      let terrainSample = null;
-      try {
-        // Trassia (Marco 2026-09-27, TODO 5/58): Gelaendehoehe vom swisstopo-
-        // Hoehendienst (LN02) am Modellursprung statt der Upstream-Kette.
-        terrainSample = await chQueryTerrainHeight({
-          lat: cameraTentative.modelOrigin.latitude,
-          lon: cameraTentative.modelOrigin.longitude,
-          projectedCRS,
-          isCancelled: () => cancelled || !lifetime.isLive(viewer),
-        });
-      }
-      catch (err) { console.warn('[CesiumOverlay] terrain query failed:', err); }
-      if (cancelled || !lifetime.isLive(viewer)) return;
-      const terrainH = terrainSample?.height ?? null;
       const modelTentative = usesSeparateCameraBridge
         ? await createCesiumBridge(
             mapConversion, projectedCRS, coordinateInfo, lengthUnitScale,
-            undefined, heightsAreEllipsoidal,
+            undefined, heightsAreEllipsoidal, globePlacement,
           )
         : cameraTentative;
-      if (cancelled || !lifetime.isLive(viewer)) return;
+      if (isCancelled()) return;
       if (!modelTentative) {
         bridgeRef.current = null;
         return;
       }
+      const swissFrame = chSwisstopoSr(projectedCRS.name) !== null;
+      const queryAt = async (bridge: CesiumBridge, conversion: MapConversion) => {
+        if (!CH_AUTOMATIC_TERRAIN_HEIGHT) return null;
+        try {
+          if (swissFrame) {
+            // Trassia (Marco 2026-09-27, TODO 5/58): swisstopo LN02 at the IFC origin.
+            // The bridge's modelOrigin is the render-frame geometry centre.
+            // Using it here would move the query as model bounds stream in.
+            return await chQueryTerrainHeight({
+              conversion, projectedCRS, lengthUnitScale, isCancelled,
+            });
+          }
+          // Outside the Swiss grids, preserve the admissible Cesium source.
+          // The Trassia net allowlist does not include Open-Meteo or ion.
+          return await bridge.queryTerrainHeight(Cesium, viewer, {
+            cacheNamespace: [terrainEnabled ? 'terrain' : 'ellipsoid', dataSource].join(':'),
+            residentGlobeOnly: true,
+            cancellation: { isCancelled, onCancel: (stop) => lifetime.onRetire(stop) },
+          });
+        } catch (err) {
+          console.warn('[CesiumOverlay] terrain query failed:', err);
+          return null;
+        }
+      };
+      const modelSample = queryAt(modelTentative, mapConversion);
+      const [terrainSample, cameraTerrainSample] = await Promise.all([
+        modelSample,
+        usesSeparateCameraBridge ? queryAt(cameraTentative, cameraConversion) : modelSample,
+      ]);
+      if (isCancelled()) return;
+      const terrainH = terrainSample?.height ?? null;
       // Placement is purely IFC-authored — no terrain/storey clamp. The
       // tentative bridges already carry the model's authored altitude
       // (IfcMapConversion.OrthogonalHeight + geometry origin), so they ARE
@@ -196,7 +219,7 @@ export function useCesiumBridge({
             coordinateInfo,
             projectedCRS,
             ifcOriginHeight: cameraTentative.modelOrigin.height,
-            terrainHeight: terrainHForFrame,
+            terrainHeight: cameraTerrainSample?.height ?? null,
             storeyElevations,
             viewerUpScale: cameraTentative.viewerUpScale,
           })
@@ -222,25 +245,17 @@ export function useCesiumBridge({
         // Siehe `lib/ch/kontext/hoehenbezug.ts`.
         const appliedGeoidN = shouldApplyGeoidUndulation(heightsAreEllipsoidal)
           ? chCesiumGeoidAnteil(
-            egm96Undulation(modelTentative.modelOrigin.latitude, modelTentative.modelOrigin.longitude))
+            egm96Undulation(modelTentative.modelOrigin.latitude, modelTentative.modelOrigin.longitude), swissFrame)
           : 0;
         setCesiumTerrainSaveHeight(
           terrainHForFrame !== null
             ? orthometricTargetForTerrain(terrainHForFrame, appliedGeoidN)
             : null,
         );
-        // terrainClipY stays in viewer-space; it represents the world terrain
-        // altitude expressed in the camera bridge's committed frame. Draft
-        // placement edits must not move this floor, or the camera will drift.
-        setCesiumTerrainClipY(cameraPlacement.terrainClipY);
-      } else {
-        // Failed re-query (offline, API down) — clear stale store fields so
-        // the clip plane doesn't drift relative to the new bridge.
-        setCesiumTerrainHeight(null);
-        setCesiumTerrainSource(null);
-        setCesiumTerrainSaveHeight(null);
-        setCesiumTerrainClipY(null);
       }
+      // The camera floor uses the committed camera frame, independent of a
+      // model draft. A flat floor would cut a model bent away from that plane.
+      setCesiumTerrainClipY(bendsAwayFromAnchorPlane(bridge.placement) ? null : cameraPlacement.terrainClipY);
 
       // World-camera stability: when this rebuild changes the placement
       // altitude (surface floor or OrthogonalHeight edited), shift the IFC
@@ -278,6 +293,11 @@ export function useCesiumBridge({
 
       bridgeRef.current = bridge;
       cameraBridgeRef.current = cameraBridge;
+      setGlobePlacementStatus({
+        mode: bridge.placement.mode,
+        anchorErrorMetres: bridge.placement.estimate?.total ?? null,
+        prescribed: bridge.placement.prescribed,
+      });
       setBridgeVersion((v) => v + 1);
     })();
 
@@ -295,6 +315,7 @@ export function useCesiumBridge({
     coordinateInfo,
     lengthUnitScale,
     terrainEnabled,
+    sourceModelId,
     heightsAreEllipsoidal,
     dataSource,
     storeyElevations,
@@ -302,6 +323,8 @@ export function useCesiumBridge({
     setCesiumTerrainSource,
     setCesiumTerrainSaveHeight,
     setCesiumTerrainClipY,
+    globePlacement,
+    setGlobePlacementStatus,
   ]);
 
   return { bridgeVersion };

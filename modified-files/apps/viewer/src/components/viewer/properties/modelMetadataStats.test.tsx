@@ -24,6 +24,7 @@ import type { LandXmlTinDocument } from '@/hooks/ingest/landXmlSemantics.js';
 import { ModelMetadataPanel } from './ModelMetadataPanel.js';
 import { registerLocale, setLocale } from '@/i18n';
 import { useViewerStore } from '@/store';
+import { settle } from '@/test/render.js';
 
 const TYPES = new Map<number, string>([
   [1, 'IFCWALL'],
@@ -97,10 +98,14 @@ function render(subject: FederatedModel): HTMLElement {
 }
 
 function statistic(container: HTMLElement, label: string): string | undefined {
+  // A key/value row (#8802): the value is the cell right after the label;
+  // a trailing copy slot may follow it.
   const row = [...container.querySelectorAll('div')].find((element) =>
     [...element.children].some((child) => child.textContent === label),
   );
-  return row?.lastElementChild?.textContent ?? undefined;
+  const cells = row ? [...row.children] : [];
+  const at = cells.findIndex((child) => child.textContent === label);
+  return at >= 0 ? cells[at + 1]?.textContent ?? undefined : undefined;
 }
 
 function unmountAll(): void {
@@ -110,13 +115,14 @@ function unmountAll(): void {
   }
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   setLocale('en');
   unmountAll();
   federationRegistry.clear();
   federationRegistry.registerModel('other-model', 100);
   federationRegistry.registerModel('stats-model', 100);
   useViewerStore.setState({ models: new Map(), mutationViews: new Map(), mutationVersion: 0 });
+  await settle();
 });
 
 after(() => {
@@ -125,7 +131,7 @@ after(() => {
   federationRegistry.clear();
 });
 
-describe('ModelMetadataPanel — Elements with Geometry', () => {
+describe('ModelMetadataPanel — Elements in Storeys', () => {
   it('counts live storey deletes and creations from a parsed IFC model (#5249)', async () => {
     const ifc = `ISO-10303-21;
 HEADER;
@@ -153,6 +159,7 @@ END-ISO-10303-21;`;
       view.deleteEntity(10);
       useViewerStore.setState({ mutationVersion: 2 });
     });
+    await settle();
     assert.equal(statistic(container, 'Building Storeys'), '1');
 
     act(() => {
@@ -160,6 +167,7 @@ END-ISO-10303-21;`;
         ['0Storey0000000000000031', null, 'Level 3', null, null, null, null, null, '.ELEMENT.', 6]);
       useViewerStore.setState({ mutationVersion: 3 });
     });
+    await settle();
     assert.equal(statistic(container, 'Building Storeys'), '2');
   });
 
@@ -189,7 +197,7 @@ END-ISO-10303-21;`;
   it('excludes a meshed IFCSPACE — the schema filter, not just the shape filter, keeps it out', () => {
     // #8 passes the shape test (it has a mesh) but must still be excluded:
     // the schema filter (`collectPhysicalEntityIds`) is what keeps a
-    // non-physical, shape-bearing row out of "Elements with Geometry", and a
+    // non-physical, shape-bearing row out of "Elements in Storeys", and a
     // fixture where every meshed id is also physical cannot exercise it.
     const offset = federationRegistry.getOffset('stats-model') ?? 0;
     const geometryResult = {
@@ -214,7 +222,7 @@ END-ISO-10303-21;`;
     assert.equal(statistic(container, 'Elements in Storeys'), '7');
   });
 
-  it('counts a meshed live creation and excludes a tombstoned source element (#5249)', () => {
+  it('counts a meshed live creation and excludes a tombstoned source element (#5249)', async () => {
     const offset = federationRegistry.getOffset('stats-model') ?? 0;
     const view = new MutablePropertyView(null, 'stats-model');
     view.setExpressIdWatermark(8);
@@ -229,10 +237,11 @@ END-ISO-10303-21;`;
 
     view.deleteEntity(2);
     act(() => useViewerStore.setState({ mutationVersion: 2 }));
+    await settle();
     assert.equal(statistic(container, 'Elements in Storeys'), '6');
   });
 
-  it('#5477 reuses physical membership across geometry-only updates and refreshes it after an overlay edit', () => {
+  it('#5477 reuses physical membership across geometry-only updates and refreshes it after an overlay edit', async () => {
     const store = dataStore();
     const view = new MutablePropertyView(null, 'stats-model');
     const originalIsDeleted = view.isDeleted.bind(view);
@@ -258,6 +267,7 @@ END-ISO-10303-21;`;
       view.deleteEntity(2);
       useViewerStore.setState({ mutationVersion: 2 });
     });
+    await settle();
     assert.equal(statistic(container, 'Elements in Storeys'), '1');
     assert.ok(membershipVisits > firstVisits, 'an overlay edit recomputes membership');
   });

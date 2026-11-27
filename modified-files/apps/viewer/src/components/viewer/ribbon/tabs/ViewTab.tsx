@@ -4,10 +4,10 @@
 
 /**
  * Ribbon · View tab — camera presets and projection, world context
- * (Cesium / sun / SpaceMouse), and interface options.
+ * (Cesium / sun / SpaceMouse), the structural view, and interface options.
  */
 
-import { Orthographic, Viewpoint, SpaceMouse, Lighting, World, Move, FollowWork, Settings, Spatial } from '@/icons';
+import { Orthographic, Viewpoint, SpaceMouse, Lighting, World, Move, FollowWork, Spatial, SiteContext, FloodCheck } from '@/icons';
 import { useViewerStore } from '@/store';
 import { useEffectiveSkyEnabled } from '@/hooks/useEffectiveSkyEnabled';
 import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
@@ -21,12 +21,9 @@ import {
   RibbonSmallStack,
 } from '../primitives';
 import { RibbonCommandLargeButton, RibbonCommandSmallButton } from '../command-button';
-// Trassia overlay (Paket UX-KOPF, Marco-Befund 2026-09-02): die benannten
-// Ansichten als Ribbon-Gruppe (vorher eigene Kopfzeile ueber dem Bild) und
-// der eigene Umgebungs-Knopf (vorher steckten swisstopo-Umgebung und WFS im
-// Lighting-Panel — unter einem Blitz suchte sie niemand).
 import { ChViewsGroup } from '../../ChViewsGroup';
 import { ChUmgebungKnopf } from '../../ChUmgebungKnopf';
+import { StructuralRibbonGroup } from './StructuralRibbonGroup';
 
 export function ViewTab() {
   const { t } = useTranslation();
@@ -121,10 +118,7 @@ export function ViewTab() {
           ))}
       </RibbonGroup>
 
-      {/* Trassia (UX-KOPF): benannte Ansichten der Projektmappe — rendert
-          Divider + Gruppe selbst und nichts ohne `?project=`. */}
       <ChViewsGroup />
-
       <RibbonGroupDivider />
 
       <RibbonGroup label={t('ribbon.view.contextGroup')}>
@@ -143,18 +137,19 @@ export function ViewTab() {
             icon={World}
             tooltip={cesiumEnabled ? t('ribbon.view.worldHideTooltip') : t('ribbon.view.worldShowTooltip')}
             active={cesiumEnabled}
-            activeClassName="bg-teal-600/20 text-foreground ring-1 ring-inset ring-teal-600/50"
           />
         )}
+        {/* Swiss site context and the surface runoff check open their sections
+            of the model's Georeference panel, which say what a model still
+            needs when it cannot host them yet (#10603). */}
+        <RibbonCommandLargeButton commandId="view:site-context" icon={SiteContext} disabled={!hasModels} />
+        <ChUmgebungKnopf />
+        <RibbonCommandLargeButton commandId="view:flood-check" icon={FloodCheck} disabled={!hasModels} />
         <RibbonCommandLargeButton
           commandId="view:lighting"
           icon={Lighting}
           active={activeWorkspacePanels.has('environment') || solarEnabled || envSkyEnabled || envPreset !== 'default'}
-          activeClassName="bg-amber-500/20 text-foreground ring-1 ring-inset ring-amber-500/50"
         />
-        {/* Trassia (UX-KOPF): Schweizer Umgebung (swisstopo + WFS) — eigener
-            Knopf statt versteckt im Lighting-Panel; nur im Weltmodus. */}
-        <ChUmgebungKnopf />
         <RibbonSmallStack>
           {cesiumAvailable && cesiumEnabled && (
             <RibbonCommandSmallButton
@@ -169,10 +164,13 @@ export function ViewTab() {
             commandId="view:spacemouse"
             icon={SpaceMouse}
             active={spaceMouseConnected}
-            activeClassName="bg-primary/20 text-foreground ring-1 ring-inset ring-primary/50"
           />
         </RibbonSmallStack>
       </RibbonGroup>
+
+      <RibbonGroupDivider />
+
+      <StructuralRibbonGroup />
 
       <RibbonGroupDivider />
 
@@ -185,7 +183,7 @@ export function ViewTab() {
           disabled={!hasModels}
           commandContext={{ activateBottomPanel: handleToggleBottomPanel }}
           badge={(basketViewCount > 0 || pinboardEntities.size > 0) ? (
-            <span className="absolute -top-0.5 right-0.5 flex h-[14px] min-w-[14px] items-center justify-center rounded-full border border-background bg-primary px-0.5 text-2xs font-bold text-primary-foreground">
+            <span className="absolute -top-0.5 right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full border border-background bg-primary px-0.5 text-2xs font-bold text-primary-foreground">
               {basketViewCount > 0 ? `${basketViewCount}/${pinboardEntities.size}` : pinboardEntities.size}
             </span>
           ) : undefined}
@@ -196,10 +194,6 @@ export function ViewTab() {
             icon={FollowWork}
             active={ribbonContextualTabs}
             {...tourAnchor(TOUR_ANCHORS.ribbonFollowWork)}
-          />
-          <RibbonCommandSmallButton
-            commandId="pref:settings"
-            icon={Settings}
           />
         </RibbonSmallStack>
       </RibbonGroup>

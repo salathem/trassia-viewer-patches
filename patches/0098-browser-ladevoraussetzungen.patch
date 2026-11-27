@@ -1,25 +1,27 @@
 diff --git a/apps/viewer/src/hooks/useIfcLoader.ts b/apps/viewer/src/hooks/useIfcLoader.ts
+index b1a85bcea8901184fc1de55e5dfbbeaf14cf32ab..280726c50aa3feb234d9a7a48e22c8d05da98e7e 100644
 --- a/apps/viewer/src/hooks/useIfcLoader.ts
 +++ b/apps/viewer/src/hooks/useIfcLoader.ts
-@@ -26,6 +26,8 @@
- import { attachTextureBitmaps, type TextureBitmapStore } from '../utils/textureResources.js';
- import { modelAppearanceAssets } from '../lib/appearance/model-assets.js';
- import { WorkerParser } from '@ifc-lite/parser/browser';
+@@ -104,6 +104,8 @@ import { realignPointCloudsToAnchor } from './ingest/pointCloudAlignmentRealign.
+ import { toast } from '../components/ui/toast.js';
+ import { chIncompleteStepMessage } from '../lib/ch/ch-file-validation.js';
+ import { chClearLoadNotice, chSetLoadNotice } from '../lib/ch/ch-load-notice.js';
 +import { ifcWorkerRequirement } from '../lib/browser-load-requirements.js';
 +import { getLocale } from '@/i18n';
- import { awaitLoad, isLoadAbort, parserWithFallback, commitIfcReplacement } from '../lib/ifc-load-cancellation.js';
- import { memoryAccounting } from '../lib/perf/memoryAccounting.js';
- import {
-@@ -1420,7 +1422,7 @@
-       // `WorkerParser.isSupported()` checks COI, SAB and Worker availability.
+ import { posthog } from '../lib/analytics.js';
+ import { loadFailureReporter, settleKernelRefusal } from './ingest/loadFailureReport.js';
+ import { revalidateServedCache, type ServedCacheHit } from './ingest/cacheRevalidation.js';
+@@ -1407,7 +1409,7 @@ export function useIfcLoader() {
        // The parser's UTF-8 reader handles SAB-backed views in Firefox too.
        const useParserWorker = WorkerParser.isSupported();
--      if (cancellableIfc && !useParserWorker) throw new Error('IFC loading requires browser worker support and cross-origin isolation.');
-+      if (cancellableIfc && !useParserWorker) throw new Error(ifcWorkerRequirement(globalThis, getLocale()).message);
+       const workerRequired = format === 'ifc';
+-      if (workerRequired && !useParserWorker) throw new Error('IFC loading requires browser worker support and cross-origin isolation.');
++      if (workerRequired && !useParserWorker) throw new Error(ifcWorkerRequirement(globalThis, getLocale()).message);
        let sharedSource: SharedArrayBuffer | null = null;
        if (useParserWorker) {
-         if (acquired.isShared && acquired.buffer instanceof SharedArrayBuffer) {
+         if (buffer instanceof SharedArrayBuffer) {
 diff --git a/apps/viewer/src/hooks/useWebGpuOpenGuard.ts b/apps/viewer/src/hooks/useWebGpuOpenGuard.ts
+index 74c27c0a296cb37f416c128ba3502f1fe273ff5f..1bf514f0ce38e63c4708d4aebea0c002afb85f12 100644
 --- a/apps/viewer/src/hooks/useWebGpuOpenGuard.ts
 +++ b/apps/viewer/src/hooks/useWebGpuOpenGuard.ts
 @@ -13,9 +13,10 @@
@@ -29,42 +31,61 @@ diff --git a/apps/viewer/src/hooks/useWebGpuOpenGuard.ts b/apps/viewer/src/hooks
 -import { useTranslation } from '@/i18n';
 +import { getLocale, useTranslation } from '@/i18n';
  import { useViewerStore } from '@/store';
- import { showLoadError } from '@/lib/analytics';
+ import { clearLoadError, showLoadError } from '@/lib/analytics';
 +import { webGpuRequirementMessage } from '../lib/browser-load-requirements.js';
  import { getWebGPUStatus, retryWebGPU, useWebGPU, type WebGPUStatus } from './useWebGPU';
  
- export interface WebGpuOpenGuard {
-@@ -37,10 +38,10 @@
-     if (state.error !== t('viewportLighting.container.loadErrorCard.webgpuChecking')) return;
-     showLoadError(
-       state.setError, state.setLastLoadRetry,
--      t('viewportLighting.container.loadErrorCard.webgpuUnsupported'),
-+      webGpuRequirementMessage(webgpu.category, getLocale()),
-       'webgpu_unsupported', state.lastLoadRetry,
-     );
--  }, [t, webgpu.checking, webgpu.supported]);
-+  }, [t, webgpu.checking, webgpu.supported, webgpu.category]);
+ /**
+@@ -55,7 +56,11 @@ type Translate = ReturnType<typeof useTranslation>['t'];
+ type CardKey = typeof CHECKING_KEY | typeof UNSUPPORTED_KEY;
  
-   const guard = useCallback((retry?: () => void): boolean => {
-     const status = getWebGPUStatus();
-@@ -67,16 +68,16 @@
-         retryPending = false;
-         showLoadError(
-           state.setError, state.setLastLoadRetry,
--          t('viewportLighting.container.loadErrorCard.webgpuUnsupported'),
-+          webGpuRequirementMessage(fresh.category, getLocale()),
-           'webgpu_unsupported', retryAfterProbe,
-         );
-       });
+ /** The load-error card the guard put up: which text, exactly as shown, and its Retry. */
+-interface GuardCard { key: CardKey; message: string | null; retry: (() => void) | null }
++interface GuardCard { key: CardKey; category: WebGPUStatus['category']; message: string | null; retry: (() => void) | null }
++
++function guardMessage(key: CardKey, category: WebGPUStatus['category'], t: Translate): string {
++  return key === CHECKING_KEY ? t(CHECKING_KEY) : webGpuRequirementMessage(category, getLocale());
++}
+ 
+ /**
+  * The guard's one piece of state: the card it is responsible for, if any.
+@@ -100,7 +105,7 @@ function settle(status: WebGPUStatus, t: Translate): void {
+   const state = useViewerStore.getState();
+   if (status.checking) {
+     // Still waiting: only the text follows the locale, whichever card is shown.
+-    const message = t(current.card.key);
++    const message = guardMessage(current.card.key, current.card.category, t);
+     if (message === current.card.message) return;
+     notice = { ...current, card: { ...current.card, message } };
+     state.setError(message);
+@@ -108,7 +113,7 @@ function settle(status: WebGPUStatus, t: Translate): void {
+   }
+   notice = { kind: 'none' };
+   if (!status.supported) {
+-    showLoadError(state.setError, state.setLastLoadRetry, t(UNSUPPORTED_KEY), 'webgpu_unsupported', current.card.retry);
++    showLoadError(state.setError, state.setLastLoadRetry, guardMessage(UNSUPPORTED_KEY, status.category, t), 'webgpu_unsupported', current.card.retry);
+     return;
+   }
+   clearLoadError(state.setError, state.setLastLoadRetry);
+@@ -155,7 +160,8 @@ export function useWebGpuOpenGuard(): WebGpuOpenGuard {
+       if (lastLoadRetry !== retryAfterProbe) return; // a stale card's Retry starts no re-check
+       // Our card is the pending checking one, or else the unsupported one.
+       const key = notice.kind !== 'none' && notice.card.retry === retryAfterProbe ? notice.card.key : UNSUPPORTED_KEY;
+-      const card = { key, message: error, retry: retryAfterProbe };
++      const category = notice.kind !== 'none' && notice.card.retry === retryAfterProbe ? notice.card.category : status.category;
++      const card = { key, category, message: error, retry: retryAfterProbe };
+       const now = getWebGPUStatus();
+       if (now.supported) {
+         // Settles synchronously, inside the click, so even the picker has its activation.
+@@ -170,9 +176,9 @@ export function useWebGpuOpenGuard(): WebGpuOpenGuard {
      } : null;
-     showLoadError(
-       setError, setLastLoadRetry,
--      t(status.checking
--        ? 'viewportLighting.container.loadErrorCard.webgpuChecking'
--        : 'viewportLighting.container.loadErrorCard.webgpuUnsupported'),
-+      status.checking
-+        ? t('viewportLighting.container.loadErrorCard.webgpuChecking')
-+        : webGpuRequirementMessage(status.category, getLocale()),
-       status.checking ? 'webgpu_checking' : 'webgpu_unsupported',
-       retryAfterProbe,
-     );
+     const checking = status.checking;
+     const key = checking ? CHECKING_KEY : UNSUPPORTED_KEY;
+-    const message = t(key);
++    const message = guardMessage(key, status.category, t);
+     notice = checking
+-      ? { kind: 'pending', card: { key, message, retry: retryAfterProbe }, open: replay === 'free' ? retry ?? null : null }
++      ? { kind: 'pending', card: { key, category: status.category, message, retry: retryAfterProbe }, open: replay === 'free' ? retry ?? null : null }
+       : { kind: 'none' };
+     showLoadError(setError, setLastLoadRetry, message, checking ? 'webgpu_checking' : 'webgpu_unsupported', retryAfterProbe);
+     return false;

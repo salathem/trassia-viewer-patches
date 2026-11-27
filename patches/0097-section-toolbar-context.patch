@@ -1,36 +1,33 @@
-diff --git a/apps/viewer/src/components/viewer/tools/SectionToolbar.tsx b/apps/viewer/src/components/viewer/tools/SectionToolbar.tsx
---- a/apps/viewer/src/components/viewer/tools/SectionToolbar.tsx
-+++ b/apps/viewer/src/components/viewer/tools/SectionToolbar.tsx
-@@ -48,6 +48,7 @@
- import { sectionBoxFromBounds, sectionBoxSize } from '@/lib/section/section-box';
- import type { SectionPlaneAxis } from '@/store/types';
- import { AlignmentSectionControls } from './AlignmentSectionControls';
+diff --git a/apps/viewer/src/components/viewer/tools/SectionActivePlaneRow.tsx b/apps/viewer/src/components/viewer/tools/SectionActivePlaneRow.tsx
+index bdf5cc3cfc8d8a08efad1a92e18976d3a379759f..6ee5f58c6646d11f61b87653b4d1a5dfee71cc49 100644
+--- a/apps/viewer/src/components/viewer/tools/SectionActivePlaneRow.tsx
++++ b/apps/viewer/src/components/viewer/tools/SectionActivePlaneRow.tsx
+@@ -26,6 +26,7 @@ import {
+ import { HudDivider, HudToggle } from '../../viewport-ui/hud/HudToggle';
+ import { SectionCapControls } from './SectionCapControls';
+ import { STOREY_SNAP_TOLERANCE_M } from './useSectionDistance';
 +import { ChSectionDistanceLabel, ChSectionToolbarContext } from './ChSectionToolbarContext';
- import { chooseAlignmentMode, leaveAlignmentMode, useAlignmentToolState } from '@/lib/section/alignment-controller';
- 
- type AxisSegment = SectionPlaneAxis | 'face' | 'box' | 'alignment';
-@@ -207,6 +208,7 @@
-         <HudSegmented options={axes} value={axisValue} onChange={handleAxis} aria-label={t('sectionTool.bar.axisAria')} />
-       </span>
+ import { useSectionOffset } from './useSectionOffset';
+ import { useSectionFill } from './useSectionFill';
+ import { SectionStepMenu } from './SectionStepMenu';
+@@ -121,6 +122,7 @@ export function SectionActivePlaneRow({ compact = false }: { compact?: boolean }
+   return (
+     <>
        <AlignmentSectionControls />
 +      <ChSectionToolbarContext />
        {boxSize ? (
          <span className={GROUP}>
            <HudDivider />
-@@ -233,6 +235,8 @@
-         title={t(sectionPlane.flipped ? 'sectionTool.flippedTitle' : 'sectionTool.flipLabel')}
-         icon={<FlipHorizontal2 aria-hidden className="h-3.5 w-3.5" />}
-       />
-+      <span className="flex flex-col items-end">
-+      {distance.kind === 'custom' && <ChSectionDistanceLabel />}
+@@ -146,6 +148,12 @@ export function SectionActivePlaneRow({ compact = false }: { compact?: boolean }
+       <button type="button" className={STEPPER} onClick={() => nudge(-1)} disabled={alignmentBusy} aria-label={t('sectionPlanes.offset.dec')} title={t('sectionPlanes.offset.dec')}>
+         <Minus aria-hidden className="h-3 w-3" />
+       </button>
++      {distance.kind === 'custom' && (
++        <span className="flex flex-col items-end text-2xs tabular-nums">
++          <ChSectionDistanceLabel />
++          <span>{distance.value.toFixed(2)} m</span>
++        </span>
++      )}
        <HudValueField
          disabled={alignmentBusy}
-         value={distance.value}
-@@ -249,6 +253,7 @@
-         aria-label={t(distance.kind === 'alignment' ? 'alignmentSection.distance' : isCustom ? 'sectionTool.distance.customAria' : 'sectionTool.distance.aria')}
-         className="min-w-[4.5rem] justify-end"
-       />
-+      </span>
-       {showStoreys && (
-         <HudPopover>
-           <HudPopoverTrigger asChild>
+         value={offset.value}

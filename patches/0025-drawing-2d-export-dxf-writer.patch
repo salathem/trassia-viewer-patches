@@ -1,5 +1,5 @@
 diff --git a/packages/drawing-2d/src/index.ts b/packages/drawing-2d/src/index.ts
-index 7b75c7aed8a8b29677b9a668103c92540c243ab4..83bb19c933185909e5e9f6f10c9c8785ef0bc6f7 100644
+index 82e66d2ef72493d68698a3ba62bed8a5994f8752..d7a639feb77d6e982c8d8c38cd8463b9e35fd04c 100644
 --- a/packages/drawing-2d/src/index.ts
 +++ b/packages/drawing-2d/src/index.ts
 @@ -225,12 +225,26 @@ export type { ColorRaster, ColorRasterOptions, RasterFit } from './color-raster.
@@ -19,8 +19,8 @@ index 7b75c7aed8a8b29677b9a668103c92540c243ab4..83bb19c933185909e5e9f6f10c9c8785
 +// own header, its own `$INSUNITS` (patch 0011), its own layer-name sanitiser
 +// and its own extents bookkeeping — in the overlay. `cssToAci` stays private;
 +// it is not needed from outside.
- export { DXFExporter, exportToDXF } from './dxf-exporter.js';
- export type { DXFExportOptions, DXFUnderlayOptions } from './dxf-exporter.js';
+ export { DXFExporter, exportToDXF, isDxfDimensionExportable } from './dxf-exporter.js';
+ export type { DXFExportOptions, DXFPolylineLayer, DXFText, DXFTextLayer, DXFUnderlayOptions } from './dxf-exporter.js';
  export { encodeDxfCp1252, type Cp1252EncodeResult } from './dxf/encoding.js'; // public: $DWGCODEPAGE ANSI_1252, not UTF-8
 +export { DxfWriter, sanitizeDxfLayerName } from './dxf/writer.js';
 +export type {
@@ -32,3 +32,33 @@ index 7b75c7aed8a8b29677b9a668103c92540c243ab4..83bb19c933185909e5e9f6f10c9c8785
  
  // ═══════════════════════════════════════════════════════════════════════════
  // GPU ACCELERATION
+diff --git a/scripts/api-surface.json b/scripts/api-surface.json
+index 63b28265fda912ca8e74569531de497bf91e6d50..e39ed5afdbfe71300a5dbea4259abf7305dc733c 100644
+--- a/scripts/api-surface.json
++++ b/scripts/api-surface.json
+@@ -5742,12 +5742,17 @@
+     "DxfDocument: interface",
+     "DxfEntity: type",
+     "DxfLayerInfo: interface",
++    "DxfLinetype",
+     "DxfPlacement: interface",
++    "DxfTextHAlign",
++    "DxfTextVAlign",
+     "DxfUnderlay: interface",
+     "DxfUnderlayFill: interface",
+     "DxfUnderlayLayer: interface",
+     "DxfUnderlayPath: interface",
+     "DxfUnderlayText: interface",
++    "DxfWriter",
++    "DxfWriterOptions",
+     "EPSILON: const",
+     "EdgeData: interface",
+     "EdgeExtractor: class",
+@@ -5991,6 +5996,7 @@
+     "renderTitleBlock: function",
+     "resolveObjectStyle: function",
+     "reversePolygon: function",
++    "sanitizeDxfLayerName",
+     "signedAxisDepth: function",
+     "signedDepth: function",
+     "signedDistanceToPlane: function",

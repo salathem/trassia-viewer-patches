@@ -1,50 +1,23 @@
-diff --git a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
-index 613daa9faf293ebc1d0510b85e4cd24395404a5f..171fc761726e21ae954c094bc2fbd6de49e8445e 100644
---- a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
-+++ b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
-@@ -26,6 +26,10 @@ import { useTranslation } from '@/i18n';
- import { getPanelDef, type WorkspacePanelId } from '@/lib/panels/registry';
- import { resetLayout } from '@/store/layoutReset';
- import { registerKeyboardCommand } from '@/lib/commands/dispatcher';
-+// Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
-+// 2026-09-03): der Anpassen-Dialog listet im Trassia-Modus nur die Panels, die
-+// die Leiste auch anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
-+import { chLeisteZeigt } from '@/lib/ch/modus';
- 
- export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
-   const { t } = useTranslation();
-@@ -41,8 +45,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
-   const [overId, setOverId] = useState<string | null>(null);
- 
-   // Shown panels keep their rail order; hidden ones live in their own section.
--  const shownIds = order.filter((id) => !hidden.has(id));
--  const hiddenList = order.filter((id) => hidden.has(id));
-+  const shownIds = order.filter((id) => !hidden.has(id) && chLeisteZeigt(id));
-+  const hiddenList = order.filter((id) => hidden.has(id) && chLeisteZeigt(id));
- 
-   // Move focus into the popover on open and restore it to the trigger on close.
-   useEffect(() => {
 diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-index 7ce4a9ce1e145c7a3f1f6c221ab6db777828ff30..0e0095951eed0f1fadadef1bb6a3e133c1b0e65d 100644
+index 3a859d627d12e039f5028c299e008ab54141702f..07eb9a2b2ebd1ce4c807d8ddec53a46b6b6e79af 100644
 --- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
 +++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-@@ -12,6 +12,10 @@ import { showAllFromStore } from '@/store/homeView';
- import { hideSelectionFromStore } from '@/store/hideSelection';
- import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
- import { bottomPanelFlags } from '@/lib/panels/bottom-panels';
-+// Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
-+// 2026-09-03): Alt+Ziffer oeffnet im Trassia-Modus nur Panels, die die Leiste
-+// anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
-+import { chLeisteZeigt } from '@/lib/ch/modus';
- import { closeAllPanelWindows } from '@/services/panel-windows';
- import { WALK_MOVEMENT_KEYS, eventKey, isTextEditingElement } from '@/lib/keyboard-event';
- import { bindModelWorkspaceKeys } from '@/lib/commands/modeling/keys-workspace';
-@@ -113,7 +117,7 @@ const RUNNERS: readonly [KeyCommandId, CommandRun][] = [
-   ['tool.annotate', () => { useViewerStore.getState().setActiveTool('annotate'); }],
-   ['ui.openPanel', (event) => {
+@@ -5,6 +5,7 @@
+ /** Live global and tool actions for the canonical keyboard table (#5841). */
+ import { useEffect } from 'react';
+ import { isPanelAvailable } from '@/lib/panels/availability';
++import { chVollmodus } from '@/lib/ch/modus';
+ import { replayWorkspaceHistory } from '@/lib/model-placement/history';
+ import { registerKeyboardCommand, type CommandRun } from '@/lib/commands/dispatcher';
+ import type { KeyCommandId } from '@/lib/commands/keyboard-commands';
+@@ -125,7 +126,9 @@ const RUNNERS: readonly [KeyCommandId, CommandRun][] = [
      const panel = workspacePanelForShortcutCode(event.code);
--    if (!panel) return false;
-+    if (!panel || !chLeisteZeigt(panel)) return false;
-     useViewerStore.getState().openPanelInHome(panel, 'shortcut');
+     // A panel the host switched off leaves its Alt+digit to the browser.
+     if (!panel || !isPanelAvailable(panel)) return false;
+-    useViewerStore.getState().openPanelInHome(panel, 'shortcut');
++    const state = useViewerStore.getState();
++    if (!chVollmodus() && state.sidebarHiddenIds.includes(panel)) return false;
++    state.openPanelInHome(panel, 'shortcut');
    }],
    ['ui.toggleSidebar', () => { useViewerStore.getState().cycleSidebarMode(); }],
+   ['edit.toggleEditMode', () => { useViewerStore.getState().toggleEditEnabled(); }],

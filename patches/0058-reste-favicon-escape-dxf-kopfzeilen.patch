@@ -1,16 +1,28 @@
+diff --git a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
+index 5fae9a79ce6e5adc9d93c9e8e1959e0299ef1075..7d090517b6d645f6386b9fb597fcc37e187d6d18 100644
+--- a/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
++++ b/apps/viewer/src/components/viewer/sidebar/CustomizeSidebar.tsx
+@@ -89,6 +89,7 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
+ 
+   return (
+     <fieldset
++      data-ch-sidebar-customize
+       ref={ref}
+       tabIndex={-1}
+       aria-label={t('shellChrome.customizeSidebar.ariaLabel')}
 diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
-index 345a522d001316324fc22cdc16e1cb42ba0b4c4e..b628b6f73abdeaab7a23976b2bbadbcbf565f969 100644
+index 23238cbeca1d247e468c20f324241e26f0579164..cae1f76411443e70ef68ce4ad03326f206f5be75 100644
 --- a/apps/viewer/src/hooks/useDrawingExport.ts
 +++ b/apps/viewer/src/hooks/useDrawingExport.ts
-@@ -44,6 +44,7 @@ import type { IfcDataStore } from '@ifc-lite/parser';
- import { useViewerStore } from '@/store';
- import { buildDxfExportTransform, resolveDxfExportGeoreference } from '@/hooks/dxfExportGeoref';
- import { downloadDxf } from '@/hooks/dxfDownload';
+@@ -45,6 +45,7 @@ import { buildDxfExportTransform, resolveDxfExportGeoreference } from '@/hooks/d
+ import { createDxfDownload } from '@/hooks/dxfDownload';
+ import { rasterizeSvgToPngDataUrl, SHEET_PDF_DPI } from './drawing-svg-raster';
+ export { rasterizeSvgToPngDataUrl, SHEET_PDF_DPI, MAX_SHEET_RASTER_PIXELS, MAX_SHEET_RASTER_DIMENSION_PX } from './drawing-svg-raster';
 +import { chQpKopfzeilen } from '@/lib/ch/qp-kopfzeilen';
  import { DEFAULT_SCAN_SVG_CAP, type ScanBandPoint } from '@/hooks/scanSectionMath';
  import { computeSvgExportViewport, svgExportMmToWorld } from '@/hooks/svgExportViewport';
  import { makePropertiesGetter } from '@/hooks/drawingElementProperties';
-@@ -956,9 +957,13 @@ function useDrawingExport({
+@@ -716,9 +717,13 @@ export function createDrawingExport({
      // R12 has no $INSUNITS (see dxf/writer.ts); state the unit — and the
      // target CRS when the export is actually map-projected — in the 999
      // comment every DXF reader shows a human but none need to parse.
@@ -27,24 +39,24 @@ index 345a522d001316324fc22cdc16e1cb42ba0b4c4e..b628b6f73abdeaab7a23976b2bbadbcb
        showHiddenLines: displayOptions.showHiddenLines,
        coordinateTransform,
 diff --git a/apps/viewer/src/hooks/useKeyboardShortcuts.ts b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-index 0e0095951eed0f1fadadef1bb6a3e133c1b0e65d..08e0074bfa23db23097a97dc26ef5c268c15aabb 100644
+index 07eb9a2b2ebd1ce4c807d8ddec53a46b6b6e79af..ec55792023ff8a04a1d0d04b7f7a09730989688d 100644
 --- a/apps/viewer/src/hooks/useKeyboardShortcuts.ts
 +++ b/apps/viewer/src/hooks/useKeyboardShortcuts.ts
-@@ -26,7 +26,9 @@ import {
+@@ -27,7 +27,9 @@ import {
  
  interface KeyboardShortcutsOptions { enabled?: boolean }
  
 -function escapeGlobal(closeAll: boolean): void {
-+function escapeGlobal(closeAll: boolean, event?: KeyboardEvent): boolean | void {
-+  const target = event?.target as HTMLElement | null;
-+  if (target?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content]')) return false;
++function escapeGlobal(closeAll: boolean, event: KeyboardEvent): boolean | void {
++  const target = event.target as Element | null;
++  if (target?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [data-ch-sidebar-customize]')) return false;
    const state = useViewerStore.getState();
    if (closeAll) {
      state.showWorkspacePanel('properties');
-@@ -143,8 +145,8 @@ const RUNNERS: readonly [KeyCommandId, CommandRun][] = [
-   ['measure.cancel', cancelMeasurement],
-   ['measure.finish', finishMeasurement],
+@@ -155,8 +157,8 @@ const RUNNERS: readonly [KeyCommandId, CommandRun][] = [
    ['measure.toggleSnap', () => { useViewerStore.getState().toggleSnap(); }],
+   ['section.previousPlane', () => stepSectionPlane(-1)],
+   ['section.nextPlane', () => stepSectionPlane(1)],
 -  ['selection.escape', () => { escapeGlobal(false); }],
 -  ['ui.closeAllPanels', () => { escapeGlobal(true); }],
 +  ['selection.escape', (event) => escapeGlobal(false, event)],
@@ -67,10 +79,10 @@ index 75e646e1488878436eee3f2f4bf84baf931d0676..6dcf38da6e3ce0b26a82a3d56087a7e3
  
  mountViewer(document.getElementById('root')!);
 diff --git a/packages/drawing-2d/src/dxf/writer.ts b/packages/drawing-2d/src/dxf/writer.ts
-index c01ffd7d158856568cfd319751a718438c0cb09c..8a040eae0a555948aec9fe71556fae3c1456686b 100644
+index 8b96d422a5145aa25299c45f43b77a84de9c3d9e..82b3fa41329b58bfbed51130bcce4d288de4c7eb 100644
 --- a/packages/drawing-2d/src/dxf/writer.ts
 +++ b/packages/drawing-2d/src/dxf/writer.ts
-@@ -181,7 +181,15 @@ export class DxfWriter {
+@@ -182,7 +182,15 @@ export class DxfWriter {
    private warnedNonFinite = false;
  
    constructor(options: DxfWriterOptions = {}) {

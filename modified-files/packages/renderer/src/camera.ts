@@ -16,17 +16,19 @@ import type { CameraInternalState, ProjectionMode } from './camera-state.js';
 import { CameraAnimator } from './camera-animation.js';
 import { CameraProjection } from './camera-projection.js';
 import { FirstPersonNavigator } from './camera-first-person.js';
-import { updateCameraMatrices, updateCameraRelativeFrame } from './camera-matrices.js';
+import { activeLensShift, updateCameraMatrices, updateCameraRelativeFrame } from './camera-matrices.js';
 import { CameraOrientation } from './camera-orientation.js';
 import { pickFitPolicy, type Bounds3, type FitPolicy, type PickFitPolicyOptions } from './camera-fit-policy.js';
 import {
   DEFAULT_ORTHO_SIZE,
   isUsableBounds,
   isUsableDistance,
+  isUsableLensShift,
   usableOrthoSize,
 } from './camera-guards.js';
 import { RelativeToEyeFrame } from './relative-to-eye.js';
 import { surfaceZoomStep } from './camera-surface-zoom.js';
+import { canAdmitZoomPose } from './camera-zoom.js';
 import { CAMERA_CONSTANTS } from './constants.js';
 
 export class Camera {
@@ -60,6 +62,8 @@ export class Camera {
       orthoSize: DEFAULT_ORTHO_SIZE, // Half-height in world units
       sceneBounds: null,
       orbitAnchorBounds: null,
+      depthOnlyBounds: null,
+      lensShift: { x: 0, y: 0 },
     };
 
     // All pose writers publish the ordinary and relative frames together.
@@ -90,6 +94,8 @@ export class Camera {
     // instead: it is a viewport property, so the previous frame's is a far
     // better answer than any constant.
     if (!Number.isFinite(aspect) || aspect <= 0) return;
+    // A redundant viewport update must not invalidate a pending pick snapshot (#6882).
+    if (aspect === this.state.camera.aspect) return;
     this.state.camera.aspect = aspect;
     this.updateMatrices();
   }
@@ -131,6 +137,40 @@ export class Camera {
     if (!Number.isFinite(fov)) return;
     this.state.camera.fov = Math.max(0.01, Math.min(Math.PI - 0.01, fov));
     this.updateMatrices();
+  }
+
+  /**
+   * Shift the perspective image by `(x, y)` in normalised device coordinates
+   * without turning the camera, the "shift lens" of architectural photography
+   * (issue #8688). A point that would project to NDC `p` projects to `p + (x, y)`.
+   * Keep the camera level and shift vertically for two-point perspective, so
+   * world-vertical edges stay vertical on screen: to frame what a camera
+   * pitched up by `pitch` would centre, use `y = -tan(pitch) / tan(fov / 2)`.
+   * `(0, 0)`, the default, is the ordinary centred frustum. Orthographic
+   * projection ignores the shift (see {@link getActiveLensShift}).
+   *
+   * Picking, sections, overlays, AO/edges, the sky and shadows follow the
+   * shift. Fit-to-view, BCF viewpoints and the shift itself are independent:
+   * a fit still centres the target in the unshifted frustum, and restoring a
+   * viewpoint keeps the current shift. Non-finite values and components beyond
+   * `MAX_LENS_SHIFT` are rejected and the previous shift is kept.
+   */
+  setLensShift(x: number, y: number): void {
+    if (!isUsableLensShift(x) || !isUsableLensShift(y)) return;
+    const shift = this.state.lensShift;
+    if (shift.x === x && shift.y === y) return;
+    this.state.lensShift = { x, y };
+    this.updateMatrices();
+  }
+
+  /** The stored lens shift in NDC, as set; a copy. */
+  getLensShift(): { x: number; y: number } {
+    return { ...this.state.lensShift };
+  }
+
+  /** The lens shift the current projection applies: {@link getLensShift} in perspective, zero in orthographic. */
+  getActiveLensShift(): { x: number; y: number } {
+    return { ...activeLensShift(this.state) };
   }
 
   /**
@@ -212,6 +252,7 @@ export class Camera {
    *   inertia, so `addVelocity` has no effect on it.
    */
   zoom(delta: number, addVelocity = false, mouseX?: number, mouseY?: number, canvasWidth?: number, canvasHeight?: number, fastZoom?: boolean, surfacePoint?: Vec3): void {
+    if (!Number.isFinite(delta)) return;
     // Zooming IN over geometry approaches the picked surface instead of the
     // target plane, so repeated notches stop short of it (#5393). Pure dolly
     // (fast zoom, Cesium) and orthographic keep the plain path.
@@ -231,6 +272,7 @@ export class Camera {
     const fraction = Math.min(Math.abs(delta) * CAMERA_CONSTANTS.ZOOM_SENSITIVITY, CAMERA_CONSTANTS.MAX_ZOOM_DELTA);
     const next = surfaceZoomStep(this.state.camera, point, fraction);
     if (!next) return false;
+    if (!canAdmitZoomPose(next, this.state.camera)) return true; // Handled, but unsafe: do not fall through to a different zoom.
     // The orbit centre is left where it is on purpose: the mouse path re-seats
     // it on every orbit start, and the new target already sits at the surface.
     // In place, like every other pose writer: callers may hold these objects.
@@ -257,6 +299,15 @@ export class Camera {
   }
 
   /**
+   * Whether a timed pose tween (preset view, frame, home) has started and its
+   * final pose has not yet been applied by `update()`. Independent of whether
+   * any frame has run since, so it is safe for a host to wait on.
+   */
+  isTweening(): boolean {
+    return this.animator.isTweening();
+  }
+
+  /**
    * Frame/center view on a point (keeps current distance and direction)
    * Standard CAD "Frame Selection" behavior
    */
@@ -267,9 +318,13 @@ export class Camera {
   /**
    * Frame selection - zoom to fit bounds while keeping current view direction
    * This is what "Frame Selection" should do - zoom to fill screen
+   *
+   * `padding` (>= 1) states the margin: the box's projected corners reach
+   * `1 / padding` of the half-frame on the limiting axis, exactly, in either
+   * projection (#7617). Omitted, the fixed default multiple of the fit distance applies.
    */
-  async frameBounds(min: Vec3, max: Vec3, duration = 300): Promise<void> {
-    return this.animator.frameBounds(min, max, duration);
+  async frameBounds(min: Vec3, max: Vec3, duration = 300, padding?: number): Promise<void> {
+    return this.animator.frameBounds(min, max, duration, padding);
   }
 
   async zoomExtent(min: Vec3, max: Vec3, duration = 300): Promise<void> {
@@ -285,7 +340,16 @@ export class Camera {
     this.state.camera.position = { ...policy.position };
     this.state.camera.target = { ...policy.target };
     this.state.camera.up = { ...policy.up };
+    // Orthographic scale is the half-height, not the distance (#8802 R6).
+    const orthoSize = this.fitOrthoSize(policy);
+    if (orthoSize !== undefined) this.state.orthoSize = orthoSize;
     this.updateMatrices();
+  }
+
+  /** The policy's orthographic half-height, in orthographic mode and when usable; else undefined. */
+  private fitOrthoSize(policy: FitPolicy): number | undefined {
+    if (this.state.projectionMode !== 'orthographic' || policy.orthoSize === undefined) return undefined;
+    return usableOrthoSize(policy.orthoSize) ?? undefined;
   }
 
   /**
@@ -298,6 +362,7 @@ export class Camera {
       { ...policy.target },
       { ...policy.up },
       duration,
+      this.fitOrthoSize(policy),
     );
   }
 
@@ -331,6 +396,9 @@ export class Camera {
     const fitOpts: PickFitPolicyOptions = {
       fovY: this.state.camera.fov,
       viewportShortPx: options?.viewportShortPx,
+      // The live viewport shape, so a portrait (phone) viewport frames the
+      // whole model across its narrower horizontal field.
+      aspect: this.state.camera.aspect,
     };
     const policy = pickFitPolicy(bounds, fitOpts);
     if (options?.animate) {
@@ -380,6 +448,19 @@ export class Camera {
     buildingRotation?: number
   ): void {
     this.animator.setPresetView(view, bounds, buildingRotation);
+  }
+
+  /**
+   * Diagonal preset for a ViewCube edge or corner. `direction` is the
+   * camera's offset from the model in the named presets' face frame
+   * (+X right, +Y top, +Z front), e.g. `{x:1,y:1,z:0}` is the top-right edge.
+   */
+  setPresetDirection(
+    direction: Vec3,
+    bounds?: { min: Vec3; max: Vec3 },
+    buildingRotation?: number
+  ): void {
+    this.animator.setPresetDirection(direction, bounds, buildingRotation);
   }
 
   /**
@@ -571,6 +652,12 @@ export class Camera {
    */
   getSceneBounds(): { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | null {
     return this.state.sceneBounds;
+  }
+
+  /** Widen only the orthographic depth range by this extent (never fitting or pivots); null clears it. */
+  setDepthOnlyBounds(bounds: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } } | null): void {
+    this.state.depthOnlyBounds = bounds;
+    this.updateMatrices();
   }
 
   /**

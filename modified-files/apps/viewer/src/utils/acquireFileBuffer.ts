@@ -24,6 +24,19 @@
 // wrapper so the test entry point (`__acquireFileBufferWithThreshold`) can
 // run without ever loading `ifcConfig`.
 
+/** Bytes copied between returns to the event loop while streaming a large file into its buffer. */
+export const READ_YIELD_BYTES = 8 * 1024 * 1024;
+
+/** One macrotask turn without timer clamping (setTimeout nests to >= 4 ms). */
+function yieldToEventLoop(): Promise<void> {
+  if (typeof MessageChannel === 'undefined') return new Promise((resolve) => setTimeout(resolve, 0));
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => { channel.port1.close(); resolve(); };
+    channel.port2.postMessage(null);
+  });
+}
+
 export interface AcquiredBuffer {
   /**
    * Underlying buffer. Either a `SharedArrayBuffer` (large files when SAB is
@@ -63,8 +76,9 @@ export async function __acquireFileBufferWithThreshold(
     && sharedArrayBufferAvailable()
     && typeof file.stream === 'function';
 
-  if (!useSharedStream && !signal) {
+  if (!useSharedStream && (!signal || typeof file.stream !== 'function')) {
     const buffer = await file.arrayBuffer();
+    signal?.throwIfAborted();
     return {
       buffer,
       view: new Uint8Array(buffer),
@@ -72,13 +86,14 @@ export async function __acquireFileBufferWithThreshold(
     };
   }
 
-  const sab = useSharedStream ? new SharedArrayBuffer(file.size) : new ArrayBuffer(file.size);
-  const view = new Uint8Array(sab);
+  const buffer = useSharedStream ? new SharedArrayBuffer(file.size) : new ArrayBuffer(file.size);
+  const view = new Uint8Array(buffer);
   const reader = (file.stream() as ReadableStream<Uint8Array>).getReader();
-  let offset = 0;
   const abort = () => { void reader.cancel(signal?.reason).catch(() => {}); };
   signal?.addEventListener('abort', abort, { once: true });
   if (signal?.aborted) abort();
+  let offset = 0;
+  let sinceYield = 0;
 
   try {
     // Stream chunks from the File directly into the SAB. No intermediate
@@ -89,15 +104,23 @@ export async function __acquireFileBufferWithThreshold(
       const { done, value } = await reader.read();
       signal?.throwIfAborted();
       if (done) break;
-      if (offset + value.byteLength > sab.byteLength) {
+      if (offset + value.byteLength > buffer.byteLength) {
         // Defensive: file grew while reading (rare, but possible on local
         // disks with active writes). Truncate to the SAB size we promised.
-        view.set(value.subarray(0, sab.byteLength - offset), offset);
-        offset = sab.byteLength;
+        view.set(value.subarray(0, buffer.byteLength - offset), offset);
+        offset = buffer.byteLength;
         break;
       }
       view.set(value, offset);
       offset += value.byteLength;
+      // Chunks that are already buffered resolve as microtasks, so without this the whole read is one long
+      // main-thread task (BWK, 327 MB: 250-300 ms) that holds back everything else the load started, such
+      // as the renderer's device response and the cache lookup.
+      sinceYield += value.byteLength;
+      if (sinceYield >= READ_YIELD_BYTES) {
+        sinceYield = 0;
+        await yieldToEventLoop();
+      }
     }
   } finally {
     signal?.removeEventListener('abort', abort);
@@ -110,14 +133,14 @@ export async function __acquireFileBufferWithThreshold(
   // Validate we read the expected number of bytes. A short read indicates
   // the file shrank mid-load; surface it loudly so callers don't silently
   // process a truncated buffer.
-  if (offset !== sab.byteLength) {
+  if (offset !== buffer.byteLength) {
     throw new Error(
-      `acquireFileBuffer: short read for ${file.name} (got ${offset} of ${sab.byteLength} bytes)`,
+      `acquireFileBuffer: short read for ${file.name} (got ${offset} of ${buffer.byteLength} bytes)`,
     );
   }
 
   return {
-    buffer: sab,
+    buffer,
     view,
     isShared: useSharedStream,
   };

@@ -63,7 +63,7 @@ export type {
   EntityKey,
 } from './types.js';
 
-export { DEFAULT_SECTION_CONFIG, makeEntityKey, parseEntityKey } from './types.js';
+export { DEFAULT_SECTION_CONFIG, isPolygonCutLine, makeEntityKey, parseEntityKey } from './types.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SECTION CUTTING
@@ -82,12 +82,7 @@ export { PolygonBuilder, simplifyPolygon, polygonBounds } from './polygon-builde
 // LINE MERGING
 // ═══════════════════════════════════════════════════════════════════════════
 
-export {
-  mergeDrawingLines,
-  mergeCollinearLines,
-  deduplicateLines,
-  splitLineAtParams,
-} from './line-merger.js';
+export { mergeDrawingLines, mergeCollinearLines, deduplicateLines, splitLineAtParams } from './line-merger.js';
 export type { LineMergerOptions } from './line-merger.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -119,8 +114,10 @@ export {
 export type { ProjectionBand, ProjectionBandDepths } from './projection-bands.js';
 
 // Current-floor scoping + feature-element exclusion (issue #979 follow-up)
-export { currentFloorBands, storeyFloorsFromMeshes } from './storey-bands.js';
+export { currentFloorBands, storeyFloorsFromMeshes, StoreyFloorLevels } from './storey-bands.js';
 export type { StoreyFloorMesh } from './storey-bands.js';
+export { storeyCutElevation } from './storey-cut.js';
+export type { StoreyCut, StoreyCutFrame } from './storey-cut.js';
 export { isFeatureElementType } from './feature-elements.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -235,8 +232,8 @@ export type { ColorRaster, ColorRasterOptions, RasterFit } from './color-raster.
 // own header, its own `$INSUNITS` (patch 0011), its own layer-name sanitiser
 // and its own extents bookkeeping — in the overlay. `cssToAci` stays private;
 // it is not needed from outside.
-export { DXFExporter, exportToDXF } from './dxf-exporter.js';
-export type { DXFExportOptions, DXFUnderlayOptions } from './dxf-exporter.js';
+export { DXFExporter, exportToDXF, isDxfDimensionExportable } from './dxf-exporter.js';
+export type { DXFExportOptions, DXFPolylineLayer, DXFText, DXFTextLayer, DXFUnderlayOptions } from './dxf-exporter.js';
 export { encodeDxfCp1252, type Cp1252EncodeResult } from './dxf/encoding.js'; // public: $DWGCODEPAGE ANSI_1252, not UTF-8
 export { DxfWriter, sanitizeDxfLayerName } from './dxf/writer.js';
 export type {
@@ -256,13 +253,11 @@ export { GPUSectionCutter, isGPUComputeAvailable } from './gpu-section-cutter.js
 // HIGH-LEVEL GENERATOR
 // ═══════════════════════════════════════════════════════════════════════════
 
-export {
-  Drawing2DGenerator,
-  createSectionConfig,
-  generateFloorPlan,
-  generateSection,
-} from './drawing-generator.js';
+export { Drawing2DGenerator, createSectionConfig, generateFloorPlan, generateSection } from './drawing-generator.js';
 export type { GeneratorOptions, GeneratorProgress } from './drawing-generator.js';
+export type { DrawingMeshSource, DrawingPass } from './drawing-mesh-source.js';
+export { DrawingSession } from './drawing-session.js';
+export type { DrawingOcclusionNeeds, DrawingSessionOptions } from './drawing-session.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MATH UTILITIES
@@ -484,7 +479,7 @@ export {
   convertDxfToUnderlay,
   applyDxfPlacement,
   aciToCss,
-  DEFAULT_DXF_PLACEMENT,
+  DEFAULT_DXF_PLACEMENT, DXF_TEXT_LINE_HEIGHT_FACTOR, dxfTextLineOffset,
 } from './dxf/index.js';
 
 export type {

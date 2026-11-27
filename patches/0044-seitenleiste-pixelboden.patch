@@ -1,47 +1,52 @@
 diff --git a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
-index 72d9b463135c27969aeecd0cafa4920565a76e73..73c74062f0b9664d5a297897abd27ea289a4c549 100644
+index b7ae9afc385debd400aba5051175455522720fc2..e54e2e48c54170b414cd373fa88144aed3ecb45d 100644
 --- a/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
 +++ b/apps/viewer/src/components/viewer/sidebar/SidebarDock.tsx
-@@ -31,6 +31,24 @@ const ACTIVITY_BAR_PX = 48; // w-12
- // Mirrors the clamp in sidebarSlice so the live drag matches what is persisted.
+@@ -27,8 +27,8 @@ import { sidebarPaneDrawn } from '@/lib/panels/rendered-panels';
+ import { useEmptyStartFoldsSidebarPane } from '../welcome/useEmptyStartFold';
+ 
+ const ACTIVITY_BAR_PX = 48; // w-12
+-// Mirrors the clamp in sidebarSlice so the live drag matches what is persisted.
  const MIN_WIDTH_PCT = 14;
- const MAX_WIDTH_PCT = 60;
-+// Trassia (Paket V-PFLEGE, Teil A): Pixelboden neben dem Prozentboden.
-+//
-+// Ein Prozentboden skaliert falsch herum — je breiter der Bildschirm, desto
-+// breiter das erzwungene Minimum, obwohl der Platzbedarf des Inhalts in
-+// Pixeln konstant ist. 14 % sind auf 1600 px 224 px, auf 2560 px aber 358 px
-+// und auf 3440 px 482 px. Auf einem grossen Schirm liess sich die Leiste
-+// dadurch nicht mehr schmal ziehen, ohne dass ein Grund sichtbar war (Marcos
-+// Befund vom 2026-09-01).
-+//
-+// 240 px ist gemessen, nicht geraten: unterhalb davon laeuft im schmalsten
-+// Upstream-Panel (Clash) die Knopfreihe aus dem Kasten — Protokoll
-+// Business/tests/20260903_ui-dichte/audit-vorher.json.
-+//
-+// Der Boden ist das MINIMUM aus beiden Werten, nie das Maximum: auf schmalen
-+// Fenstern bleibt alles wie bisher (dort sind 14 % ohnehin weniger als
-+// 240 px), auf breiten wird der Prozentboden geloest. Diese Aenderung kann
-+// den erlaubten Bereich also nur vergroessern, nie verkleinern.
 +const MIN_WIDTH_PX = 240;
+ const MAX_WIDTH_PCT = 60;
  
  export function SidebarDock() {
-   const { t } = useTranslation();
-@@ -70,7 +88,11 @@ export function SidebarDock() {
+@@ -65,13 +65,16 @@ export function SidebarDock() {
+       const parent = rootRef.current?.parentElement;
+       if (!parent) return;
+       const rect = parent.getBoundingClientRect();
++      if (rect.width <= 0) return;
++      // The limit depends on the measured dock row, not the persisted percentage.
++      const minPct = Math.min(MIN_WIDTH_PCT, (MIN_WIDTH_PX / rect.width) * 100);
+       const move = (ev: MouseEvent) => {
+         // The content pane's right edge is fixed against the activity bar;
+         // dragging its left edge sets the width. Clamp live to the same range
          // the store enforces so the pane doesn't rubber-band past the limits.
          const contentPx = rect.right - ACTIVITY_BAR_PX - ev.clientX;
          const pct = (contentPx / rect.width) * 100;
 -        setDragPct(Math.max(MIN_WIDTH_PCT, Math.min(MAX_WIDTH_PCT, pct)));
-+        // Trassia: der kleinere der beiden Boeden gewinnt (siehe MIN_WIDTH_PX).
-+        const minPct = rect.width > 0
-+          ? Math.min(MIN_WIDTH_PCT, (MIN_WIDTH_PX / rect.width) * 100)
-+          : MIN_WIDTH_PCT;
 +        setDragPct(Math.max(minPct, Math.min(MAX_WIDTH_PCT, pct)));
        };
        const teardown = () => {
          document.removeEventListener('mousemove', move);
+diff --git a/apps/viewer/src/lib/panels/layout-migration.ts b/apps/viewer/src/lib/panels/layout-migration.ts
+index 30f4e9354afd6cdfcc20760719597feda6bb7a65..bbb61871deb757cad79575b5629f6470010f75aa 100644
+--- a/apps/viewer/src/lib/panels/layout-migration.ts
++++ b/apps/viewer/src/lib/panels/layout-migration.ts
+@@ -65,7 +65,9 @@ export interface SidebarMigration {
+   changes: LayoutChange[];
+ }
+ 
+-const MIN_WIDTH_PCT = 14;
++// The measured drag floor lives in SidebarDock. Accept its persisted value
++// down to 240 px on a 4000 px wide row.
++const MIN_WIDTH_PCT = 6;
+ const MAX_WIDTH_PCT = 60;
+ const MAX_PRESERVED = 64;
+ 
 diff --git a/apps/viewer/src/store/slices/sidebarSlice.test.ts b/apps/viewer/src/store/slices/sidebarSlice.test.ts
-index e44e4012f21ed2c92c611827e7688e7fc41a74ac..6e3ea0478d3118b74ae175d9150a3ce77bd87662 100644
+index ad7cc64db10e8ff5439fd06137d59e91c94e7fed..8714d7a1e52e69d6b825cb374955d02bea997d1f 100644
 --- a/apps/viewer/src/store/slices/sidebarSlice.test.ts
 +++ b/apps/viewer/src/store/slices/sidebarSlice.test.ts
 @@ -59,7 +59,16 @@ describe('sidebarSlice (#1208)', () => {
@@ -62,28 +67,3 @@ index e44e4012f21ed2c92c611827e7688e7fc41a74ac..6e3ea0478d3118b74ae175d9150a3ce7
    });
  
    it('reorders a panel to the front', () => {
-diff --git a/apps/viewer/src/store/slices/sidebarSlice.ts b/apps/viewer/src/store/slices/sidebarSlice.ts
-index 29e8fbf0f6ec1cd142b6610db818557bab419fbd..5272a159041d81f35df690755ebd11949448d987 100644
---- a/apps/viewer/src/store/slices/sidebarSlice.ts
-+++ b/apps/viewer/src/store/slices/sidebarSlice.ts
-@@ -58,7 +58,19 @@ export interface SidebarLayoutSnapshot {
- }
- 
- const STORAGE_KEY = 'ifc-lite:sidebar-layout-v1';
--const MIN_WIDTH_PCT = 14;
-+// Trassia (Paket V-PFLEGE, Teil A): von 14 auf 6 gesenkt.
-+//
-+// Diese Klemme ist die PERSISTENZ-Schranke — sie faengt kaputte oder
-+// veraltete gespeicherte Werte ab. Der echte, bildschirmbreitenabhaengige
-+// Boden liegt in SidebarDock.tsx (MIN_WIDTH_PX = 240 px), weil nur dort die
-+// Breite der Zeile bekannt ist; ein Prozentwert allein kann ihn nicht
-+// ausdruecken. Bliebe hier 14 stehen, wuerde der Speicher jede vom Nutzer
-+// gezogene Breite unter 14 % sofort wieder hochklemmen und die Aenderung in
-+// SidebarDock waere wirkungslos.
-+//
-+// 6 % deckt 240 px bis hinauf zu einem 4000-px-Schirm ab (240/4000 = 6 %) und
-+// bleibt zugleich eine echte Schranke gegen eine auf null gespeicherte Breite.
-+const MIN_WIDTH_PCT = 6;
- const MAX_WIDTH_PCT = 60;
- 
- // Fresh layouts cluster the registry's task groups; persisted custom order is

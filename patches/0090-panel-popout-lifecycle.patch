@@ -1,16 +1,16 @@
 diff --git a/apps/viewer/src/hooks/usePanelControls.ts b/apps/viewer/src/hooks/usePanelControls.ts
-index 3271ea5bde829b1123234d5a640257d5ad4e3392..c7a0b00406889537d3f1cfa6a9b8b668ef7ed10d 100644
+index 4cd1389341c03285a7c924f7ec8acf2e3e8c0287..c9d8e1ceceb85fdc0e9f45cb643d7f8d9b3fe32f 100644
 --- a/apps/viewer/src/hooks/usePanelControls.ts
 +++ b/apps/viewer/src/hooks/usePanelControls.ts
-@@ -131,6 +131,7 @@ export function usePanelControls(): PanelControls {
-       useViewerStore.getState().setLeftPanelCollapsed(false);
-       return;
+@@ -137,6 +137,7 @@ export function usePanelControls(): PanelControls {
      }
+     // Bottom-strip panels never touch the right pane, so never lift its fold.
+     if (!isBottomPanel(id)) liftStartFold('right');
 +    closePanelWindow(id);
      useViewerStore.getState().openPanelInHome(id, source);
    }, []);
  
-@@ -171,6 +172,7 @@ export function usePanelControls(): PanelControls {
+@@ -181,6 +182,7 @@ export function usePanelControls(): PanelControls {
    }, []);
  
    const closePanel = useCallback((id: WorkspacePanelId) => {
@@ -18,11 +18,92 @@ index 3271ea5bde829b1123234d5a640257d5ad4e3392..c7a0b00406889537d3f1cfa6a9b8b668
      if (useViewerStore.getState().closeDockedSidebarPanel(id)) return;
      if (isLeftPanel(id)) {
        useViewerStore.getState().setLeftPanelCollapsed(true);
+@@ -191,7 +193,6 @@ export function usePanelControls(): PanelControls {
+       useViewerStore.getState().setSidebarSecondaryPanel(null);
+     }
+     useViewerStore.getState().closeFloatingPanel(id);
+-    closePanelWindow(id);
+     if (isAnalysisPanel(id)) setDockedVisible(id, false);
+     // Trassia (Paket SEITENLEISTE, Tester-Blocker B-1): ein Seitenpanel OHNE
+     // eigenes Sichtbarkeits-Flag (Zones, Trassia-Panels drape/kubatur/
+diff --git a/apps/viewer/src/services/panel-windows.test.ts b/apps/viewer/src/services/panel-windows.test.ts
+index 1ff9bc05a712799f5a6875d5d208ca765b63f791..5573639f7583ac150157a1a7467f9fa53ffd0674 100644
+--- a/apps/viewer/src/services/panel-windows.test.ts
++++ b/apps/viewer/src/services/panel-windows.test.ts
+@@ -44,6 +44,7 @@ function fakeWindow() {
+       const i = arr.indexOf(cb);
+       if (i >= 0) arr.splice(i, 1);
+     },
++    fire: (type: string) => { for (const callback of listeners.get(type) ?? []) callback(); },
+     document: {
+       title: '',
+       documentElement: {
+@@ -58,7 +59,7 @@ function fakeWindow() {
+       createElement: () => ({}),
+     },
+   };
+-  return win as unknown as Window & { close: () => void; readonly closed: boolean };
++  return win as unknown as Window & { fire: (type: string) => void };
+ }
+ 
+ describe('panel-windows', () => {
+@@ -110,6 +111,51 @@ describe('panel-windows', () => {
+     assert.equal(getPanelWindowsSnapshot().length, 0);
+   });
+ 
++  it('close wins over late PiP permission and a double request does not open a second window', async () => {
++    const child = fakeWindow();
++    let resolvePermission!: (value: Window) => void;
++    const permission = new Promise<Window>((resolve) => { resolvePermission = resolve; });
++    let requests = 0;
++    window.documentPictureInPicture = {
++      requestWindow: () => { requests++; return permission; },
++      window: null,
++    };
++    try {
++      const opening = openPanelWindow('clash');
++      assert.equal(await openPanelWindow('clash'), null);
++      closePanelWindow('clash');
++      resolvePermission(child);
++      assert.equal(await opening, null);
++      assert.equal(requests, 1);
++      assert.equal(child.closed, true);
++      assert.equal(getPanelWindowsSnapshot().length, 0);
++    } finally {
++      window.documentPictureInPicture = undefined;
++    }
++  });
++
++  it('uses a normal popup when requesting PiP throws before returning a promise', async () => {
++    window.documentPictureInPicture = {
++      requestWindow: () => { throw new Error('PiP disabled'); },
++      window: null,
++    };
++    try {
++      assert.equal(await openPanelWindow('clash'), 'popup');
++      assert.equal(openedWindows.length, 1);
++    } finally {
++      window.documentPictureInPicture = undefined;
++    }
++  });
++
++  it('ignores pagehide from a replaced child', async () => {
++    await openPanelWindow('clash');
++    closePanelWindow('clash');
++    await openPanelWindow('clash');
++    openedWindows[0].fire('pagehide');
++    assert.equal(getPanelWindowsSnapshot()[0].win, openedWindows[1]);
++    assert.equal(openedWindows[1].closed, false);
++  });
++
+   it('focuses (and does not re-open) an already-popped-out panel', async () => {
+     await openPanelWindow('clash');
+     assert.equal(openedWindows.length, 1);
 diff --git a/apps/viewer/src/services/panel-windows.ts b/apps/viewer/src/services/panel-windows.ts
-index 1c2909f5c14024a29c31e83eec96edac1396aa87..20a5b6bd4ee3383bddb81a76cb06a766708f758a 100644
+index 907a85a07e2338ba302ee67d4ae7f89eddc3f882..ce788e51c9158f30d88d947e90b5f470126d83e3 100644
 --- a/apps/viewer/src/services/panel-windows.ts
 +++ b/apps/viewer/src/services/panel-windows.ts
-@@ -45,6 +45,8 @@ export interface PanelWindowEntry {
+@@ -47,6 +47,8 @@ export interface PanelWindowEntry {
  }
  
  const open = new Map<WorkspacePanelId, PanelWindowEntry>();
@@ -31,7 +112,7 @@ index 1c2909f5c14024a29c31e83eec96edac1396aa87..20a5b6bd4ee3383bddb81a76cb06a766
  const listeners = new Set<() => void>();
  let snapshot: PanelWindowEntry[] = [];
  
-@@ -144,26 +146,35 @@ export async function openPanelWindow(id: WorkspacePanelId): Promise<PanelWindow
+@@ -147,26 +149,35 @@ export async function openPanelWindow(id: WorkspacePanelId): Promise<PanelWindow
      return existing.kind;
    }
  
@@ -69,9 +150,9 @@ index 1c2909f5c14024a29c31e83eec96edac1396aa87..20a5b6bd4ee3383bddb81a76cb06a766
    }
 +  pending.delete(id);
    if (!win) return null; // blocked by a popup blocker
+   observeWindowInput(win); // its input publishes a held edit too (#10535)
  
-   try {
-@@ -186,7 +197,10 @@ export async function openPanelWindow(id: WorkspacePanelId): Promise<PanelWindow
+@@ -190,7 +201,10 @@ export async function openPanelWindow(id: WorkspacePanelId): Promise<PanelWindow
    open.set(id, entry);
  
    // Closing the child (its own X, or the user closing the window) re-docks.
@@ -83,7 +164,7 @@ index 1c2909f5c14024a29c31e83eec96edac1396aa87..20a5b6bd4ee3383bddb81a76cb06a766
    win.addEventListener('pagehide', onClosed, { once: true });
    win.addEventListener('unload', onClosed, { once: true });
  
-@@ -196,11 +210,13 @@ export async function openPanelWindow(id: WorkspacePanelId): Promise<PanelWindow
+@@ -200,11 +214,13 @@ export async function openPanelWindow(id: WorkspacePanelId): Promise<PanelWindow
  
  /** Close a popped-out panel (re-dockable from the activity bar afterwards). */
  export function closePanelWindow(id: WorkspacePanelId): void {

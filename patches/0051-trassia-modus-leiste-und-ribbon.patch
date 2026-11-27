@@ -1,25 +1,25 @@
 diff --git a/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx b/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
-index 68dad6dfe65196a7d66d03a1e2e01121adf56e2b..4a50ffccdb818c931d7f3e4a01920089b6adc309 100644
+index 0abad0b59c657a36946539c91ad8bb68ac59920a..2d79f14479f52052fb2a2b70693885c58a126a07 100644
 --- a/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
 +++ b/apps/viewer/src/components/viewer/ribbon/RibbonToolbar.tsx
-@@ -37,6 +37,7 @@ import { AnalyzeTab } from './tabs/AnalyzeTab';
+@@ -40,6 +40,7 @@ import { AnalyzeTab } from './tabs/AnalyzeTab';
  import { AuthorTab } from './tabs/AuthorTab';
  import { RibbonSwitchNotice } from './RibbonSwitchNotice';
  import { useRibbonContextualTab } from './useRibbonContextualTab';
 +import { chRibbonZeigt, chVollmodus } from '@/lib/ch/modus';
+ import { RibbonCommandSmallButton } from './command-button';
+ import { Settings } from '@/icons';
  import { emitOpenCommandPalette } from '@/lib/tours/events';
- 
- const RIBBON_TABS: { id: RibbonTabId; labelKey: TranslationKey }[] = [
-@@ -91,7 +92,7 @@ export function RibbonToolbar({ onShowShortcuts }: RibbonToolbarProps = {} as Ri
-           className="flex h-full items-end justify-start gap-0.5 rounded-none bg-transparent p-0"
-           {...tourAnchor(TOUR_ANCHORS.ribbonTabs)}
-         >
--          {RIBBON_TABS.map((tab) => {
-+          {RIBBON_TABS.filter((tab) => chRibbonZeigt(tab.id)).map((tab) => {
-             const isActive = tab.id === activeTab;
-             return (
-               <TabsTrigger
-@@ -238,7 +239,7 @@ export function RibbonToolbar({ onShowShortcuts }: RibbonToolbarProps = {} as Ri
+@@ -54,7 +55,7 @@ export function RibbonToolbar({ onShowShortcuts }: RibbonToolbarProps = {} as Ri
+   const { t } = useTranslation();
+   const inModel = useViewerStore((s) => s.workspaceMode === 'model');
+   const canEdit = useViewerStore((s) => s.canCollabEdit());
+-  const tabs = availableRibbonTabs();
++  const tabs = availableRibbonTabs().filter((tab) => chRibbonZeigt(tab.id));
+   const storedTab = useViewerStore((s) => s.ribbonTab);
+   const activeTab = tabs.some((tab) => tab.id === storedTab) ? storedTab : 'home';
+   const setActiveTab = useViewerStore((s) => s.setRibbonTab);
+@@ -241,7 +242,7 @@ export function RibbonToolbar({ onShowShortcuts }: RibbonToolbarProps = {} as Ri
  
        {/* One-time "the toolbar changed" line, with the way back. Sits under
            the band so it never displaces a command the user is reaching for. */}
@@ -29,11 +29,11 @@ index 68dad6dfe65196a7d66d03a1e2e01121adf56e2b..4a50ffccdb818c931d7f3e4a01920089
    );
  }
 diff --git a/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx b/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx
-index 6827e97b690e754a47f8a03b248eee6fa6456dd0..684665adac71b28641dec85d215ddc75aac24c14 100644
+index 472b4b2caea7b3b48d9ca69e92ac302d5af8e336..73b10578ad44e979e695a2fbc2be1b17cb645eaa 100644
 --- a/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx
 +++ b/apps/viewer/src/components/viewer/ribbon/tabs/FileTab.tsx
-@@ -18,6 +18,8 @@ import { useWorkspacePanelControls } from '../../toolbar/useWorkspacePanelContro
- import { surfaceCommand } from '../../surface-commands';
+@@ -19,6 +19,8 @@ import { useWorkspacePanelControls } from '../../toolbar/useWorkspacePanelContro
+ import { surfaceCommand } from '../../surface-command-registry';
  import { RibbonExportGroup } from './RibbonExportGroup';
  import { RIBBON_EXPORT_ICONS } from './ribbon-export-icons';
 +// Trassia overlay (not upstream) — Paket U2. Siehe lib/ch/modus.ts.
@@ -41,7 +41,7 @@ index 6827e97b690e754a47f8a03b248eee6fa6456dd0..684665adac71b28641dec85d215ddc75
  import {
    RibbonGroup,
    RibbonGroupDivider,
-@@ -63,6 +65,7 @@ export function FileTab({ fileCommands }: { fileCommands: FileCommands }) {
+@@ -64,6 +66,7 @@ export function FileTab({ fileCommands }: { fileCommands: FileCommands }) {
            className={loading ? '[&_svg]:animate-spin' : undefined}
            commandContext={{ openFiles: () => { void handleOpenClick(); } }}
          />
@@ -49,7 +49,7 @@ index 6827e97b690e754a47f8a03b248eee6fa6456dd0..684665adac71b28641dec85d215ddc75
          <RibbonCommandLargeButton
            commandId="panel:sources"
            icon={CloudSources}
-@@ -70,6 +73,7 @@ export function FileTab({ fileCommands }: { fileCommands: FileCommands }) {
+@@ -71,6 +74,7 @@ export function FileTab({ fileCommands }: { fileCommands: FileCommands }) {
            active={activeWorkspacePanels.has('sources')}
            commandContext={{ activateRightPanel: () => handleToggleRightPanel('sources') }}
          />
@@ -57,26 +57,3 @@ index 6827e97b690e754a47f8a03b248eee6fa6456dd0..684665adac71b28641dec85d215ddc75
          <RibbonSmallStack>
            <RibbonCommandSmallButton
              commandId="file:add-model"
-diff --git a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
-index 61db4988f60665c41d8ebd96e914222fe7ba841b..0597d126b43daa2fb21d061f37676bc2438ac043 100644
---- a/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
-+++ b/apps/viewer/src/components/viewer/sidebar/ActivityBar.tsx
-@@ -43,6 +43,9 @@ import { useRailPanelIds } from '@/hooks/useRailPanelIds';
- import { pendingCompositionMutations } from '@/lib/layers/pending';
- import { activityAnchor, tourAnchor } from '@/lib/tours/anchors';
- import { CustomizeSidebar } from './CustomizeSidebar';
-+// Trassia overlay (not upstream) — Paket U2: im Trassia-Modus zeigt die Leiste
-+// fuenf Symbole, im Vollmodus (?voll=1) alle. Siehe lib/ch/modus.ts.
-+import { chLeisteZeigt } from '@/lib/ch/modus';
- 
- /** Alt+N shortcut KEY per panel, by registry index (frozen since #1200): 1-9,
-  *  then 0. Only the first ten registry entries get a shortcut; later
-@@ -79,7 +82,7 @@ export function ActivityBar() {
-   const [overId, setOverId] = useState<WorkspacePanelId | null>(null);
- 
-   // One rail list for the activity bar and the mobile Panels sheet (#5853).
--  const visibleIds = useRailPanelIds();
-+  const visibleIds = useRailPanelIds().filter(chLeisteZeigt);
- 
-   const onIconClick = (id: WorkspacePanelId) => {
-     const region = getPanelDef(id)?.region;

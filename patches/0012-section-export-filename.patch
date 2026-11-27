@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/hooks/useDrawingExport.ts b/apps/viewer/src/hooks/useDrawingExport.ts
-index 5c398f982bdf1e7420f4e490a2337c0e615f0502..347d06ad5cf2f6a60cb3177b680328447b8ae4bf 100644
+index 1c17934d53564e20aa7b5ecf14f4a72f400a4891..6f45aa10516533e65472b37e3814c19696c9fab6 100644
 --- a/apps/viewer/src/hooks/useDrawingExport.ts
 +++ b/apps/viewer/src/hooks/useDrawingExport.ts
-@@ -8,6 +8,9 @@ import { drawingReferenceSvg, snapshotDrawingReferences, rasterizeReferenceLayer
+@@ -10,6 +10,9 @@ import { drawingReferenceSvg, snapshotDrawingReferences, rasterizeReferenceLayer
  import type React from 'react';
  import { posthog, trackExportCompleted } from '@/lib/analytics';
  import { downloadFile, sanitizeFilename } from '@/lib/export/download';
@@ -10,11 +10,11 @@ index 5c398f982bdf1e7420f4e490a2337c0e615f0502..347d06ad5cf2f6a60cb3177b68032844
 +// called; see overlay/apps/viewer/src/lib/ch/section-export-name.ts.
 +import { chSectionExportStem } from '@/lib/ch/section-export-name';
  import { toast } from '@/components/ui/toast';
- import { useTranslation } from '@/i18n';
- import { pdfLineStyleFor } from '@/lib/export/pdf-line-style';
-@@ -952,7 +955,12 @@ function useDrawingExport({
-       metadataComment,
-       underlays: mappedDxfUnderlayOptions(dxfUnderlays, sectionPlane.axis),
+ import { useTranslation, type UseTranslationResult } from '@/i18n';
+ import { recordActivity } from '@/lib/activity/activity-journal';
+@@ -723,7 +726,12 @@ export function createDrawingExport({
+       polylineLayers: displayOptions.showScanSection ? scanOutlineDxfLayers(scanSection.outline) : [],
+       dimensions: dimensionGraphicsAt(displayOptions.scale, sectionPlane.axis),
      });
 -    const stem = `section-${sectionPlane.axis}-${sectionPlane.position}`;
 +    // Trassia (audit finding M-11): a cut set at a station on an
@@ -23,6 +23,6 @@ index 5c398f982bdf1e7420f4e490a2337c0e615f0502..347d06ad5cf2f6a60cb3177b68032844
 +    // name is kept for every other section, where it is the honest one.
 +    const stem = chSectionExportStem(sectionPlane.custom)
 +      ?? `section-${sectionPlane.axis}-${sectionPlane.position}`;
-     downloadDxf(dxf, `${stem}.dxf`);
-     trackExportCompleted({ format: 'dxf', surface: 'drawing_panel' });
-     posthog.capture('drawing_exported', {
+     const artifact = createDxfDownload(dxf, `${stem}.dxf`);
+     const warnings = artifact.hadUnmappable ? ['Some characters have no DXF R12 text encoding and were exported as "?".'] : [];
+     for (const message of warnings) services.warn?.(message);

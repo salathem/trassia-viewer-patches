@@ -24,16 +24,18 @@ import { cn } from '@/lib/utils';
 import { useViewerStore } from '@/store';
 import { useTranslation } from '@/i18n';
 import { getPanelDef, type WorkspacePanelId } from '@/lib/panels/registry';
+import { isPanelAvailable } from '@/lib/panels/availability';
 import { resetLayout } from '@/store/layoutReset';
-import { CH_HIDE_NACHHALTEN_MS, chAnpassenZeilen } from '@/lib/ch/leiste-anpassen';
 import { registerKeyboardCommand } from '@/lib/commands/dispatcher';
-// Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
-// 2026-09-03): der Anpassen-Dialog listet im Trassia-Modus nur die Panels, die
-// die Leiste auch anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
+import { CH_HIDE_NACHHALTEN_MS, chAnpassenZeilen } from '@/lib/ch/leiste-anpassen';
+import { LayoutPresetSection } from './LayoutPresetSection';
 
 export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
-  const order = useViewerStore((s) => s.sidebarOrder);
+  // The store keeps every panel's place; Customize lists the ones the host left on
+  // (`lib/features`). Moves index into the full order, so they land past the right panel.
+  const fullOrder = useViewerStore((s) => s.sidebarOrder);
+  const order = fullOrder.filter(isPanelAvailable);
   const hiddenIds = useViewerStore((s) => s.sidebarHiddenIds);
   const reorder = useViewerStore((s) => s.reorderSidebarPanel);
   const setShown = useViewerStore((s) => s.setPanelShownInSidebar);
@@ -43,26 +45,15 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
-
-  // Trassia (UPSTREAM-RESTE, TODO #50, Tester M5-1 04.09.): ein Doppelklick auf
-  // «Hide» versteckte ZWEI Panels — nach dem ersten Klick rueckte die Liste nach,
-  // der zweite Klick traf an derselben Stelle die naechste Zeile (auch bei 150 ms
-  // Abstand). Die soeben versteckte Zeile bleibt darum CH_HIDE_NACHHALTEN_MS an
-  // Ort, abgeblendet und ohne Klickflaeche; erst danach wandert sie nach «Hidden».
-  // Die Listenlogik dazu ist reine Funktion (lib/ch/leiste-anpassen.ts, getestet).
-  const [nachhalten, setNachhalten] = useState<WorkspacePanelId | null>(null);
+  const [heldRow, setHeldRow] = useState<WorkspacePanelId | null>(null);
   useEffect(() => {
-    if (nachhalten === null) return;
-    const t = window.setTimeout(() => setNachhalten(null), CH_HIDE_NACHHALTEN_MS);
-    return () => window.clearTimeout(t);
-  }, [nachhalten]);
-  const verstecken = (id: WorkspacePanelId) => {
-    setShown(id, false);
-    setNachhalten(id);
-  };
+    if (heldRow === null) return;
+    const timer = window.setTimeout(() => setHeldRow(null), CH_HIDE_NACHHALTEN_MS);
+    return () => window.clearTimeout(timer);
+  }, [heldRow]);
 
-  // Shown panels keep their rail order; hidden ones live in their own section.
-  const { shown: shownIds, hiddenList } = chAnpassenZeilen(order, hidden, nachhalten);
+  // Keep the just-hidden row in place until a second click cannot hit its neighbour.
+  const { shown: shownIds, hiddenList } = chAnpassenZeilen(order, hidden, heldRow);
 
   // Move focus into the popover on open and restore it to the trigger on close.
   useEffect(() => {
@@ -104,10 +95,11 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
 
   return (
     <fieldset
+      data-ch-sidebar-customize
       ref={ref}
       tabIndex={-1}
       aria-label={t('shellChrome.customizeSidebar.ariaLabel')}
-      className="absolute bottom-2 right-14 z-40 min-w-0 w-64 rounded-lg border border-border bg-popover text-popover-foreground shadow-2xl overflow-hidden outline-none"
+      className="absolute bottom-2 right-14 z-40 min-w-0 w-64 max-h-[calc(100dvh-12rem)] flex flex-col rounded-lg border border-border bg-popover text-popover-foreground shadow-2xl overflow-hidden outline-none"
     >
       <div className="flex items-center justify-between px-3 h-9 border-b border-border bg-muted/40">
         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -123,7 +115,9 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
         </button>
       </div>
 
-      <div className="max-h-[60vh] overflow-y-auto py-1">
+      <LayoutPresetSection />
+
+      <div className="min-h-0 overflow-y-auto py-1">
         {/* Shown: the panels in the rail, reorderable, each with a Hide control. */}
         {shownIds.map((id, index) => {
           const def = getPanelDef(id);
@@ -131,14 +125,14 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
           const title = t(def.titleKey);
           const Icon = def.Icon;
           const locked = id === 'properties';
-          const nachgehalten = id === nachhalten;
+          const held = id === heldRow;
           const prevShown = shownIds[index - 1];
           const nextShown = shownIds[index + 1];
           return (
             <div
               key={id}
-              data-ch-nachgehalten={nachgehalten || undefined}
-              draggable={!nachgehalten}
+              draggable={!held}
+              data-ch-nachgehalten={held || undefined}
               onDragStart={() => setDragId(id)}
               onDragEnd={() => {
                 setDragId(null);
@@ -151,14 +145,14 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
                 if (overId !== id) setOverId(id);
               }}
               onDrop={() => {
-                if (dragId && dragId !== id) reorder(dragId as WorkspacePanelId, order.indexOf(id));
+                if (dragId && dragId !== id) reorder(dragId as WorkspacePanelId, fullOrder.indexOf(id));
                 setDragId(null);
                 setOverId(null);
               }}
               className={cn(
                 'group flex items-center gap-1.5 px-2 py-1.5 mx-1 rounded-md cursor-grab active:cursor-grabbing',
                 dragId === id && 'opacity-40',
-                nachgehalten && 'opacity-40 pointer-events-none',
+                held && 'opacity-40 pointer-events-none',
                 overId === id && dragId && dragId !== id && 'ring-1 ring-primary/60',
               )}
             >
@@ -167,8 +161,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
               <span className="text-xs flex-1 truncate">{title}</span>
               <button
                 type="button"
-                disabled={index === 0}
-                onClick={() => prevShown && reorder(id, order.indexOf(prevShown))}
+                disabled={held || index === 0}
+                onClick={() => prevShown && reorder(id, fullOrder.indexOf(prevShown))}
                 aria-label={t('shellChrome.customizeSidebar.moveUp', { title })}
                 className="h-6 w-5 inline-flex items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-25 disabled:pointer-events-none transition-colors"
               >
@@ -176,8 +170,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
               </button>
               <button
                 type="button"
-                disabled={index === shownIds.length - 1}
-                onClick={() => nextShown && reorder(id, order.indexOf(nextShown))}
+                disabled={held || index === shownIds.length - 1}
+                onClick={() => nextShown && reorder(id, fullOrder.indexOf(nextShown))}
                 aria-label={t('shellChrome.customizeSidebar.moveDown', { title })}
                 className="h-6 w-5 inline-flex items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-25 disabled:pointer-events-none transition-colors"
               >
@@ -185,8 +179,8 @@ export function CustomizeSidebar({ onClose }: { onClose: () => void }) {
               </button>
               <button
                 type="button"
-                disabled={locked || nachgehalten}
-                onClick={() => verstecken(id)}
+                disabled={locked || held}
+                onClick={() => { setShown(id, false); setHeldRow(id); }}
                 aria-label={
                   locked
                     ? t('shellChrome.customizeSidebar.alwaysShownAriaLabel', { title })

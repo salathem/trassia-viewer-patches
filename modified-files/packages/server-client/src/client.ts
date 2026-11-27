@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import { pollCachedData } from './poll-cached-data.js';
 import { withNarrowedCoordinateSpace,
   type HealthResponse,
   type MetadataResponse,
@@ -18,8 +19,11 @@ import { withNarrowedCoordinateSpace,
 } from './types.js';
 import { decodeParquetGeometry, decodeOptimizedParquetGeometry, isParquetAvailable } from './parquet-decoder.js';
 import { dataModelQuery, parquetStreamQuery, parseQuery } from './parse-query.js';
+import { computeFileHash } from './file-hash.js';
+import { compressGzip, compressedUploadForm, parseRequestSignal } from './parse-request.js';
+import { assertProcessedModelHash, isProcessedModelRef, type ProcessedModelRef } from './processed-model.js';
 import type { ParseRequestOptions, ParseStreamOptions } from './parse-options.js';
-import { serverErrorFromResponse, type IfcServerError } from './server-error.js';
+import { serverErrorFromResponse, IfcServerError } from './server-error.js';
 import {
   consumeParquetStream,
   STREAM_ENDED_WITHOUT_TERMINAL_EVENT,
@@ -54,35 +58,6 @@ const PROBE_HEADER_TIMEOUT_MS = 5000;
 const PROBE_NOT_ANSWERED = new Set([400, 404, 405, 415, 501, 503]);
 
 /**
- * Compress a file or ArrayBuffer using gzip compression.
- * Uses the browser's CompressionStream API for efficient compression.
- *
- * @param file - File or ArrayBuffer to compress
- * @returns Compressed Blob
- */
-async function compressGzip(file: File | ArrayBuffer): Promise<Blob> {
-  const stream = file instanceof File ? file.stream() : new Blob([file]).stream();
-  const compressionStream = new CompressionStream('gzip');
-  const compressedStream = stream.pipeThrough(compressionStream);
-  return new Response(compressedStream).blob();
-}
-
-/**
- * Compute SHA-256 hash of a file or ArrayBuffer.
- * Used for cache key generation client-side to avoid uploading files that are already cached.
- *
- * @param file - File or ArrayBuffer to hash
- * @returns Hexadecimal SHA-256 hash string
- */
-async function computeFileHash(file: File | ArrayBuffer): Promise<string> {
-  const buffer = file instanceof File ? await file.arrayBuffer() : file;
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-/**
  * Client for the IFC-Lite Server API.
  *
  * @example
@@ -107,12 +82,6 @@ export class IfcServerClient {
   private baseUrl: string;
   private readonly token?: string;
   private timeout: number;
-  private readonly loadSignal?: AbortSignal;
-
-  private requestSignal(timeout: number): AbortSignal {
-    const budget = AbortSignal.timeout(timeout);
-    return this.loadSignal ? AbortSignal.any([this.loadSignal, budget]) : budget;
-  }
 
   /**
    * Create a new IFC server client.
@@ -120,7 +89,6 @@ export class IfcServerClient {
    * @param config - Client configuration
    */
   constructor(config: ServerConfig) {
-    this.loadSignal = config.signal;
     // Remove trailing slash from base URL
     this.baseUrl = config.baseUrl.replace(/\/$/, '');
     this.timeout = config.timeout ?? 300000; // 5 minutes default
@@ -136,15 +104,26 @@ export class IfcServerClient {
       : { ...(extra ?? {}) };
   }
 
+  /** The streaming route; with `hash` (already normalized), the bodiless ask for a stored result. */
+  private postParse(url: string, signal?: AbortSignal, body?: FormData, extraHeaders?: Record<string, string>): Promise<Response> {
+    return fetch(url, {
+      method: 'POST', headers: this.authHeaders(extraHeaders), body,
+      signal: parseRequestSignal(signal, this.timeout),
+    });
+  }
+
+  private streamUrl(options?: ParseStreamOptions, hash?: string): string {
+    return `${this.baseUrl}/api/v1/parse/parquet-stream${parquetStreamQuery(options, hash)}`;
+  }
 
   /**
    * Check server health.
    *
    * @returns Health status
    */
-  async health(): Promise<HealthResponse> {
+  async health(options?: Pick<ParseRequestOptions, 'signal'>): Promise<HealthResponse> {
     const response = await fetch(`${this.baseUrl}/api/v1/health`, {
-      signal: this.requestSignal(this.timeout),
+      signal: parseRequestSignal(options?.signal, this.timeout),
     });
 
     if (!response.ok) {
@@ -172,19 +151,9 @@ export class IfcServerClient {
    * ```
    */
   async parse(file: File | ArrayBuffer, options?: ParseRequestOptions): Promise<ParseResponse> {
-    // Compress file before upload for faster transfer
-    const compressedFile = await compressGzip(file);
-    const fileName = file instanceof File ? file.name : 'model.ifc';
-
-    const formData = new FormData();
-    formData.append('file', compressedFile, fileName);
-
-    const response = await fetch(`${this.baseUrl}/api/v1/parse${parseQuery(options)}`, {
-      method: 'POST',
-      headers: this.authHeaders(),
-      body: formData,
-      signal: this.requestSignal(this.timeout),
-    });
+    options?.signal?.throwIfAborted();
+    const formData = await compressedUploadForm(file);
+    const response = await this.postParse(`${this.baseUrl}/api/v1/parse${parseQuery(options)}`, options?.signal, formData);
 
     if (!response.ok) {
       throw await this.handleError(response);
@@ -205,7 +174,7 @@ export class IfcServerClient {
    * **Requirements:** This method requires `parquet-wasm` and `apache-arrow`
    * to be installed as peer dependencies.
    *
-   * @param file - File or ArrayBuffer containing IFC data
+   * @param file - File or ArrayBuffer containing IFC data, or a {@link ProcessedModelRef} to fetch a stored result
    * @returns Parse result with all meshes (decoded from Parquet)
    *
    * @example
@@ -218,7 +187,8 @@ export class IfcServerClient {
    * }
    * ```
    */
-  async parseParquet(file: File | ArrayBuffer, options?: ParseRequestOptions): Promise<ParquetParseResponse> {
+  async parseParquet(file: File | ArrayBuffer | ProcessedModelRef, options?: ParseRequestOptions): Promise<ParquetParseResponse> {
+    options?.signal?.throwIfAborted();
     // Check if Parquet decoding is available
     const parquetReady = await isParquetAvailable();
     if (!parquetReady) {
@@ -228,6 +198,12 @@ export class IfcServerClient {
       );
     }
 
+    if (isProcessedModelRef(file)) {
+      const sha256 = assertProcessedModelHash(file.sha256);
+      const stored = await this.fetchCachedGeometry(sha256, options);
+      if (!stored) throw new IfcServerError(`No processed model is stored for ${sha256.substring(0, 16)}...`, 404, 'NOT_FOUND');
+      return stored;
+    }
     // Step 1: Compute hash client-side (fast, ~50ms for large files)
     const hashStart = performance.now();
     const hash = await computeFileHash(file);
@@ -239,18 +215,16 @@ export class IfcServerClient {
     const cacheCheck = await fetch(`${this.baseUrl}/api/v1/cache/check/${hash}${parseQuery(options, true)}`, {
       method: 'GET',
       headers: this.authHeaders(),
-      signal: this.requestSignal(5000), // 5s timeout for cache check
+      signal: parseRequestSignal(options?.signal, 5000), // 5s timeout for cache check
     });
-    const cacheCheckTime = performance.now() - cacheCheckStart;
 
-    if (cacheCheck.ok) {
-      // Cache HIT - fetch directly without uploading!
-      console.log(`[client] Cache HIT (check: ${cacheCheckTime.toFixed(0)}ms) - skipping upload`);
-      return this.fetchCachedGeometry(hash, options);
-    }
+    // Cache HIT - fetch without uploading! The check only sees an entry is there;
+    // a 404 from the fetch means it was unusable and dropped: upload rewrites it (#7676).
+    const cached = cacheCheck.ok ? await this.fetchCachedGeometry(hash, options) : null;
+    if (cached) return cached;
 
     // Cache MISS - upload and process as usual
-    console.log(`[client] Cache MISS (check: ${cacheCheckTime.toFixed(0)}ms) - uploading file`);
+    console.log(`[client] Cache ${cacheCheck.ok ? 'entry unusable' : 'MISS'} (check: ${(performance.now() - cacheCheckStart).toFixed(0)}ms) - uploading file`);
     return this.uploadAndProcessParquet(file, hash, options);
   }
 
@@ -273,7 +247,7 @@ export class IfcServerClient {
    * rendering exactly when the data was already there. Set
    * `skipCacheProbe: true` to go straight to the upload.
    *
-   * @param file - IFC file to parse (File or ArrayBuffer)
+   * @param file - IFC file to parse (File or ArrayBuffer), or a {@link ProcessedModelRef} to replay a stored result
    * @param onBatch - Callback for each geometry batch (for immediate rendering)
    * @returns Final result with cache_key, stats, and metadata
    *
@@ -291,16 +265,24 @@ export class IfcServerClient {
    * ```
    */
   async parseParquetStream(
-    file: File | ArrayBuffer,
+    file: File | ArrayBuffer | ProcessedModelRef,
     onBatch: (batch: ParquetBatch) => void,
     options?: ParseStreamOptions
   ): Promise<ParquetStreamResult> {
+    options?.signal?.throwIfAborted();
     const parquetReady = await isParquetAvailable();
     if (!parquetReady) {
       throw new Error(
         'Parquet streaming requires parquet-wasm and apache-arrow. ' +
         'Install them with: npm install parquet-wasm apache-arrow'
       );
+    }
+
+    if (isProcessedModelRef(file)) { // the reference is the whole request: no hash, no upload, a miss is an error
+      const start = performance.now();
+      const response = await this.postParse(this.streamUrl(options, assertProcessedModelHash(file.sha256)), options?.signal);
+      if (!response.ok) throw await this.handleError(response);
+      return consumeParquetStream(response, onBatch, start);
     }
 
     const fileSize = file instanceof File ? file.size : file.byteLength;
@@ -321,21 +303,15 @@ export class IfcServerClient {
       // default) and then rejects with an AbortError that never reaches the
       // fallback below, so the load dies instead of uploading.
       const controller = new AbortController();
+      const signal = options?.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
       let timer = setTimeout(() => controller.abort(), PROBE_HEADER_TIMEOUT_MS);
       const probeStart = performance.now();
 
       let probe: Response | null = null;
       try {
-        probe = await fetch(
-          `${this.baseUrl}/api/v1/parse/parquet-stream${parquetStreamQuery(options, hash)}`,
-          {
-            method: 'POST',
-            headers: this.authHeaders(),
-            signal: this.loadSignal ? AbortSignal.any([this.loadSignal, controller.signal]) : controller.signal,
-          }
-        );
+        probe = await fetch(this.streamUrl(options, hash), { method: 'POST', headers: this.authHeaders(), signal });
       } catch (error) {
-        this.loadSignal?.throwIfAborted();
+        options?.signal?.throwIfAborted();
         // A probe that times out or fails to connect is not an answer about
         // the cache. Upload, which is what would have happened without it.
         console.warn('[client] Stream: hash probe failed; uploading instead:', error);
@@ -362,18 +338,14 @@ export class IfcServerClient {
       console.log(`[client] Stream: no cached replay (${(performance.now() - probeStart).toFixed(0)}ms) - uploading`);
     }
 
+    options?.signal?.throwIfAborted();
     console.log(`[client] Stream: starting upload for ${fileName} (${(fileSize / 1024 / 1024).toFixed(1)}MB)`);
 
     const formData = new FormData();
     formData.append('file', file instanceof File ? file : new Blob([file]), fileName);
 
     const uploadStart = performance.now();
-    const response = await fetch(`${this.baseUrl}/api/v1/parse/parquet-stream${parquetStreamQuery(options)}`, {
-      method: 'POST',
-      headers: this.authHeaders(),
-      body: formData,
-      signal: this.requestSignal(this.timeout),
-    });
+    const response = await this.postParse(this.streamUrl(options), options?.signal, formData);
 
     if (!response.ok) {
       throw await this.handleError(response);
@@ -386,17 +358,18 @@ export class IfcServerClient {
    * Fetch cached geometry directly without uploading the file.
    * @private
    */
-  private async fetchCachedGeometry(
-    hash: string,
-    options?: ParseRequestOptions
-  ): Promise<ParquetParseResponse> {
+  private async fetchCachedGeometry(hash: string, options?: ParseRequestOptions): Promise<ParquetParseResponse | null> {
     const fetchStart = performance.now();
     const response = await fetch(`${this.baseUrl}/api/v1/cache/geometry/${hash}${parseQuery(options, true)}`, {
       method: 'GET',
       headers: this.authHeaders(),
-      signal: this.requestSignal(this.timeout),
+      signal: parseRequestSignal(options?.signal, this.timeout),
     });
 
+    if (response.status === 404) {
+      await response.body?.cancel();
+      return null;
+    }
     if (!response.ok) {
       throw await this.handleError(response);
     }
@@ -447,12 +420,7 @@ export class IfcServerClient {
     formData.append('file', uploadFile as Blob, fileName);
 
     const uploadStart = performance.now();
-    const response = await fetch(`${this.baseUrl}/api/v1/parse/parquet${parseQuery(options, true)}`, {
-      method: 'POST',
-      headers: this.authHeaders(),
-      body: formData,
-      signal: this.requestSignal(this.timeout),
-    });
+    const response = await this.postParse(`${this.baseUrl}/api/v1/parse/parquet${parseQuery(options, true)}`, options?.signal, formData);
     const uploadTime = performance.now() - uploadStart;
     console.log(`[client] Upload and processing completed in ${uploadTime.toFixed(0)}ms`);
 
@@ -563,11 +531,13 @@ export class IfcServerClient {
    *
    * @param cacheKey - The cache key from the geometry parse response
    * @param options - Maximum number of retries (default: 10), or an options
-   *   object with `maxRetries` and `dataModelEntities`. Pass the same
+   *   object with `maxRetries`, `signal`, and `dataModelEntities`. Pass the same
    *   `dataModelEntities` the parse call used (#6034): the full and the
    *   rooted-only data model are separate entries, and each is served only to
    *   a request that names it. The parse call's own options object works here.
-   * @returns Data model Parquet buffer, or null if not available after retries
+   * @returns Data model Parquet buffer, or null for 404 or exhausted pending (202) responses.
+   * @throws HTTP errors, exhausted transport failures, decode failures, or caller cancellation.
+   * Pass `signal` in the options object to cancel requests and backoff.
    *
    * @example
    * ```typescript
@@ -588,52 +558,13 @@ export class IfcServerClient {
    */
   async fetchDataModel(
     cacheKey: string,
-    options: number | (Pick<ParseRequestOptions, 'dataModelEntities'> & { maxRetries?: number }) = 10
+    options: number | (Pick<ParseRequestOptions, 'dataModelEntities'> & { maxRetries?: number; signal?: AbortSignal }) = 10
   ): Promise<ArrayBuffer | null> {
-    const maxRetries = typeof options === 'number' ? options : (options.maxRetries ?? 10);
-    const query = dataModelQuery(typeof options === 'number' ? undefined : options);
-    let delay = 100; // Start with 100ms delay
-
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        this.loadSignal?.throwIfAborted();
-        const response = await fetch(`${this.baseUrl}/api/v1/parse/data-model/${cacheKey}${query}`, {
-          method: 'GET',
-          headers: this.authHeaders(),
-          signal: this.requestSignal(30000),
-        });
-
-        if (response.status === 200) {
-          // Data model is ready
-          const buffer = await response.arrayBuffer();
-          console.log(`[client] Data model fetched: ${(buffer.byteLength / 1024 / 1024).toFixed(2)}MB`);
-          return buffer;
-        } else if (response.status === 202) {
-          // Still processing, wait and retry
-          console.log(`[client] Data model still processing (attempt ${attempt + 1}/${maxRetries}), waiting ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay = Math.min(delay * 1.5, 2000); // Exponential backoff, max 2s
-        } else if (response.status === 404) {
-          // Cache key not found
-          console.warn(`[client] Data model not found for cache key: ${cacheKey}`);
-          return null;
-        } else {
-          throw new Error(`Unexpected response status: ${response.status}`);
-        }
-      } catch (error) {
-        this.loadSignal?.throwIfAborted();
-        if (attempt === maxRetries - 1) {
-          console.error('[client] Failed to fetch data model:', error);
-          return null;
-        }
-        // Retry on network errors
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay = Math.min(delay * 1.5, 2000);
-      }
-    }
-
-    console.warn('[client] Data model fetch timed out after max retries');
-    return null;
+    const settings = typeof options === 'number' ? { maxRetries: options } : options;
+    return pollCachedData(
+      `${this.baseUrl}/api/v1/parse/data-model/${cacheKey}${dataModelQuery(settings)}`,
+      this.authHeaders(), settings, response => response.arrayBuffer(), response => this.handleError(response),
+    );
   }
 
   /**
@@ -651,8 +582,10 @@ export class IfcServerClient {
    * it in the background, hence the bounded retry.
    *
    * @param cacheKey - The `cache_key` from a parse response
-   * @param maxRetries - Maximum number of retries (default: 10)
-   * @returns Decoded symbol data, or null if unavailable after retries
+   * @param options - Retry count (default: 10), or `{ maxRetries, signal }`.
+   * @returns Decoded symbol data, or null for 404 or exhausted pending (202) responses.
+   * @throws HTTP errors, exhausted transport failures, decode failures, or caller cancellation.
+   * Pass `{ maxRetries, signal }` to cancel requests and backoff.
    *
    * @example
    * ```typescript
@@ -663,49 +596,15 @@ export class IfcServerClient {
    * }
    * ```
    */
-  async fetchSymbolic(cacheKey: string, maxRetries = 10): Promise<SymbolicData | null> {
-    let delay = 100; // Start with 100ms delay
-
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      // Only transport/timeout failures are retried here. HTTP error statuses
-      // are handled below so a persistent 5xx surfaces as a thrown error rather
-      // than being collapsed into `null` (which would look like "no symbols").
-      let response: Response;
-      try {
-        response = await fetch(`${this.baseUrl}/api/v1/parse/symbolic/${cacheKey}`, {
-          method: 'GET',
-          headers: this.authHeaders(),
-          signal: this.requestSignal(30000),
-        });
-      } catch (error) {
-        this.loadSignal?.throwIfAborted();
-        if (attempt === maxRetries - 1) throw error;
-        console.warn('[client] Retrying symbolic data fetch after network error:', error);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay = Math.min(delay * 1.5, 2000); // Exponential backoff, max 2s
-        continue;
-      }
-
-      if (response.status === 200) {
-        return (await response.json()) as SymbolicData;
-      } else if (response.status === 202) {
-        // Still processing (streaming background cache), wait and retry.
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay = Math.min(delay * 1.5, 2000);
-      } else if (response.status === 404) {
-        // Definitive "no entry for this cache key" — distinct from a server error.
-        console.warn(`[client] Symbolic data not found for cache key: ${cacheKey}`);
-        return null;
-      } else {
-        // 5xx / other unexpected status: surface it instead of masking it.
-        throw await this.handleError(response);
-      }
-    }
-
-    // Exhausted retries while still 202 (background cache not ready). This is a
-    // known "not yet available" state, so return null rather than throwing.
-    console.warn('[client] Symbolic data fetch timed out after max retries');
-    return null;
+  async fetchSymbolic(
+    cacheKey: string,
+    options: number | { maxRetries?: number; signal?: AbortSignal } = 10,
+  ): Promise<SymbolicData | null> {
+    return pollCachedData(
+      `${this.baseUrl}/api/v1/parse/symbolic/${cacheKey}`, this.authHeaders(),
+      typeof options === 'number' ? { maxRetries: options } : options,
+      async response => (await response.json()) as SymbolicData, response => this.handleError(response),
+    );
   }
 
   /**
@@ -741,6 +640,7 @@ export class IfcServerClient {
    * ```
    */
   async parseParquetOptimized(file: File | ArrayBuffer, options?: ParseRequestOptions): Promise<OptimizedParquetParseResponse> {
+    options?.signal?.throwIfAborted();
     // Check if Parquet decoding is available
     const parquetReady = await isParquetAvailable();
     if (!parquetReady) {
@@ -750,19 +650,8 @@ export class IfcServerClient {
       );
     }
 
-    // Compress file before upload for faster transfer
-    const compressedFile = await compressGzip(file);
-    const fileName = file instanceof File ? file.name : 'model.ifc';
-
-    const formData = new FormData();
-    formData.append('file', compressedFile, fileName);
-
-    const response = await fetch(`${this.baseUrl}/api/v1/parse/parquet/optimized${parseQuery(options)}`, {
-      method: 'POST',
-      headers: this.authHeaders(),
-      body: formData,
-      signal: this.requestSignal(this.timeout),
-    });
+    const formData = await compressedUploadForm(file);
+    const response = await this.postParse(`${this.baseUrl}/api/v1/parse/parquet/optimized${parseQuery(options)}`, options?.signal, formData);
 
     if (!response.ok) {
       throw await this.handleError(response);
@@ -842,6 +731,7 @@ export class IfcServerClient {
     file: File | ArrayBuffer,
     options?: ParseRequestOptions
   ): AsyncGenerator<StreamEvent> {
+    options?.signal?.throwIfAborted();
     const formData = new FormData();
     const blob = file instanceof File ? file : new Blob([file], { type: 'application/octet-stream' });
     formData.append(
@@ -850,13 +740,7 @@ export class IfcServerClient {
       file instanceof File ? file.name : 'model.ifc'
     );
 
-    const response = await fetch(`${this.baseUrl}/api/v1/parse/stream${parseQuery(options)}`, {
-      method: 'POST',
-      body: formData,
-      // Don't set Content-Type header - browser will set it with boundary for FormData
-      headers: this.authHeaders({ Accept: 'text/event-stream' }),
-      signal: this.requestSignal(this.timeout),
-    });
+    const response = await this.postParse(`${this.baseUrl}/api/v1/parse/stream${parseQuery(options)}`, options?.signal, formData, { Accept: 'text/event-stream' });
 
     if (!response.ok) {
       throw await this.handleError(response);
@@ -934,7 +818,7 @@ export class IfcServerClient {
    * @example
    * ```typescript
    * const meta = await client.getMetadata(file);
-   * console.log(`${meta.entity_count} entities, ${meta.geometry_count} with geometry`);
+   * console.log(`${meta.entity_count} entities, ${meta.geometry_count} geometry jobs`);
    * console.log(`Schema: ${meta.schema_version}`);
    * ```
    */
@@ -950,7 +834,7 @@ export class IfcServerClient {
       method: 'POST',
       headers: this.authHeaders(),
       body: formData,
-      signal: this.requestSignal(30000), // 30 second timeout for metadata
+      signal: AbortSignal.timeout(30000), // 30 second timeout for metadata
     });
 
     if (!response.ok) {
@@ -985,7 +869,7 @@ export class IfcServerClient {
   async getCached(key: string): Promise<ParseResponse | null> {
     const response = await fetch(`${this.baseUrl}/api/v1/cache/${key}`, {
       headers: this.authHeaders(),
-      signal: this.requestSignal(this.timeout),
+      signal: AbortSignal.timeout(this.timeout),
     });
 
     if (response.status === 404) {

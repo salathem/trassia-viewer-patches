@@ -1,22 +1,41 @@
 diff --git a/apps/viewer/src/hooks/useIfcLoader.ts b/apps/viewer/src/hooks/useIfcLoader.ts
+index b3de4071900e1100103ab233fe3d3ed09fbab38b..b1a85bcea8901184fc1de55e5dfbbeaf14cf32ab 100644
 --- a/apps/viewer/src/hooks/useIfcLoader.ts
 +++ b/apps/viewer/src/hooks/useIfcLoader.ts
-@@ -656,6 +656,10 @@
+@@ -543,9 +543,16 @@ export function useIfcLoader() {
+         // A complete model carries its identity (#7022); the pass ran beside the load.
+         const sourceContentHash = await trace.span('finalize.identityWait', () => placementIdentity);
+         if (isStale()) return;
++        const loadState = patch?.loadState ?? 'complete';
++        const finalizedLoadState = {
++          loadState,
++          geometryLoadState: loadState === 'complete' ? 'complete' as const : undefined,
++          cacheState: patch?.cacheState ?? 'none' as const,
++          loadError: patch?.loadError ?? null,
++        };
+         const staged = previousModels !== null;
+         if (staged && (
+-          (patch?.loadState ?? 'complete') !== 'complete' || !dataStore || !geometryResult
++          loadState !== 'complete' || !dataStore || !geometryResult
+           || !publishStagedPrimary(true)
+         )) return;
+         // Ordering notice (issue #1804): alignment is baked into a scan at
+@@ -629,6 +636,7 @@ export function useIfcLoader() {
+             landXmlDocument: patch?.landXmlDocument,
              sourceSchema: patch?.sourceSchema,
              geometryResult,
-+            loadState: patch?.loadState ?? 'complete',
-+            geometryLoadState: (patch?.loadState ?? 'complete') === 'complete' ? 'complete' : undefined,
-+            cacheState: patch?.cacheState ?? 'none',
-+            loadError: patch?.loadError ?? null,
++            ...finalizedLoadState,
              visible: target.visible ?? true,
              collapsed: target.collapsed ?? (useViewerStore.getState().models.size > 0),
              schemaVersion,
-             loadedAt: target.loadedAt ?? Date.now(),
-@@ -716,6 +720,7 @@
+@@ -686,9 +694,7 @@ export function useIfcLoader() {
+           schemaVersion,
            idOffset,
            maxExpressId,
-           loadState: patch?.loadState ?? 'complete',
-+          geometryLoadState: (patch?.loadState ?? 'complete') === 'complete' ? 'complete' : undefined,
-           cacheState: patch?.cacheState ?? 'none',
-           loadError: patch?.loadError ?? null,
-           pointCloudHandleId: patch?.pointCloudHandleId,
+-          loadState: patch?.loadState ?? 'complete',
+-          cacheState: patch?.cacheState ?? 'none',
+-          loadError: patch?.loadError ?? null,
++          ...finalizedLoadState,
+           pointCloudHandleId: patch?.pointCloudHandleId, gaussianSplat: patch?.gaussianSplat,
+           ...(patch?.spatialReference ? { spatialReference: patch.spatialReference } : {}),
+           ...buildModelLoadReportPatch(loadDiagnostics, format, patch, omittedTypeRecords),

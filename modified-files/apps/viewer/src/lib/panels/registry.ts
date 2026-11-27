@@ -20,7 +20,7 @@
 // lucide only, never `@/icons`: the store imports this module, so it sits in
 // the viewer-embed bundle too, which has no unplugin-icons resolver for the
 // `~icons/viewer/*` virtual modules (#6315 broke that build).
-import { BarChart3, Box, CalendarRange, ClipboardCheck, Cloud, Coins, Crosshair, DraftingCompass, FileText, FileWarning, GitBranch, GitCompareArrows, History, Info, Layers as LayersIcon, ListTree, MessageSquare, Move3d, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
+import { BarChart3, Bot, Box, CalendarRange, ChartLine, ClipboardCheck, ClipboardPen, Cloud, Coins, Crosshair, DraftingCompass, FileText, FileWarning, GitBranch, GitCompareArrows, History, Info, Link2, Layers as LayersIcon, ListChecks, ListTree, MessageSquare, Move3d, Paintbrush, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
 import { chEntwurfAktiv } from '@/lib/ch/entwurf/entwurf-flag';
 import { Mountain, ChartSpline, Route, ArrowUpDown } from 'lucide-react';
 import type { TranslationKey } from '@/i18n';
@@ -61,10 +61,15 @@ export type WorkspacePanelId =
   | 'changes'
   | 'model'
   | 'changeSets'
+  | 'semantic'
+  | 'review'
+  | 'assistant'
+  | 'idsStudio'
   | 'drape'
   | 'kubatur'
   | 'laengsschnitt'
-  | 'entwurf';
+  | 'entwurf'
+  | 'influx';
 
 /** Shared task grouping for the rail, ribbon panel browser, and palette commands (#5873). */
 export type PanelGroup = 'coordinate' | 'check' | 'quantify' | 'automate' | 'site' | 'author';
@@ -140,7 +145,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
   // `loadReportPanelVisible` boolean; `openWorkspacePanel`'s generic
   // non-SIDEBAR_PANEL_FLAGS branch adopts it directly (issue #3927).
   { id: 'loadReport', titleKey: 'loadReportPanel.title', Icon: FileWarning, group: 'check', region: 'side' },
-  { id: 'appearance', titleKey: 'appearance.panelView.heading', Icon: Palette, group: 'site', region: 'side' },
+  { id: 'appearance', titleKey: 'appearance.panelView.heading', Icon: Paintbrush, group: 'site', region: 'side' },
   // Charts bound to the model, bidirectional with the 3D view (#3944). Bottom
   // strip like Lists / Schedule; the table in `bottom-panels.ts` carries it.
   { id: 'charts', titleKey: 'workspacePanels.bottom.charts', Icon: BarChart3, group: 'quantify', region: 'bottom', prefersWide: true },
@@ -206,11 +211,62 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
   // Named change sets (#6232 D4): the active set collects new edits; export /
   // import as files. Flag-free like 'changes' / 'model'. APPENDED (no Alt shortcut).
   { id: 'changeSets', titleKey: 'changeSets.panel.title', Icon: GitBranch, group: 'author', region: 'side' },
+  { id: 'assistant', titleKey: 'assistant.title', Icon: Bot, group: 'coordinate', region: 'side', prefersWide: true },
+  { id: 'semantic', titleKey: 'semantic.title', Icon: Link2, group: 'coordinate', region: 'side', prefersWide: true },
+  { id: 'review', titleKey: 'reviewWorkspace.title', Icon: ListChecks, group: 'coordinate', region: 'side', prefersWide: true },
+  // IDS Studio (IDS-030): authoring of IDS documents through the typed ops of
+  // `@ifc-lite/ids-authoring`. Results stay in Data validation. APPENDED (no
+  // Alt shortcut). Flag-free like 'review'; no model gate, an IDS is
+  // authored before any model is loaded.
+  { id: 'influx', titleKey: 'influx.title', Icon: ChartLine, group: 'site', region: 'side' },
+  { id: 'idsStudio', titleKey: 'idsStudio.title', Icon: ClipboardPen, group: 'check', region: 'side', prefersWide: true },
   { id: 'drape', titleKey: 'trassia.panel.drape', Icon: Mountain, group: 'author', region: 'side' },
   { id: 'kubatur', titleKey: 'trassia.panel.kubatur', Icon: ArrowUpDown, group: 'quantify', region: 'side' },
   { id: 'laengsschnitt', titleKey: 'trassia.panel.laengsschnitt', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
   ...(chEntwurfAktiv() ? [{ id: 'entwurf' as const, titleKey: 'trassia.panel.entwurf' as const, Icon: Route, group: 'author' as const, region: 'side' as const, prefersWide: true }] : []),
 ];
+
+/** How a panel opened on an empty viewer offers a way to a model
+ *  (`components/viewer/PanelModelGate.tsx`). */
+export type PanelModelGateMode = 'takeover' | 'banner';
+
+/**
+ * Panels that mean nothing without a model. `takeover`: the whole panel is
+ * model-derived (a lens over no elements, a chart of nothing), so it shows a
+ * no-model state instead. `banner`: the panel also holds work that exists
+ * before a model (list and document definitions, a schedule imported from MS
+ * Project or CSV, zone sets imported from JSON), so one quiet line sits above
+ * it and the panel stays mounted across the load.
+ *
+ * Left out on purpose: panels that are themselves a way in (Cloud sources,
+ * Layers' demo stack), that carry their own demo empty state (Compare,
+ * Clash, Data validation), that work on a model-independent artifact (BCF
+ * topics, IDS / rule sets, scripts, extensions, a collaboration room),
+ * Measurements (only the Measure tool opens it, and that needs a model), and
+ * Properties / Hierarchy, whose own no-model states the welcome tour anchors.
+ */
+const PANEL_MODEL_GATE: Partial<Record<WorkspacePanelId, PanelModelGateMode>> = {
+  lens: 'takeover',
+  charts: 'takeover',
+  environment: 'takeover',
+  presentation: 'takeover',
+  drawing: 'takeover',
+  model: 'takeover',
+  changes: 'takeover',
+  changeSets: 'takeover',
+  cost: 'takeover',
+  placement: 'takeover',
+  loadReport: 'takeover',
+  lists: 'banner',
+  document: 'banner',
+  flow: 'banner',
+  gantt: 'banner',
+  zones: 'banner',
+};
+
+export function panelModelGateMode(id: WorkspacePanelId): PanelModelGateMode | undefined {
+  return PANEL_MODEL_GATE[id];
+}
 
 // The bottom strip (Script / Schedule / Lists) is table-driven; the id union and
 // the type guard are re-exported here so registry consumers keep one import.
@@ -268,6 +324,11 @@ export function migratePanelId(id: string): WorkspacePanelId | undefined {
 /** The panels Alt+1..9 / Alt+0 open, in key order (Alt+0 is the tenth). */
 export const ALT_SHORTCUT_PANELS: readonly WorkspacePanelDef[] = WORKSPACE_PANELS.slice(0, 10);
 
+/** The digit of the Alt shortcut for `ALT_SHORTCUT_PANELS[position]`. */
+export function altShortcutDigit(position: number): number {
+  return (position + 1) % 10;
+}
+
 /**
  * Map an Alt+digit shortcut's `KeyboardEvent.code` to the workspace panel it
  * opens (#1200/#1208). Digit/Numpad 1-9 select the first nine panels; 0 selects
@@ -279,8 +340,8 @@ export const ALT_SHORTCUT_PANELS: readonly WorkspacePanelDef[] = WORKSPACE_PANEL
 export function workspacePanelForShortcutCode(code: string): WorkspacePanelId | undefined {
   const m = /^(?:Digit|Numpad)([0-9])$/.exec(code);
   if (!m) return undefined;
-  const n = Number(m[1]);
-  return ALT_SHORTCUT_PANELS[n === 0 ? 9 : n - 1]?.id;
+  const digit = Number(m[1]);
+  return ALT_SHORTCUT_PANELS.find((_, position) => altShortcutDigit(position) === digit)?.id;
 }
 
 /** The analysis / tool panels that toggle in the sidebar (everything except

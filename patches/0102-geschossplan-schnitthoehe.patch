@@ -1,0 +1,204 @@
+diff --git a/packages/drawing-2d/src/drawing-generator.test.ts b/packages/drawing-2d/src/drawing-generator.test.ts
+index 4f4d5065243140ac81a49de97196b816b18811cf..8662a18cffdffa23ca54757afb3ee174968746eb 100644
+--- a/packages/drawing-2d/src/drawing-generator.test.ts
++++ b/packages/drawing-2d/src/drawing-generator.test.ts
+@@ -15,7 +15,7 @@
+ 
+ import { describe, it, expect } from 'vitest';
+ import type { MeshData } from '@ifc-lite/geometry';
+-import { Drawing2DGenerator } from './drawing-generator.js';
++import { Drawing2DGenerator, generateFloorPlan } from './drawing-generator.js';
+ import { projectTo2D } from './math.js';
+ import type {
+   DrawingLine,
+@@ -489,3 +489,22 @@ describe('generate() cut rings carry only real corners', () => {
+     expect(edges[3]).toBeCloseTo(6, 6);
+   });
+ });
++
++describe('generateFloorPlan() storey-relative cut (#10931)', () => {
++  it('cuts a storey of a building placed above its site 1.2 m above that storey floor', async () => {
++    // Site Z 14.23, building Z 3, storey Elevation 0.5, RTC offset Z 14.73: the storey floor is at render Y 3.
++    const frame = { siteOrigin: { x: 0, y: 0, z: 14.23 }, buildingOrigin: { z: 3 }, wasmRtcOffset: { x: 0, y: 0, z: 14.73 } };
++    const parapet = boxMesh(1, [0, 3, 0], [4, 4.5, 0.2]);
++    const wallBelow = boxMesh(2, [0, -0.5, 1], [4, 2.9, 1.2]);
++    const drawing = await generateFloorPlan([parapet, wallBelow], { storeyElevation: 0.5, cutHeight: 1.2, frame }, {
++      useGPU: false, includeHiddenLines: false,
++    });
++    expect(drawing.cutPolygons.map((p) => p.entityId)).toEqual([1]);
++    expect(drawing.config.plane.position).toBeCloseTo(4.2, 9);
++  });
++
++  it('still takes a render-frame Y as a number', async () => {
++    const drawing = await generateFloorPlan([boxMesh(1, [0, 0, 0], [4, 1.5, 0.2])], 1.2, { useGPU: false, includeHiddenLines: false });
++    expect(drawing.cutPolygons.map((p) => p.entityId)).toEqual([1]);
++  });
++});
+diff --git a/packages/drawing-2d/src/drawing-generator.ts b/packages/drawing-2d/src/drawing-generator.ts
+index eab25027878aeaf557ae1bdae76261c665939507..72f0b3f38f71af2a765c49590e23e32476e59656 100644
+--- a/packages/drawing-2d/src/drawing-generator.ts
++++ b/packages/drawing-2d/src/drawing-generator.ts
+@@ -30,6 +30,7 @@ import type { SVGExportOptions } from './svg-exporter.js';
+ import { GPUSectionCutter } from './gpu-section-cutter.js';
+ import { meshArraySource, type DrawingMeshSource } from './drawing-mesh-source.js';
+ import { DrawingSession } from './drawing-session.js';
++import { storeyCutElevation, type StoreyCut } from './storey-cut.js';
+ 
+ // ═══════════════════════════════════════════════════════════════════════════
+ // TYPES
+@@ -238,18 +239,23 @@ export function createSectionConfig(
+ }
+ 
+ /**
+- * Quick helper to generate a floor plan
++ * Quick helper to generate a floor plan. `elevation` is the render-frame Y of
++ * the cut, or a {@link StoreyCut} height above a storey floor, which is moved
++ * into that frame with {@link storeyCutElevation}.
+  */
+ export async function generateFloorPlan(
+   meshes: MeshData[],
+-  elevation: number,
++  elevation: number | StoreyCut,
+   options?: Partial<GeneratorOptions>
+ ): Promise<Drawing2D> {
++  const cutY = typeof elevation === 'number'
++    ? elevation
++    : storeyCutElevation(elevation.storeyElevation, elevation.cutHeight, elevation.frame);
+   const generator = new Drawing2DGenerator();
+   try {
+     await generator.initialize();
+ 
+-    const config = createSectionConfig('y', elevation, {
++    const config = createSectionConfig('y', cutY, {
+       projectionDepth: 3, // 3 meters below cut
+       scale: 100,
+     });
+diff --git a/packages/drawing-2d/src/index.ts b/packages/drawing-2d/src/index.ts
+index e0f3b833e3fc986cd1300eb028626f811ca231a5..1d2d52cfafca69150466580f2e76fc2457a232fc 100644
+--- a/packages/drawing-2d/src/index.ts
++++ b/packages/drawing-2d/src/index.ts
+@@ -82,12 +82,7 @@ export { PolygonBuilder, simplifyPolygon, polygonBounds } from './polygon-builde
+ // LINE MERGING
+ // ═══════════════════════════════════════════════════════════════════════════
+ 
+-export {
+-  mergeDrawingLines,
+-  mergeCollinearLines,
+-  deduplicateLines,
+-  splitLineAtParams,
+-} from './line-merger.js';
++export { mergeDrawingLines, mergeCollinearLines, deduplicateLines, splitLineAtParams } from './line-merger.js';
+ export type { LineMergerOptions } from './line-merger.js';
+ 
+ // ═══════════════════════════════════════════════════════════════════════════
+@@ -121,6 +116,8 @@ export type { ProjectionBand, ProjectionBandDepths } from './projection-bands.js
+ // Current-floor scoping + feature-element exclusion (issue #979 follow-up)
+ export { currentFloorBands, storeyFloorsFromMeshes, StoreyFloorLevels } from './storey-bands.js';
+ export type { StoreyFloorMesh } from './storey-bands.js';
++export { storeyCutElevation } from './storey-cut.js';
++export type { StoreyCut, StoreyCutFrame } from './storey-cut.js';
+ export { isFeatureElementType } from './feature-elements.js';
+ 
+ // ═══════════════════════════════════════════════════════════════════════════
+diff --git a/packages/drawing-2d/src/storey-cut.test.ts b/packages/drawing-2d/src/storey-cut.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..53fa95f0f142b0399319a8e15942dcd96b43d99c
+--- /dev/null
++++ b/packages/drawing-2d/src/storey-cut.test.ts
+@@ -0,0 +1,26 @@
++/* This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
++
++import { describe, it, expect } from 'vitest';
++import { storeyCutElevation } from './index.js';
++
++// rvt01.ifc (Revit): IfcSite at Z 14.23, storey "GR_GROUND FLOOR FFL" Elevation 0.5,
++// meshes re-based by a wasm RTC offset of Z 14.73, so that floor sits at render Y 0.
++const revitFrame = { wasmRtcOffset: { x: 500373.11, y: 2780223.98, z: 14.73 }, siteOrigin: { x: 500373.11, y: 2780223.98, z: 14.23 } };
++
++describe('storey-relative plan cut in the render frame (#10931)', () => {
++  it('cuts 1.2 m above the storey floor of a re-based model', () => {
++    expect(storeyCutElevation(0.5, 1.2, revitFrame)).toBeCloseTo(1.2, 9);
++  });
++
++  it('adds the building placement Z, since IfcBuildingStorey.Elevation is relative to the building', () => {
++    expect(storeyCutElevation(0, 1.2, { siteOrigin: { x: 0, y: 0, z: 0 }, buildingOrigin: { z: 3 } })).toBeCloseTo(4.2, 9);
++    expect(storeyCutElevation(0.5, 1.2, { ...revitFrame, wasmRtcOffset: { ...revitFrame.wasmRtcOffset, z: 17.73 }, buildingOrigin: { z: 3 } })).toBeCloseTo(1.2, 9);
++  });
++
++  it('takes the JS origin shift off as well', () => {
++    expect(storeyCutElevation(3, 1.2, { originShift: { x: 0, y: 2, z: 0 } })).toBeCloseTo(2.2, 9);
++    expect(storeyCutElevation(3)).toBeCloseTo(4.2, 9);
++  });
++});
+diff --git a/packages/drawing-2d/src/storey-cut.ts b/packages/drawing-2d/src/storey-cut.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..29030881ff355e6103085de6d6be3ab451c9bf11
+--- /dev/null
++++ b/packages/drawing-2d/src/storey-cut.ts
+@@ -0,0 +1,43 @@
++/* This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
++
++import type { CoordinateInfo, Vec3 } from '@ifc-lite/geometry';
++import { totalYupOffset, type RenderFrameInfo } from '@ifc-lite/geometry/world-frame';
++
++/** Architectural plan cut height above the storey floor, metres. */
++export const DEFAULT_PLAN_CUT_HEIGHT = 1.2;
++
++/**
++ * The parts of `GeometryResult.coordinateInfo` that place a storey in the render
++ * frame, plus the building's local placement Z relative to the site
++ * (`buildingOrigin.z`, metres), which `IfcBuildingStorey.Elevation` is measured from.
++ * Pass the frame the meshes are drawn in: for a federated scene that is the
++ * shared frame, not each model's own. A frame without `siteOrigin` puts the
++ * site at Z 0.
++ */
++export type StoreyCutFrame = RenderFrameInfo & Pick<CoordinateInfo, 'siteOrigin'> & { buildingOrigin?: Pick<Vec3, 'z'> };
++
++/** A plan cut `cutHeight` above the floor of a storey at `storeyElevation`, placed by `frame`. */
++export interface StoreyCut {
++  storeyElevation: number;
++  cutHeight?: number;
++  frame?: StoreyCutFrame | null;
++}
++
++/**
++ * Render-frame Y of a plan cut `cutHeight` above a storey floor, for
++ * `generateFloorPlan`. `storeyElevation` is `IfcBuildingStorey.Elevation` in
++ * metres, which is relative to the building placement. A
++ * `SpatialHierarchy.storeyElevations` entry for a storey without Elevation is
++ * its own placement Z, which need not be in that frame. The site's and the
++ * building's Z are added and the RTC offset and origin shift the meshes were
++ * moved by are taken off (#10931).
++ */
++export function storeyCutElevation(
++  storeyElevation: number,
++  cutHeight: number = DEFAULT_PLAN_CUT_HEIGHT,
++  frame?: StoreyCutFrame | null,
++): number {
++  return (frame?.siteOrigin?.z ?? 0) + (frame?.buildingOrigin?.z ?? 0) + storeyElevation + cutHeight - totalYupOffset(frame).y;
++}
+diff --git a/scripts/api-surface.json b/scripts/api-surface.json
+index e39ed5afdbfe71300a5dbea4259abf7305dc733c..7c5f91f90d38e1b44c4bd4e3dedef43009bdc74c 100644
+--- a/scripts/api-surface.json
++++ b/scripts/api-surface.json
+@@ -5859,6 +5859,8 @@
+     "SlidingDoorParameters: interface",
+     "StairArrowParameters: interface",
+     "StampedSheetLayout: interface",
++    "StoreyCut: interface",
++    "StoreyCutFrame: type",
+     "StoreyFloorLevels: class",
+     "StoreyFloorMesh: interface",
+     "StreamingSectionCutterOptions: interface",
+@@ -6002,6 +6004,7 @@
+     "signedDistanceToPlane: function",
+     "simplifyPolygon: function",
+     "splitLineAtParams: function",
++    "storeyCutElevation: function",
+     "storeyFloorsFromMeshes: function",
+     "updateTitleBlockField: function",
+     "vec3: function",

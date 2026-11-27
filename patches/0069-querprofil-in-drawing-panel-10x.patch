@@ -1,5 +1,5 @@
 diff --git a/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx b/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
-index 3e00faa0a7d0a722d85e31fc047a36b3ba4df796..bb81e9822e607c1d470b2b157235b76c3784dc13 100644
+index 8003882c688a493b4bb42fc25a85dbdaecfd7223..311a434e54b6deb08661b7e64ba9a2dda62a651e 100644
 --- a/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
 +++ b/apps/viewer/src/components/viewer/drawing/DrawingCanvasView.tsx
 @@ -15,9 +15,17 @@ import { Drawing2DCanvas } from '../Drawing2DCanvas';
@@ -17,11 +17,11 @@ index 3e00faa0a7d0a722d85e31fc047a36b3ba4df796..bb81e9822e607c1d470b2b157235b76c
    const { t } = useTranslation();
 +  // Trassia (Paket P3-NP): Bruchkanten und Masse dieser Station.
 +  const chNp = useChNpZeichnung();
-   const { drawing, status, sectionPlane, viewTransform, displayOptions } = vm;
-   const hasContent = !!drawing && (drawing.cutPolygons.length > 0 || drawing.lines?.length > 0 || layers.dxfUnderlayData.length > 0 || vm.hasReferences);
-   const editingAnnotation = vm.textAnnotation2DEditing
-@@ -31,6 +39,14 @@ export function DrawingCanvasView({ vm, layers }: { vm: DrawingViewModel; layers
-       className={`relative min-h-0 flex-1 overflow-hidden bg-white dark:bg-zinc-950 ${vm.cursorClass}`}
+   const { drawing, status, drawnPlane, viewTransform, displayOptions } = vm;
+   // Dimensions count as content: on an empty cut, saved ones from another cut
+   // still show dimmed, and one being placed shows its points and preview.
+@@ -35,6 +43,14 @@ export function DrawingCanvasView({ vm, layers }: { vm: DrawingViewModel; layers
+       className={`relative min-h-0 flex-1 overflow-hidden bg-paper ${vm.cursorClass}`}
        {...vm.canvasMouseHandlers}
      >
 +      {/* Trassia: was dieses Querprofil IST — Achse/Linie, Station,
@@ -35,8 +35,8 @@ index 3e00faa0a7d0a722d85e31fc047a36b3ba4df796..bb81e9822e607c1d470b2b157235b76c
        {status === 'generating' && (
          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80">
            <Spinner className="mb-4 h-8 w-8 text-primary" />
-@@ -91,6 +107,10 @@ export function DrawingCanvasView({ vm, layers }: { vm: DrawingViewModel; layers
-           scanOpacity={displayOptions.scanSectionOpacity}
+@@ -97,6 +113,10 @@ export function DrawingCanvasView({ vm, layers }: { vm: DrawingViewModel; layers
+           scanOutline={displayOptions.showScanSection ? layers.scanSectionLayer.outline?.rings : undefined}
            unitDisplayOverrides={vm.unitDisplayOverrides}
            paperTheme={vm.paperTheme}
 +          chNpMarken={chNp.marken}
@@ -47,10 +47,10 @@ index 3e00faa0a7d0a722d85e31fc047a36b3ba4df796..bb81e9822e607c1d470b2b157235b76c
        )}
  
 diff --git a/apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx b/apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx
-index d91cee9cf5137a929293bd5ef9324077d8120181..43c49d73005a24673563952c7ea5f2e33c0ef6cb 100644
+index a33756e1662acce21c393c96ef04c2cc0e55cec2..71ad8406aeb7fcfcd484e1b484ddc3844ea9a980 100644
 --- a/apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx
 +++ b/apps/viewer/src/components/viewer/drawing/DrawingToolbar.tsx
-@@ -20,6 +20,8 @@ import { useTranslation } from '@/i18n';
+@@ -21,6 +21,8 @@ import { useTranslation } from '@/i18n';
  import type { TranslationKey } from '@/i18n/en';
  import type { DrawingDrawer } from './useDrawingViewModel';
  import { DrawerToggle, IconAction, ToggleChip, ToolSegment, ToolbarDivider } from './DrawingToolbarControls';
@@ -59,9 +59,9 @@ index d91cee9cf5137a929293bd5ef9324077d8120181..43c49d73005a24673563952c7ea5f2e3
  
  export type DrawingWidthTier = 'wide' | 'compact' | 'narrow';
  
-@@ -136,6 +138,9 @@ export function DrawingToolbar(p: DrawingToolbarProps) {
+@@ -148,6 +150,9 @@ export function DrawingToolbar(p: DrawingToolbarProps) {
          {!narrow && <IconAction icon={ZoomIn} label={t('section2d.zoom.in')} onClick={p.onZoomIn} />}
-         <IconAction icon={Maximize2} label={t('section2d.zoom.fit')} onClick={p.onFit} />
+         <IconAction icon={Maximize2} label={t('section2d.zoom.fit')} text={showLabels ? t('section2d.zoom.fitShort') : undefined} onClick={p.onFit} />
          {!narrow && <IconAction icon={p.pinned ? Pin : PinOff} label={pinLabel} pressed={p.pinned} onClick={p.onTogglePinned} />}
 +        {/* Trassia (Pin 10.x, Nachfolger von 0027): die Zeichnung in ein eigenes
 +            Fenster auskoppeln — immer sichtbar, gerade im schmalen Panel. */}

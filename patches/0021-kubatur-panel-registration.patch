@@ -1,55 +1,78 @@
 diff --git a/apps/viewer/src/i18n/en.ts b/apps/viewer/src/i18n/en.ts
-index f532d90fe54af6ffa5a33ef3c1084a22455538ed..73cdb74b8d58210599c503f3e8bb0fa6e6e0b0ca 100644
+index c88e3d9f83dbcae95c3e32c6dfee947d5c5c89cf..c5d94205676a4c57dc7bd29bcd8f675e5d283c07 100644
 --- a/apps/viewer/src/i18n/en.ts
 +++ b/apps/viewer/src/i18n/en.ts
-@@ -110,6 +110,7 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
+@@ -170,6 +170,7 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
  
  /** English is assembled from feature catalogues so no locale becomes a monolith. */
  export const en = {
 +  'trassia.panel.kubatur': 'Cut and fill',
    'trassia.panel.drape': 'Terrain drape',
-   ...analysisPanelEn,
-   ...annotationsEn,
+   ...influxEn,
+   ...zoneEmissionEn,
+diff --git a/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts b/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts
+index c879c2d2ef2518502100b6b62286a7643d4fec02..e4187bf82a46ee42c1b10078f52a4c9eb4306c28 100644
+--- a/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts
++++ b/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts
+@@ -8,6 +8,7 @@ export type AuditFamily = 'core' | 'authoring' | 'clash' | 'analytics' | 'appear
+  * Adding a panel requires an audit entry and concrete classified bindings. */
+ export const panelControlAudits: Readonly<Record<WorkspacePanelId, readonly AuditFamily[]>> = {
+   drape: [], // Trassia panel, local UI controls.
++  kubatur: [], // Trassia panel, local UI controls.
+   hierarchy: ['core'], properties: ['core', 'authoring', 'coordination'], layers: ['coordination'], zones: ['authoring'],
+   model: ['authoring'], placement: ['authoring'], changes: ['authoring', 'core'], changeSets: ['authoring'],
+   clash: ['clash'], validation: ['authoring'], idsStudio: ['authoring'], compare: ['coordination'], bcf: ['coordination'],
+diff --git a/apps/viewer/src/lib/panels/availability.ts b/apps/viewer/src/lib/panels/availability.ts
+index 50e9e5406b94d88f3dd9b66467ea172498d8d838..7ae5e5a0d0ff4e8a3d8138f3a983d20ea026feb9 100644
+--- a/apps/viewer/src/lib/panels/availability.ts
++++ b/apps/viewer/src/lib/panels/availability.ts
+@@ -21,7 +21,7 @@ import { isCollabEnabled } from '@/lib/collab/config';
+ import { isFeatureEnabled, type FeatureId } from '@/lib/features';
+ import type { WorkspacePanelId } from './registry';
+ 
+-export const PANEL_FEATURE: Readonly<Record<Exclude<WorkspacePanelId, 'drape' | 'hierarchy' | 'properties'>, FeatureId>> = {
++export const PANEL_FEATURE: Readonly<Record<Exclude<WorkspacePanelId, 'drape' | 'kubatur' | 'hierarchy' | 'properties'>, FeatureId>> = {
+   sources: 'files.sources',
+   measurements: 'tools.measure',
+   lens: 'view.lens',
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index b0fac740105b2b9f9749444e0584e1eb671bfcdc..26da97077c87fcd1a6256cae915514786f914960 100644
+index 6c20bbbd2a1d3d9a1629639e5cbed635bd976df3..e06acf9fd985956a11dd279c285fc68f4151c1dc 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
-@@ -60,7 +60,8 @@ export type WorkspacePanelId =
-   | 'changes'
-   | 'model'
-   | 'changeSets'
--  | 'drape';
-+  | 'drape'
-+  | 'kubatur';
+@@ -65,6 +65,7 @@ export type WorkspacePanelId =
+   | 'assistant'
+   | 'idsStudio'
+   | 'drape'
++  | 'kubatur'
+   | 'influx';
  
  /** Shared task grouping for the rail, ribbon panel browser, and palette commands (#5873). */
- export type PanelGroup = 'coordinate' | 'check' | 'quantify' | 'automate' | 'site' | 'author';
-@@ -203,6 +204,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
-   // import as files. Flag-free like 'changes' / 'model'. APPENDED (no Alt shortcut).
-   { id: 'changeSets', titleKey: 'changeSets.panel.title', Icon: GitBranch, group: 'author', region: 'side' },
+@@ -217,6 +218,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+   { id: 'influx', titleKey: 'influx.title', Icon: ChartLine, group: 'site', region: 'side' },
+   { id: 'idsStudio', titleKey: 'idsStudio.title', Icon: ClipboardPen, group: 'check', region: 'side', prefersWide: true },
    { id: 'drape', titleKey: 'trassia.panel.drape', Icon: Mountain, group: 'author', region: 'side' },
 +  { id: 'kubatur', titleKey: 'trassia.panel.kubatur', Icon: Ruler, group: 'quantify', region: 'side' },
  ];
  
- // The bottom strip (Script / Schedule / Lists) is table-driven; the id union and
+ /** How a panel opened on an empty viewer offers a way to a model
 diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-index d2a427782e273fe6d154f7f7b2fca08a7ee3a55d..a449320dd6e53c4878ee593bfce2def9cab8616a 100644
+index 24f034c4c6c5da3561a730a56f5989a462affb4c..26f5a8a822b7c98c8df96e6b94ebc74515d91c6b 100644
 --- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
 +++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-@@ -39,6 +39,8 @@ import { ModelInspectorPanel } from '@/components/viewer/model-inspector/ModelIn
- import { useViewerStore } from '@/store';
+@@ -41,6 +41,8 @@ import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
+ import { loadIdsStudioRuntime } from '@/lib/ids-studio/runtime-loader';
  // Trassia overlay (not upstream) — Paket V-DRAPE, siehe ChDrapePanel.tsx.
  import { ChDrapePanel } from '@/components/viewer/ChDrapePanel';
 +// Trassia overlay (not upstream) — Paket V-KUBATUR, siehe ChKubaturPanel.tsx.
 +import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
+ import { useViewerStore } from '@/store';
  // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
  // dynamic chunk keeps it out of the initial bundle until first opened.
- const LayersPanel = lazy(() =>
-@@ -149,6 +151,7 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
-     case 'zones': return <ZonesPanel onClose={onClose} />;
-     case 'loadReport': return <LoadReportPanel onClose={onClose} />;
+@@ -218,6 +220,7 @@ function panelBody(id: WorkspacePanelId, onClose: () => void): ReactNode {
+     case 'review': return <ReviewPanelBody />;
+     case 'idsStudio': return <IdsStudioPanelBody />;
      case 'drape': return <ChDrapePanel onClose={onClose} />;
 +    case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
-     case 'changes': return <ChangesPanel onClose={onClose} />;
-     case 'layers': return <LayersPanelBody onClose={onClose} />;
-     case 'sources': return <SourcesPanelBody onClose={onClose} />;
+     case 'changeSets': return <ChangeSetPanel onClose={onClose} />;
+   }
+ }

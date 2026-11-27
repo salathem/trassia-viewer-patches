@@ -7,28 +7,31 @@
  * point-cloud scan band, and the exports that render all of them together.
  */
 
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect } from 'react';
 import { useViewerStore } from '@/store';
 import { toast } from '@/components/ui/toast';
 import { useIfc } from '@/hooks/useIfc';
 import { useTranslation } from '@/i18n';
 import { drawingAnnotationFrame } from '@/lib/model-placement/drawing-annotation-frame';
 import { useSymbolicAnnotationsForDrawing, symbolicAnnotationsOverlayEnabled } from '@/hooks/useSymbolicAnnotations';
-import { useDxfMapToWorldTransform, dxfWorldShift, dxfUnderlayDrawingBounds } from '@/hooks/useDxfUnderlay';
-import { drawingModelCenter } from '@/hooks/dxfDrawingBounds';
-import { dxfPlaneDrawingMapper, dxfDrawingDeltaToPlacement } from '@/hooks/dxfReferencePlane';
+import { useDxfMapToWorldTransform } from '@/hooks/useDxfUnderlay';
+import { centerDxfPlacement } from '@/lib/drawing/center-dxf';
 import { useScanSectionLayer } from '@/hooks/useScanSectionLayer';
+import { publishDrawingExportFrame } from '@/lib/drawing/export-view-frame';
 import { useDrawingExport } from '@/hooks/useDrawingExport';
 import { useChQpHeightAnnotations } from '@/hooks/useChQpHeightAnnotations';
+import { drawingWithDxfBounds } from '@/hooks/dxfDrawingBounds';
+import { prepareDrawingWithReferences } from '@/hooks/useReferenceImagesForDrawing';
+import { chQpUndistorted } from '@/lib/ch/qp-corridor';
 import type { DrawingViewModel } from './useDrawingViewModel';
 
 export function useDrawingLayers(vm: DrawingViewModel) {
   const { t } = useTranslation();
-  const heightAnnotations = useChQpHeightAnnotations(vm.drawing, true);
+  const heightAnnotations = useChQpHeightAnnotations(vm.sourceDrawing, true);
   const { ifcDataStore } = useIfc();
   const updateDxfUnderlayPlacement = useViewerStore((s) => s.updateDxfUnderlayPlacement);
   const {
-    geometryResult, runtime, sectionPlane, status, displayOptions, drawing, dxfUnderlays,
+    geometryResult, runtime, drawnPlane, status, displayOptions, drawing, dxfUnderlays,
     typeVisibility, models, pointCloudClassMask,
   } = vm;
 
@@ -38,19 +41,28 @@ export function useDrawingLayers(vm: DrawingViewModel) {
   // with the cut. Empty/missing bounds collapse to an inert range → hook
   // returns empty, the overlay simply does nothing.
   const ifcAnnotationsForDrawing = useMemo(() => drawingAnnotationFrame(
-    geometryResult?.coordinateInfo, runtime.sourceCoordinateInfo, sectionPlane,
-  ), [geometryResult, runtime.sourceCoordinateInfo, sectionPlane]);
+    geometryResult?.coordinateInfo, runtime.sourceCoordinateInfo, drawnPlane,
+  ), [geometryResult, runtime.sourceCoordinateInfo, drawnPlane]);
 
   const ifcAnnotationData = useSymbolicAnnotationsForDrawing({
     enabled: symbolicAnnotationsOverlayEnabled(displayOptions.showIfcAnnotations, status, typeVisibility.ifcAnnotations),
-    axis: sectionPlane.axis,
+    axis: drawnPlane.axis,
     sectionPosWorld: ifcAnnotationsForDrawing.sectionPosWorld,
     viewDepth: ifcAnnotationsForDrawing.viewDepth,
-    flipped: sectionPlane.flipped,
+    flipped: drawnPlane.flipped,
     fallbackY: ifcAnnotationsForDrawing.fallbackY,
   });
 
   const dxfUnderlayData = vm.dxfUnderlayData;
+  // The view model decorates the drawing with reference bounds. Resolve the
+  // true-scale store object first, then decorate that one for export.
+  const exportDrawing = useMemo(() => {
+    if (!vm.exportableDrawing) return null;
+    const plain = chQpUndistorted(vm.sourceDrawing);
+    if (!plain || plain === vm.sourceDrawing) return vm.exportableDrawing;
+    const raster = prepareDrawingWithReferences(plain);
+    return drawingWithDxfBounds(raster.drawing, dxfUnderlayData, raster.hasReferences);
+  }, [vm.exportableDrawing, vm.sourceDrawing, dxfUnderlayData]);
 
   // Centre an underlay on the generated drawing: offset = model-drawing
   // centre − underlay centre at zero offset (same world→drawing mapping
@@ -61,39 +73,12 @@ export function useDrawingLayers(vm: DrawingViewModel) {
   const handleCenterDxfUnderlay = useCallback((id: string) => {
     const entry = dxfUnderlays.find((u) => u.id === id);
     if (!entry || !drawing) return;
-    const shift = dxfWorldShift(geometryResult?.coordinateInfo);
-    const mirrorX = sectionPlane.flipped && sectionPlane.custom === undefined;
-    const zeroOffsetEntry = {...entry,placement:{...entry.placement,offsetX:0,offsetY:0}};
-    const state = useViewerStore.getState();
-    const mapper = entry.referenceFrame ? dxfPlaneDrawingMapper(zeroOffsetEntry, state, drawing.config.plane) : undefined;
-    if (entry.referenceFrame && !mapper) { toast.error(t('section2d.underlay.unavailableReference')); return; }
-    const underlayBounds = dxfUnderlayDrawingBounds(entry, shift, mirrorX, dxfMapToWorld, dxfGeoreferenceAvailable, mapper ?? undefined);
-    if (!underlayBounds) {
-      // PR #1965 review: this guard fires when the underlay has no usable
-      // bounds AT ALL (missing extents) OR the georeference produced a
-      // non-finite corner (`dxfUnderlayDrawingBounds` collapses both into
-      // `null` — see its docstring). Tell the user so a malformed
-      // `IfcMapConversion` doesn't read as an unresponsive button.
-      toast.error(t('section2d.underlay.missingBounds'));
-      return;
-    }
-    const modelCenter = drawingModelCenter(vm.sourceDrawing);
-    if (!modelCenter) { toast.error(t('section2d.underlay.emptyDrawing')); return; }
-    const underlayCx = (underlayBounds.min.x + underlayBounds.max.x) / 2;
-    const underlayCy = (underlayBounds.min.y + underlayBounds.max.y) / 2;
-    const offset = dxfDrawingDeltaToPlacement(entry,state,drawing.config.plane,{x:modelCenter.x-underlayCx,y:modelCenter.y-underlayCy});
-    if (!offset) { toast.error(t('section2d.underlay.incompatiblePlacement')); return; }
-    const offsetX = offset.x, offsetY = offset.y;
-    // Defense-in-depth (PR #1965 review): `drawing.bounds` comes from the
-    // generated drawing, not the underlay, and a NaN here would otherwise be
-    // written into the stored placement, which survives toggling
-    // georeferencing back off.
-    if (!Number.isFinite(offsetX) || !Number.isFinite(offsetY)) {
-      toast.error(t('section2d.underlay.nonFiniteDrawing'));
-      return;
-    }
-    updateDxfUnderlayPlacement(id, { offsetX, offsetY });
-  }, [dxfUnderlays, drawing, vm.sourceDrawing, geometryResult, sectionPlane.flipped, sectionPlane.custom, updateDxfUnderlayPlacement, dxfMapToWorld, dxfGeoreferenceAvailable, t]);
+    const result = centerDxfPlacement(entry, drawing, vm.sourceDrawing, geometryResult?.coordinateInfo,
+      drawnPlane.flipped && drawnPlane.custom === undefined,
+      { transform: dxfMapToWorld, available: dxfGeoreferenceAvailable }, useViewerStore.getState());
+    if (result.error) { toast.error(t(`section2d.underlay.${result.error}`)); return; }
+    updateDxfUnderlayPlacement(id, result.placement);
+  }, [dxfUnderlays, drawing, vm.sourceDrawing, geometryResult, drawnPlane.flipped, drawnPlane.custom, updateDxfUnderlayPlacement, dxfMapToWorld, dxfGeoreferenceAvailable, t]);
 
   // Point-cloud scan overlay (issue #1805): a thin band of the loaded
   // scan(s) around the active section plane, projected into the SAME
@@ -101,16 +86,22 @@ export function useDrawingLayers(vm: DrawingViewModel) {
   // the DXF underlay, this works on plan AND vertical (front/side) sections.
   const scanSectionLayer = useScanSectionLayer({
     enabled: displayOptions.showScanSection && status === 'ready',
-    sectionPlane,
+    sectionPlane: drawnPlane,
     coordinateInfo: geometryResult?.coordinateInfo,
     thickness: displayOptions.scanSectionThickness,
     classMask: pointCloudClassMask,
     models,
     legacyPointClouds: geometryResult?.pointClouds,
+    outline: { enabled: displayOptions.scanSectionOutline, maxGap: displayOptions.scanSectionOutlineMaxGap },
   });
 
-  const { handleExportSVG, handleExportDXF, handleExportPDF, handlePrint } = useDrawingExport({
-    drawing, displayOptions, sectionPlane, activePresetId: vm.activePresetId,
+  useEffect(() => { publishDrawingExportFrame({ drawing: vm.sourceDrawing, isPinned: vm.isPinned, cachedSheetTransformRef: vm.cachedSheetTransformRef }); }, [vm.sourceDrawing, vm.isPinned, vm.cachedSheetTransformRef]);
+
+  const { handleExportSVG, handleExportDXF, handleExportPDF, handlePrint, getExportDimensionGraphics } = useDrawingExport({
+    // Only the drawing on screen exports: a dialog left open while the cut
+    // fails must not write the drawing the error now hides.
+    drawing: exportDrawing, seriesDrawing: exportDrawing ? vm.sourceDrawing : null,
+    displayOptions, sectionPlane: drawnPlane, activePresetId: vm.activePresetId,
     entityColorMap: vm.entityColorMap, overridesEnabled: vm.overridesEnabled, overrideEngine: vm.overrideEngine,
     measure2DResults: vm.measure2DResults, polygonArea2DResults: vm.polygonArea2DResults,
     textAnnotations2D: vm.textAnnotations2D, cloudAnnotations2D: vm.cloudAnnotations2D,
@@ -130,7 +121,7 @@ export function useDrawingLayers(vm: DrawingViewModel) {
     heightAnnotations,
     ifcAnnotationData, dxfUnderlayData, dxfGeoreferenceAvailable, handleCenterDxfUnderlay,
     scanSectionLayer,
-    handleExportSVG, handleExportDXF, handleExportPDF, handlePrint,
+    handleExportSVG, handleExportDXF, handleExportPDF, handlePrint, getExportDimensionGraphics,
   };
 }
 

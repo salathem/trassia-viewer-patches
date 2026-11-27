@@ -1,18 +1,48 @@
 diff --git a/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx b/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx
-index cc683d2e20c5aade6e2f51d5bc6186ee92253a20..c69a841de97335754e531a9f158e54dc72b41de2 100644
+index 1c0519c411186ad6c56dbea230185595a471fa0a..f51469b04cf76c13c71ad6919410b39fc2792088 100644
 --- a/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx
 +++ b/apps/viewer/src/components/viewer/tools/measure-modes/geo-readout.tsx
-@@ -24,6 +24,8 @@ import { useTranslation } from '@/i18n/useTranslation';
+@@ -22,8 +22,10 @@ import {
+ } from '@/lib/geo/reproject';
+ import { useTranslation } from '@/i18n/useTranslation';
+ import { createCesiumBridge } from '@/lib/geo/cesium-bridge';
+-import { isGeographicProj4 } from '@ifc-lite/geo/proj4';
++import { declaredEpsgCode, isGeographicProj4 } from '@ifc-lite/geo/proj4';
+ import { useViewerStore } from '@/store';
++// Trassia overlay — see overlay/apps/viewer/src/lib/geo/ch-coordinates.ts
++import { formatSwissEnh, isSwissProjectedCrs, type CrsNameLike } from '@/lib/geo/ch-coordinates';
  // Side-effect import: merges the measure catalogue into the runtime `en`
  // object so `t('measure.*')` resolves under the real 'en' locale (see that
  // module's own doc comment).
-+// Trassia overlay (not upstream) — see overlay/apps/viewer/src/lib/geo/ch-coordinates.ts
-+import { formatSwissEnh, isSwissProjectedCrs } from '@/lib/geo/ch-coordinates';
- 
+@@ -31,9 +33,25 @@ import { useViewerStore } from '@/store';
  export interface Vec3Like { x: number; y: number; z: number }
  export interface Enh { e: string; n: string; h: string }
-@@ -38,11 +40,15 @@ export interface Enh { e: string; n: string; h: string }
- export function projectedEnh(point: Vec3Like, anchor: AnchorGeoreference): Enh {
+ 
++/** Follow the upstream resolver's WKT precedence over the model's display name. */
++export function measurementCrsName(anchor: AnchorGeoreference): string {
++  const crs = anchor.eff.projectedCRS;
++  if (!crs.wellKnownText) return crs.name;
++  const epsg = declaredEpsgCode(crs);
++  return epsg ? `EPSG:${epsg}` : 'WKT';
++}
++
++/** The same Swiss grid identity gates notation and the bounds warning. */
++export function measurementSwissCrs(anchor: AnchorGeoreference): CrsNameLike | null {
++  if (anchor.geographic) return null;
++  const declared = { name: measurementCrsName(anchor) };
++  return isSwissProjectedCrs(declared) ? declared : null;
++}
++
+ /**
+  * Project a picked viewer point to real-world Eastings/Northings/Height and
+- * format it in the CRS's metre unit to millimetre precision. The stored
++ * format it in metres, with centimetre precision on Swiss national grids
++ * and millimetre precision elsewhere. The stored
+  * MapConversion offsets are in the authored map unit (millimetres for the
+  * bundled sample), so we convert to metres with the anchor's map-unit scale —
+  * the raw offsets would read ~1000x too large for a metre CRS.
+@@ -44,11 +62,11 @@ export function projectedEnh(point: Vec3Like, anchor: AnchorGeoreference): Enh |
+   if (anchor.geographic) return null;
    const proj = viewerPointToProjected(point, anchor.eff, anchor.originViewer);
    const { projectedCRS, lengthUnitScale } = anchor.eff;
 -  return {
@@ -23,12 +53,53 @@ index cc683d2e20c5aade6e2f51d5bc6186ee92253a20..c69a841de97335754e531a9f158e54dc
 +  const e = mapUnitsToMeters(proj.eastings, projectedCRS, lengthUnitScale);
 +  const n = mapUnitsToMeters(proj.northings, projectedCRS, lengthUnitScale);
 +  const h = mapUnitsToMeters(proj.height, projectedCRS, lengthUnitScale);
-+  // Trassia: on the Swiss national grids the same number is written
-+  // `E 2'675'200.00` — apostrophe groups, centimetres. Presentation only; the
-+  // projection above is untouched, and every other CRS keeps the upstream
-+  // bare-metre / millimetre format so nothing outside CH changes.
-+  if (isSwissProjectedCrs(projectedCRS)) return formatSwissEnh(e, n, h);
++  if (measurementSwissCrs(anchor)) return formatSwissEnh(e, n, h);
 +  return { e: e.toFixed(3), n: n.toFixed(3), h: h.toFixed(3) };
  }
  
  /** One compact monospace E/N/H line, optionally labelled (A/B endpoints). */
+diff --git a/packages/geo/src/proj4.ts b/packages/geo/src/proj4.ts
+index e7d903f5e344c13f5b6c7f6afe67bbd232c681d8..817c6d46b1c7c59662d9853d78e3860f74408042 100644
+--- a/packages/geo/src/proj4.ts
++++ b/packages/geo/src/proj4.ts
+@@ -13,6 +13,7 @@
+  */
+ 
+ export {
++  declaredEpsgCode,
+   resolveProjection,
+   resolveProjectionId,
+   resolveProjectionOperation,
+diff --git a/packages/geo/src/well-known-crs.ts b/packages/geo/src/well-known-crs.ts
+index eed0150465131a9a38dd326c20940e5d2e9199f5..c045e4685301bf77ff4331a477aabb5adb81778c 100644
+--- a/packages/geo/src/well-known-crs.ts
++++ b/packages/geo/src/well-known-crs.ts
+@@ -15,12 +15,14 @@ const WELL_KNOWN_CRS: Record<string, string> = {
+   'dhdn / gauss-kruger zone 4': '31468', 'dhdn / gauss-kruger zone 5': '31469',
+   'etrs89 / utm zone 32n': '25832', 'etrs89 / utm zone 33n': '25833',
+   'mgi / austria lambert': '31287', 'austria lambert': '31287',
+-  'ch1903+ / lv95': '2056', 'lv95': '2056', 'ch1903 / lv03': '21781', 'lv03': '21781',
++  'ch1903+ / lv95': '2056', 'lv95': '2056', 'ch1903+': '2056', 'ch1903+ lv95': '2056',
++  'chtrs95 / lv95': '2056', 'swiss lv95': '2056',
++  'ch1903 / lv03': '21781', 'lv03': '21781', 'ch1903': '21781', 'ch1903 lv03': '21781', 'swiss lv03': '21781',
+   'belge 1972 / belgian lambert 72': '31370', 'belgian lambert 72': '31370',
+   'etrs89 / belgian lambert 2008': '3812',
+   'rgf93 / lambert-93': '2154', 'rgf93 v1 / lambert-93': '2154', 'lambert-93': '2154', 'lambert 93': '2154',
+ };
+ 
+ export function wellKnownCrsCode(name: string): string | undefined {
+-  return WELL_KNOWN_CRS[name.trim().toLowerCase()];
++  return WELL_KNOWN_CRS[name.trim().toLowerCase().replace(/\s+/g, ' ')];
+ }
+diff --git a/scripts/api-surface.json b/scripts/api-surface.json
+index 6900fbeb657dfd511deacf54642dbfaec08fe88f..63b28265fda912ca8e74569531de497bf91e6d50 100644
+--- a/scripts/api-surface.json
++++ b/scripts/api-surface.json
+@@ -6911,6 +6911,7 @@
+     "computeGridFrame: function",
+     "computeGridPointFactors: function",
+     "coordinatesToLatLon: function",
++    "declaredEpsgCode: function",
+     "hasFailedPrecisionGrid: function",
+     "hasLoadedPrecisionGrid: function",
+     "isGeographicProj4: function",

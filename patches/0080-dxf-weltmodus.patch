@@ -33,19 +33,19 @@ index 6e721cd6265333e9dca3d6d3bac5ce4c187c7856..71f05142f1c9357f0fecbdb1fdc23d47
      return null;
    }
 diff --git a/apps/viewer/src/components/viewer/ViewportContainer.tsx b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-index 32f738642c102c4b81bcd1a36014e705f44e3fca..06e5dbfb547e5fb9dc44cbde7796db2cf8807be1 100644
+index cc286b1809da93736ad1622e2eb72c3830eb3882..a87620088af9585784df566613103cb880a7e6ea 100644
 --- a/apps/viewer/src/components/viewer/ViewportContainer.tsx
 +++ b/apps/viewer/src/components/viewer/ViewportContainer.tsx
-@@ -35,6 +35,8 @@ import { CesiumOverlay } from './CesiumOverlay';
+@@ -40,6 +40,8 @@ import { BCFOverlay } from './bcf/BCFOverlay';
+ import { CesiumOverlay } from './CesiumOverlay';
  import { CesiumPlacementGizmo } from './placement/CesiumPlacementGizmo';
- // Trassia overlay (Paket UX-KOPF): eigenes Panel fuer die Schweizer Umgebung.
  import { ChUmgebungPanel } from './ChUmgebungPanel';
 +import { ChDxfWorldPanel } from './ChDxfWorldPanel';
 +import { ChDxfWorldStandalone } from './ChDxfWorldStandalone';
  import { useSolarEnvironment } from '@/hooks/useSolarEnvironment';
  import { useSolarSweep } from '@/hooks/useSolarSweep';
- import { getViewerStoreApi, useViewerStore } from '@/store';
-@@ -945,6 +947,8 @@ export function ViewportContainer() {
+ import { getViewerStoreApi, useViewerStore, LiveViewerScope } from '@/store';
+@@ -721,6 +723,8 @@ function ViewportContainerLive() {
  
            </div>
          </div>
@@ -54,17 +54,17 @@ index 32f738642c102c4b81bcd1a36014e705f44e3fca..06e5dbfb547e5fb9dc44cbde7796db2c
          <Toaster variant="absolute" />
        </div>
      );
-@@ -985,6 +989,8 @@ export function ViewportContainer() {
+@@ -761,6 +765,8 @@ function ViewportContainerLive() {
+           storeyElevations={georef.storeyElevations}
          />
        )}
-       <ChUmgebungPanel />
 +      {!georef && <ChDxfWorldStandalone />}
 +      <ChDxfWorldPanel hasUnreferencedModel={!georef && models.size > 0} />
        {georef?.mapConversion && georef.baseMapConversion && (
          <CesiumPlacementGizmo
            modelId={georef.sourceModelId}
 diff --git a/apps/viewer/src/hooks/ingest/dxfIngest.ts b/apps/viewer/src/hooks/ingest/dxfIngest.ts
-index 3e81f49cf6802411ebd26ccb76ba1e1d04dcb723..88de118dc3a91c77e42b888d10eed12a39fb56c1 100644
+index 8ad2f8df3059f248c5302310644734560e390f5e..38b15c980358cdd040a3c0c3d973bb73a8eea04c 100644
 --- a/apps/viewer/src/hooks/ingest/dxfIngest.ts
 +++ b/apps/viewer/src/hooks/ingest/dxfIngest.ts
 @@ -47,6 +47,7 @@
@@ -77,20 +77,20 @@ index 3e81f49cf6802411ebd26ccb76ba1e1d04dcb723..88de118dc3a91c77e42b888d10eed12a
  import { resolve } from '@/i18n/registry';
 @@ -73,6 +74,10 @@ export function splitDxfFiles(files: File[]): { dxfFiles: File[]; modelFiles: Fi
  /** Parse one DXF file and register it as a reference underlay. */
- export async function ingestDxfFile(file: File, options: DxfIngestOptions = {}): Promise<void> {
+ export async function ingestDxfFile(file: File, options: DxfIngestOptions = {}): Promise<string | null> {
    const capturedOptions = structuredClone(options);
 +  if (useViewerStore.getState().cesiumEnabled) {
 +    chDxfWorldQueue(file);
-+    return;
++    return null;
 +  }
    let text: string;
    try {
      text = await file.text();
 diff --git a/packages/drawing-2d/src/index.ts b/packages/drawing-2d/src/index.ts
-index 83bb19c933185909e5e9f6f10c9c8785ef0bc6f7..9a37c5ce0c85ff3c8a58554330b9fa4906e7436f 100644
+index d7a639feb77d6e982c8d8c38cd8463b9e35fd04c..e0f3b833e3fc986cd1300eb028626f811ca231a5 100644
 --- a/packages/drawing-2d/src/index.ts
 +++ b/packages/drawing-2d/src/index.ts
-@@ -480,6 +480,7 @@ export type {
+@@ -478,6 +478,7 @@ export type {
  export {
    importDxf,
    parseDxf,

@@ -4,19 +4,20 @@
 
 /** Live global and tool actions for the canonical keyboard table (#5841). */
 import { useEffect } from 'react';
+import { isPanelAvailable } from '@/lib/panels/availability';
+import { chVollmodus } from '@/lib/ch/modus';
+import { chElementePlan, chPlanAusfuehren, chZeilenAuswahlLeeren, chZeilenSichtbarkeitUmschalten } from '@/lib/ch/zeilen-auswahl';
 import { replayWorkspaceHistory } from '@/lib/model-placement/history';
 import { registerKeyboardCommand, type CommandRun } from '@/lib/commands/dispatcher';
 import type { KeyCommandId } from '@/lib/commands/keyboard-commands';
 import { useViewerStore } from '@/store';
 import { showAllFromStore } from '@/store/homeView';
+import { orderedSectionPlanes } from '@/lib/section/section-plane-set';
 import { hideSelectionFromStore } from '@/store/hideSelection';
+import { finishOpenMeasureSequence } from '@/store/finishMeasureSequence';
+import { isGeometryRestoreHeld } from '@/lib/pick-gating';
 import { workspacePanelForShortcutCode } from '@/lib/panels/registry';
 import { bottomPanelFlags } from '@/lib/panels/bottom-panels';
-// Trassia overlay (not upstream) — Paket U2/TODO #36 (Business-Entscheid
-// 2026-09-03): Alt+Ziffer oeffnet im Trassia-Modus nur Panels, die die Leiste
-// anbietet; ?voll=1 zeigt alle. Siehe lib/ch/modus.ts.
-import { chVollmodus } from '@/lib/ch/modus';
-import { chElementePlan, chPlanAusfuehren, chZeilenAuswahlLeeren, chZeilenSichtbarkeitUmschalten } from '@/lib/ch/zeilen-auswahl';
 import { closeAllPanelWindows } from '@/services/panel-windows';
 import { WALK_MOVEMENT_KEYS, eventKey, isTextEditingElement } from '@/lib/keyboard-event';
 import { bindModelWorkspaceKeys } from '@/lib/commands/modeling/keys-workspace';
@@ -27,9 +28,9 @@ import {
 
 interface KeyboardShortcutsOptions { enabled?: boolean }
 
-function escapeGlobal(closeAll: boolean, event?: KeyboardEvent): boolean | void {
-  const target = event?.target as HTMLElement | null;
-  if (target?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [aria-label="Customize sidebar panels"]')) return false;
+function escapeGlobal(closeAll: boolean, event: KeyboardEvent): boolean | void {
+  const target = event.target as Element | null;
+  if (target?.closest?.('[role="menu"], [role="menuitem"], [role="dialog"], [data-radix-menu-content], [data-ch-sidebar-customize]')) return false;
   chZeilenAuswahlLeeren();
   const state = useViewerStore.getState();
   if (closeAll) {
@@ -61,30 +62,26 @@ function rotateSelected(event: KeyboardEvent): boolean {
   return true;
 }
 
-function finishMeasurement(): boolean {
+function cancelMeasurement(): boolean {
   const state = useViewerStore.getState();
-  if (state.activePolyline) {
-    if (!state.finishPolyline(false)) {
-      void import('@/components/ui/toast').then(({ toast }) => toast.error('Polyline needs at least 2 points'));
-    }
-    return true;
-  }
-  if (state.activeRadius) {
-    if (!state.finishRadius()) {
-      void import('@/components/ui/toast').then(({ toast }) => toast.error('Radius needs at least 3 points'));
-    }
-    return true;
-  }
+  const inProgress = !!(state.activeMeasurement || state.activePolyline || state.activeAngle || state.activeRadius);
+  // Esc is a gesture reset in every mode, even with nothing placed yet: it drops the
+  // lock, the snap glyph and a press still held (#8786). It holds Esc only if it cancelled something.
+  state.resetMeasureGesture();
+  if (inProgress) return true;
+  // The hover preview alone does not hold Esc: it is cursor feedback, like the snap glyph.
+  if (state.measurePointLast) { state.clearMeasurePoint(); return true; }
   return false;
 }
 
-function cancelMeasurement(): boolean {
+/** Make the previous or next cutting plane (in the order the chips show) the active one; wraps. */
+function stepSectionPlane(step: 1 | -1): boolean {
   const state = useViewerStore.getState();
-  if (state.activeMeasurement) { state.cancelMeasurement(); return true; }
-  if (state.activePolyline) { state.cancelPolyline(); return true; }
-  if (state.activeAngle) { state.cancelAngle(); return true; }
-  if (state.activeRadius) { state.cancelRadius(); return true; }
-  return false;
+  const planes = orderedSectionPlanes(state.sectionPlane, state.inactiveSectionPlanes);
+  if (planes.length < 2) return false;
+  const at = planes.findIndex((p) => p.id === state.sectionPlane.id);
+  state.activateSectionPlane(planes[(at + step + planes.length) % planes.length]!.id);
+  return true;
 }
 
 function splitSelected(): void {
@@ -97,24 +94,32 @@ function splitSelected(): void {
   state.startCommand('element.split');
 }
 
-function hideSelected(event: KeyboardEvent): boolean {
-  if (event.key === ' ') {
-    const tag = document.activeElement?.tagName;
-    if (tag === 'BUTTON' || tag === 'SELECT' || tag === 'A') return false;
-  }
-  if (event.key === ' ') {
-    const s = useViewerStore.getState();
-    const actions = { hideEntities: s.hideEntities, showEntities: s.showEntities, setModelVisibility: s.setModelVisibility };
-    let steps = chZeilenSichtbarkeitUmschalten({ versteckt: s.hiddenEntities, modellSichtbar: (id) => s.models.get(id)?.visible }, actions);
-    if (steps === 0) {
-      const ids = s.selectedEntityIds.size > 0 ? [...s.selectedEntityIds] : s.selectedEntityId === null ? [] : [s.selectedEntityId];
-      const plan = chElementePlan(ids, s.hiddenEntities);
-      chPlanAusfuehren(plan, actions);
-      steps = plan.length;
-    }
-    return steps > 0;
-  }
-  return hideSelectionFromStore();
+// A focused button keeps Space: the dispatcher yields it before any command runs (#9233).
+function toggleSelected(): boolean {
+  const state = useViewerStore.getState();
+  const actions = { hideEntities: state.hideEntities, showEntities: state.showEntities, setModelVisibility: state.setModelVisibility };
+  if (chZeilenSichtbarkeitUmschalten({
+    versteckt: state.hiddenEntities,
+    modellSichtbar: (id) => state.models.get(id)?.visible,
+  }, actions) > 0) return true;
+  const ids = state.selectedEntityIds.size > 0 ? [...state.selectedEntityIds]
+    : state.selectedEntityId === null ? [] : [state.selectedEntityId];
+  const plan = chElementePlan(ids, state.hiddenEntities);
+  chPlanAusfuehren(plan, actions);
+  return plan.length > 0;
+}
+
+/**
+ * The dispatcher yields Enter to a focused button (#9233), so Enter on Cancel
+ * in the Measurements list cancels rather than finishes (#9113); Enter from the
+ * canvas, the list or a row still finishes. A held Enter's repeats finish
+ * nothing: after the first press moves focus off a button (a delete hands it
+ * to the next row), a repeat must not finish the open sequence.
+ */
+function finishMeasurement(event: KeyboardEvent): boolean {
+  if (isGeometryRestoreHeld(useViewerStore.getState())) return true;
+  if (event.repeat) return false;
+  return finishOpenMeasureSequence();
 }
 
 function walkOwns(event: KeyboardEvent): boolean {
@@ -133,8 +138,11 @@ const RUNNERS: readonly [KeyCommandId, CommandRun][] = [
   ['tool.annotate', () => { useViewerStore.getState().setActiveTool('annotate'); }],
   ['ui.openPanel', (event) => {
     const panel = workspacePanelForShortcutCode(event.code);
-    if (!panel || (!chVollmodus() && useViewerStore.getState().sidebarHiddenIds.includes(panel))) return false;
-    useViewerStore.getState().openPanelInHome(panel, 'shortcut');
+    // A panel the host switched off leaves its Alt+digit to the browser.
+    if (!panel || !isPanelAvailable(panel)) return false;
+    const state = useViewerStore.getState();
+    if (!chVollmodus() && state.sidebarHiddenIds.includes(panel)) return false;
+    state.openPanelInHome(panel, 'shortcut');
   }],
   ['ui.toggleSidebar', () => { useViewerStore.getState().cycleSidebarMode(); }],
   ['edit.toggleEditMode', () => { useViewerStore.getState().toggleEditEnabled(); }],
@@ -151,8 +159,8 @@ const RUNNERS: readonly [KeyCommandId, CommandRun][] = [
     if (useViewerStore.getState().pinboardEntities.size === 0) return false;
     void executeBasketSaveView().catch((error: unknown) => console.error('[keyboard] Could not save basket view:', error));
   }],
-  ['visibility.hideSelection', hideSelected],
-  ['visibility.toggleSelection', hideSelected],
+  ['visibility.hideSelection', hideSelectionFromStore],
+  ['visibility.toggleSelection', toggleSelected],
   ['visibility.showAll', (event) => {
     if (walkOwns(event)) return false;
     showAllFromStore('a');
@@ -160,6 +168,8 @@ const RUNNERS: readonly [KeyCommandId, CommandRun][] = [
   ['measure.cancel', cancelMeasurement],
   ['measure.finish', finishMeasurement],
   ['measure.toggleSnap', () => { useViewerStore.getState().toggleSnap(); }],
+  ['section.previousPlane', () => stepSectionPlane(-1)],
+  ['section.nextPlane', () => stepSectionPlane(1)],
   ['selection.escape', (event) => escapeGlobal(false, event)],
   ['ui.closeAllPanels', (event) => escapeGlobal(true, event)],
   ['ui.toggleTheme', () => { useViewerStore.getState().toggleTheme(); }],
@@ -169,6 +179,8 @@ const TOOL_CONTEXT: Partial<Record<KeyCommandId, string>> = {
   'measure.cancel': 'measure',
   'measure.finish': 'measure',
   'measure.toggleSnap': 'measure',
+  'section.previousPlane': 'section',
+  'section.nextPlane': 'section',
 };
 
 /** Undo / redo also run from a focused combobox or menu button; only real text editing keeps its own. */

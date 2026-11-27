@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/components/viewer/HierarchyPanel.tsx b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
-index 88e824e20c49bfb5f65923d8f2e9760c020946f3..e7f35fb2f7c2e7a8ac0a9a9dea0ffee4ade8c4e6 100644
+index 374f5ba3a32a93e00a6eb2fb9aef06f582b3a217..aff32baa18d3442b94d47cac5b0b6b8921acfcf0 100644
 --- a/apps/viewer/src/components/viewer/HierarchyPanel.tsx
 +++ b/apps/viewer/src/components/viewer/HierarchyPanel.tsx
-@@ -45,6 +45,9 @@ import { applyLevelDisplayMode } from '@/store/levelDisplay';
+@@ -50,6 +50,9 @@ import { applyLevelDisplayMode } from '@/store/levelDisplay';
  import { createHierarchyModelsSelector, selectLegacyHierarchyGeometry } from './hierarchy/hierarchy-models-selector';
  import { TOUR_ANCHORS, tourAnchor } from '@/lib/tours/anchors';
  import { useStreamingThrottled } from '@/hooks/useStreamingThrottled';
@@ -12,17 +12,17 @@ index 88e824e20c49bfb5f65923d8f2e9760c020946f3..e7f35fb2f7c2e7a8ac0a9a9dea0ffee4
  
  export function HierarchyPanel() {
    const { t } = useTranslation();
-@@ -647,6 +650,8 @@ export function HierarchyPanel() {
+@@ -595,6 +598,8 @@ export function HierarchyPanel() {
  
            {/* Models Section */}
            <div style={{ height: `${(1 - splitRatio) * 100}%` }} className="flex flex-col min-h-0">
 +            {/* Trassia: Kachelsaetze der Mappe, ueber den Modellen. */}
 +            <ChTileLayers />
              <ModelsSectionHeader count={models.size} />
-             <div ref={modelsRef} role="tree" tabIndex={modelsTreeKeyboard.containerTabIndex} aria-label={t('hierarchy.modelsSection.title')} onKeyDown={modelsTreeKeyboard.onKeyDown} className="flex-1 overflow-auto scrollbar-thin bg-white dark:bg-black">
+             <div ref={modelsRef} role="tree" tabIndex={modelsTreeKeyboard.containerTabIndex} aria-label={t('hierarchy.modelsSection.title')} onKeyDown={modelsTreeKeyboard.onKeyDown} className="flex-1 overflow-auto scrollbar-thin bg-background">
                <div
-@@ -698,6 +703,10 @@ export function HierarchyPanel() {
-         )}
+@@ -642,6 +647,10 @@ export function HierarchyPanel() {
+         {groupFilterChips}
        </div>
  
 +      {/* Trassia: Kachelsaetze der Mappe — auch in der flachen Ansicht, sonst
@@ -31,4 +31,4 @@ index 88e824e20c49bfb5f65923d8f2e9760c020946f3..e7f35fb2f7c2e7a8ac0a9a9dea0ffee4
 +
        {/* Section Header */}
        <SectionHeader
-         icon={groupingMode === 'spatial' ? Building2 : groupingMode === 'type' ? Layers : groupingMode === 'material' ? Palette : groupingMode === 'groups' ? Network : FileBox}
+         icon={groupingMode === 'spatial' ? Building2 : groupingMode === 'type' ? Shapes : groupingMode === 'material' ? Palette : groupingMode === 'groups' ? Network : groupingMode === 'presentation-layers' ? Layers3 : FileBox}

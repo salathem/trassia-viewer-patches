@@ -1,32 +1,25 @@
 diff --git a/apps/viewer/src/components/viewer/useRenderUpdates.ts b/apps/viewer/src/components/viewer/useRenderUpdates.ts
-index ebd79c64aa9bf090ca4ac6872659bc4f6ddcfc2d..7d44fc1318fdc3c6438448ecbad81d7e93224728 100644
+index f0bc57384309d1a6df58ea910d744ebd6f8360bd..a1c2fe091a7fe42bc591fe89130595fecae73071 100644
 --- a/apps/viewer/src/components/viewer/useRenderUpdates.ts
 +++ b/apps/viewer/src/components/viewer/useRenderUpdates.ts
-@@ -20,6 +20,8 @@ import { getThemeClearColor } from '../../utils/viewportUtils.js';
- import { rendererOverlayTheme } from '@/lib/viewport-ui/overlay-theme-renderer';
- import { setClashColorsFromTheme } from '@/lib/clash/clash-colors';
- import type { ThemeMode } from '@/store/slices/uiSlice';
-+// Trassia overlay (not upstream) — see overlay/apps/viewer/src/lib/ch/qp-corridor.ts
+@@ -17,6 +17,7 @@ import type { Drawing2D } from '@ifc-lite/drawing-2d';
+ import type { SectionPlane } from '@/store';
+ import { useViewerStore } from '@/store';
+ import { capOverlayBasis, capOverlayHasContent, capOverlayInput } from '@/lib/section/cap-overlay';
 +import { chQpUndistorted } from '@/lib/ch/qp-corridor';
+ import { capSignature } from '@/lib/section/section-cut-config';
+ import { cuttingSectionBoxCapPlanes } from '@/lib/section/section-box-caps';
+ import { boxHoldingPlane, planeRange, type RangeBounds } from '@/lib/section/section-render-clip';
+@@ -135,8 +136,10 @@ export function useRenderUpdates(params: UseRenderUpdatesParams): void {
+     if (!renderer || !isInitialized) return;
+     if (geometryHeld) { renderer.clearSection2DOverlay(); renderer.requestRender(); return; }
  
- export interface UseRenderUpdatesParams {
-   rendererRef: MutableRefObject<Renderer | null>;
-@@ -76,11 +78,17 @@ export function useRenderUpdates(params: UseRenderUpdatesParams): void {
-     coordinateInfo,
-     sectionPlaneRef,
-     sectionRangeRef,
--    drawing2D,
-+    drawing2D: drawing2DFromStore,
-     show3DOverlay,
-     showHiddenLines,
-   } = params;
+-    if (activeTool === 'section' && drawing2D && drawingIsThisPlanes && capOverlayHasContent(drawing2D) && show3DOverlay) {
+-      const { polygons, lines } = capOverlayInput(drawing2D, showHiddenLines, fillMode);
++    // Keep plane ownership and the settled signal bound to the published drawing.
++    const capDrawing = chQpUndistorted(drawing2D);
++    if (activeTool === 'section' && capDrawing && drawingIsThisPlanes && capOverlayHasContent(capDrawing) && show3DOverlay) {
++      const { polygons, lines } = capOverlayInput(capDrawing, showHiddenLines, fillMode);
+       const customPlane = capOverlayBasis(sectionPlane.custom);
  
-+  // Trassia (Paket V-QP): die 3D-Kappe nimmt IMMER die unverzerrte Zeichnung.
-+  // Die Hoehenueberhoehung des Querprofil-Panels ist eine Sache der ANZEIGE im
-+  // 2D-Blatt; in den Raum gehoben waere sie eine Kappe, die neben ihrem eigenen
-+  // Modell schwebt. Ohne Ueberhoehung ist das dasselbe Objekt.
-+  const drawing2D = chQpUndistorted(drawing2DFromStore);
-+
-   // Theme-aware clear color update, and the renderer's overlay theme (#5484):
-   // selection, section-plane preview, every overlay line channel (annotation /
-   // alignment / grid / DXF / LandXML lines and the section-cut outline, #5388)
+       renderer.uploadSection2DOverlay(

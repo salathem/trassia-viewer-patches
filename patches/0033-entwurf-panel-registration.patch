@@ -1,8 +1,8 @@
 diff --git a/apps/viewer/src/i18n/en.ts b/apps/viewer/src/i18n/en.ts
-index f2ae1e076a2c4b068ac390c84b150c088697b880..c2725ff0988a91a23b65757c3d72d93f2cbfb89f 100644
+index 50306d6f71d1aa30bab23d26652e8419ece82412..4c3590a05de481aa3cb2fffcdecb8253e52009ab 100644
 --- a/apps/viewer/src/i18n/en.ts
 +++ b/apps/viewer/src/i18n/en.ts
-@@ -110,6 +110,7 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
+@@ -170,6 +170,7 @@ import { zonesPanelEn } from './catalogues/zones-panel.en';
  
  /** English is assembled from feature catalogues so no locale becomes a monolith. */
  export const en = {
@@ -10,43 +10,79 @@ index f2ae1e076a2c4b068ac390c84b150c088697b880..c2725ff0988a91a23b65757c3d72d93f
    'trassia.panel.laengsschnitt': 'Longitudinal profile',
    'trassia.panel.kubatur': 'Cut and fill',
    'trassia.panel.drape': 'Terrain drape',
+diff --git a/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts b/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts
+index 2f8d882523117c9c01c29bccfa93a4bcf7cb074d..fba12740dbc8de204805dcaac3c3a968f5060ca3 100644
+--- a/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts
++++ b/apps/viewer/src/lib/agent-tools/operations/coverage-audit.ts
+@@ -10,6 +10,7 @@ export const panelControlAudits: Readonly<Record<WorkspacePanelId, readonly Audi
+   drape: [], // Trassia panel, local UI controls.
+   kubatur: [], // Trassia panel, local UI controls.
+   laengsschnitt: [], // Trassia panel, local UI controls.
++  entwurf: [], // Trassia panel, local UI controls.
+   hierarchy: ['core'], properties: ['core', 'authoring', 'coordination'], layers: ['coordination'], zones: ['authoring'],
+   model: ['authoring'], placement: ['authoring'], changes: ['authoring', 'core'], changeSets: ['authoring'],
+   clash: ['clash'], validation: ['authoring'], idsStudio: ['authoring'], compare: ['coordination'], bcf: ['coordination'],
+diff --git a/apps/viewer/src/lib/panels/availability.ts b/apps/viewer/src/lib/panels/availability.ts
+index 91f8ba2d8e54da3618068f09e86deb9c6b7c4205..5488b1da2947aa29125a723d80461cbcd3f5ac32 100644
+--- a/apps/viewer/src/lib/panels/availability.ts
++++ b/apps/viewer/src/lib/panels/availability.ts
+@@ -17,11 +17,12 @@
+  * collaboration panel's build-flag rule.
+  */
+ 
++import { chEntwurfAktiv } from '@/lib/ch/entwurf/entwurf-flag';
+ import { isCollabEnabled } from '@/lib/collab/config';
+ import { isFeatureEnabled, type FeatureId } from '@/lib/features';
+ import type { WorkspacePanelId } from './registry';
+ 
+-export const PANEL_FEATURE: Readonly<Record<Exclude<WorkspacePanelId, 'drape' | 'kubatur' | 'laengsschnitt' | 'hierarchy' | 'properties'>, FeatureId>> = {
++export const PANEL_FEATURE: Readonly<Record<Exclude<WorkspacePanelId, 'drape' | 'kubatur' | 'laengsschnitt' | 'entwurf' | 'hierarchy' | 'properties'>, FeatureId>> = {
+   sources: 'files.sources',
+   measurements: 'tools.measure',
+   lens: 'view.lens',
+@@ -59,6 +60,7 @@ export const PANEL_FEATURE: Readonly<Record<Exclude<WorkspacePanelId, 'drape' |
+ 
+ /** Whether the host left this panel's feature on. A panel that is not available never opens or renders. */
+ export function isPanelAvailable(id: WorkspacePanelId): boolean {
++  if (id === 'entwurf') return chEntwurfAktiv();
+   const feature = (PANEL_FEATURE as Partial<Record<WorkspacePanelId, FeatureId>>)[id];
+   return feature === undefined || isFeatureEnabled(feature);
+ }
 diff --git a/apps/viewer/src/lib/panels/registry.ts b/apps/viewer/src/lib/panels/registry.ts
-index 9f277beaf94946c0a697ab22f177c3f2b997bac0..468e31d77960035e65d7fb1758709cff4c50c0e2 100644
+index 6442ad4cd3b2312b33c0b0b30e4eb2fea88bccb8..8937f451568ca9c5bd75590720bd6cf4b255767f 100644
 --- a/apps/viewer/src/lib/panels/registry.ts
 +++ b/apps/viewer/src/lib/panels/registry.ts
 @@ -21,7 +21,8 @@
  // the viewer-embed bundle too, which has no unplugin-icons resolver for the
  // `~icons/viewer/*` virtual modules (#6315 broke that build).
- import { BarChart3, Box, CalendarRange, ClipboardCheck, Cloud, Coins, Crosshair, DraftingCompass, FileText, FileWarning, GitBranch, GitCompareArrows, History, Info, Layers as LayersIcon, ListTree, MessageSquare, Move3d, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
+ import { BarChart3, Bot, Box, CalendarRange, ChartLine, ClipboardCheck, ClipboardPen, Cloud, Coins, Crosshair, DraftingCompass, FileText, FileWarning, GitBranch, GitCompareArrows, History, Info, Link2, Layers as LayersIcon, ListChecks, ListTree, MessageSquare, Move3d, Paintbrush, Palette, PencilRuler, Presentation, Puzzle, Ruler, Scan, Sun, Table2, Terminal, type LucideIcon, Users, Workflow } from 'lucide-react';
 -import { Mountain, ChartSpline } from 'lucide-react';
 +import { chEntwurfAktiv } from '@/lib/ch/entwurf/entwurf-flag';
 +import { Mountain, ChartSpline, Route } from 'lucide-react';
  import type { TranslationKey } from '@/i18n';
  
  /** Every panel reachable from the unified sidebar rail. `properties` is the
-@@ -62,7 +63,8 @@ export type WorkspacePanelId =
-   | 'changeSets'
+@@ -67,6 +68,7 @@ export type WorkspacePanelId =
    | 'drape'
    | 'kubatur'
--  | 'laengsschnitt';
-+  | 'laengsschnitt'
-+  | 'entwurf';
+   | 'laengsschnitt'
++  | 'entwurf'
+   | 'influx';
  
  /** Shared task grouping for the rail, ribbon panel browser, and palette commands (#5873). */
- export type PanelGroup = 'coordinate' | 'check' | 'quantify' | 'automate' | 'site' | 'author';
-@@ -207,6 +209,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
+@@ -221,6 +223,7 @@ export const WORKSPACE_PANELS: readonly WorkspacePanelDef[] = [
    { id: 'drape', titleKey: 'trassia.panel.drape', Icon: Mountain, group: 'author', region: 'side' },
    { id: 'kubatur', titleKey: 'trassia.panel.kubatur', Icon: Ruler, group: 'quantify', region: 'side' },
    { id: 'laengsschnitt', titleKey: 'trassia.panel.laengsschnitt', Icon: ChartSpline, group: 'author', region: 'side', prefersWide: true },
 +  ...(chEntwurfAktiv() ? [{ id: 'entwurf' as const, titleKey: 'trassia.panel.entwurf' as const, Icon: Route, group: 'author' as const, region: 'side' as const, prefersWide: true }] : []),
  ];
  
- // The bottom strip (Script / Schedule / Lists) is table-driven; the id union and
+ /** How a panel opened on an empty viewer offers a way to a model
 diff --git a/apps/viewer/src/lib/panels/renderPanelBody.tsx b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-index fea955fc0282ad5c7481344560cf41d6f4f82523..c6f94568011c8aec67e9b6021045fdaec473d65e 100644
+index 015aad07c5b4f77a26e11eb06e3b5d35f724fb98..fc8642c5803d940e0c723243579a48554948a0f0 100644
 --- a/apps/viewer/src/lib/panels/renderPanelBody.tsx
 +++ b/apps/viewer/src/lib/panels/renderPanelBody.tsx
-@@ -44,6 +44,18 @@ import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
+@@ -46,6 +46,18 @@ import { ChKubaturPanel } from '@/components/viewer/ChKubaturPanel';
  // Trassia overlay (not upstream) — Paket V-LAENGSSCHNITT, siehe
  // ChLaengsschnittPanel.tsx.
  import { ChLaengsschnittPanel } from '@/components/viewer/ChLaengsschnittPanel';
@@ -56,19 +92,19 @@ index fea955fc0282ad5c7481344560cf41d6f4f82523..c6f94568011c8aec67e9b6021045fdae
 +// `?entwurf=1` nicht erreichbar: die Registratur fuehrt den Eintrag dann gar
 +// nicht. Ein STATISCHER Import hier zoege den Spike ins Startbuendel und die
 +// Flagge waere eine Sichtbarkeits-, keine Ladefrage.
-+const ChEntwurfPanel = lazy(() =>
++const ChEntwurfPanel = lazyChunk(() =>
 +  import('@/components/viewer/ChEntwurfPanel').then((m) => ({ default: m.ChEntwurfPanel })),
 +);
 +// Eigene kleine Fehlergrenze: die Upstream-ChunkErrorBoundary nimmt seit 10.x nur
 +// feste Upstream-Beschriftungen an (siehe ChEntwurfFehlergrenze.tsx).
 +import { ChEntwurfFehlergrenze } from '@/components/viewer/ChEntwurfFehlergrenze';
+ import { useViewerStore } from '@/store';
  // Lazy: the Layers panel pulls in @ifc-lite/merge (engine + blake3); a
  // dynamic chunk keeps it out of the initial bundle until first opened.
- const LayersPanel = lazy(() =>
-@@ -157,6 +169,14 @@ export function renderPanelBody(id: WorkspacePanelId, onClose: () => void): Reac
+@@ -225,6 +237,14 @@ function panelBody(id: WorkspacePanelId, onClose: () => void): ReactNode {
+     case 'drape': return <ChDrapePanel onClose={onClose} />;
      case 'kubatur': return <ChKubaturPanel onClose={onClose} />;
      case 'laengsschnitt': return <ChLaengsschnittPanel onClose={onClose} />;
-     case 'changes': return <ChangesPanel onClose={onClose} />;
 +    // Trassia (Trassierungs-Spike S0, nur bei `?entwurf=1`).
 +    case 'entwurf': return (
 +      <ChEntwurfFehlergrenze>
@@ -77,6 +113,6 @@ index fea955fc0282ad5c7481344560cf41d6f4f82523..c6f94568011c8aec67e9b6021045fdae
 +        </Suspense>
 +      </ChEntwurfFehlergrenze>
 +    );
-     case 'layers': return <LayersPanelBody onClose={onClose} />;
-     case 'sources': return <SourcesPanelBody onClose={onClose} />;
-     case 'charts': return <ChartsPanelBody />;
+     case 'changeSets': return <ChangeSetPanel onClose={onClose} />;
+   }
+ }

@@ -1,57 +1,208 @@
 diff --git a/apps/viewer/src/components/viewer/ViewerLayout.tsx b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-index ff3d95d7a0145de6df7f3abf15fc4ed6f2996deb..246ec94f50c81e5c94b4a5feab836a833fe30078 100644
+index 9db23d98d96109399072721b649828bf17841786..a4845b1f434644cddde27bb179c8fa6fa1d8bd38 100644
 --- a/apps/viewer/src/components/viewer/ViewerLayout.tsx
 +++ b/apps/viewer/src/components/viewer/ViewerLayout.tsx
-@@ -39,6 +39,12 @@ import { parseRoleFromToken } from '@/lib/collab/share-link';
- import { chIsHtmlResponse } from '@/lib/ch/ch-file-validation';
- import { chSetLoadNotice } from '@/lib/ch/ch-load-notice';
- import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
-+// Trassia overlay (Phase 1.1) — `?project=<slug>` opens a curated set of
-+// models from a manifest instead of one file. See hooks/useChProjectLoader.ts.
+@@ -30,6 +30,7 @@ import { ShieldAlert } from 'lucide-react';
+ import { ExtensionDockHost } from '@/components/extensions/ExtensionDockHost';
+ import { ExtensionKeyboardBindings } from '@/components/extensions/ExtensionKeyboardBindings';
+ import { useModelUrlAutoload } from '@/hooks/useModelUrlAutoload';
 +import { useChProjectLoader } from '@/hooks/useChProjectLoader';
-+import { ChProjectBanner } from './ChProjectBanner';
-+import { ChLensEngine } from './ChLensEngine';
-+import { chReadProjectParam } from '@/lib/ch/project-manifest';
+ import { useProcessedModelAutoload } from '@/hooks/useProcessedModelAutoload';
+ import { useArtifactDeepLink } from '@/hooks/useArtifactDeepLink';
+ import { useViewerStore } from '@/store';
+@@ -37,6 +38,7 @@ import { joinRoomFromPageUrl } from '@/lib/collab/deep-link-join';
+ import { toast } from '@/components/ui/toast';
  import { EntityContextMenu } from './EntityContextMenu';
+ import { ChLoadNoticeBanner } from './ChLoadNoticeBanner';
++import { ChLensEngine } from './ChLensEngine';
  import { AnonymizedExportDialog } from './anonymized-export/AnonymizedExportDialog';
  import { useDuplicateShortcut } from './useDuplicateShortcut';
-@@ -94,6 +100,7 @@ export function ViewerLayout() {
-   // Auto-load a model from ?model=<URL> (extracted to its own hook, #5851:
-   // a malformed/cross-origin/failed fetch now shows the load-error card
-   // instead of only `console.error`; see the hook's docblock).
+ import { HoverTooltip } from './HoverTooltip';
+@@ -86,6 +88,7 @@ export function ViewerLayout() {
+   const shortcutsDialog = useKeyboardShortcutsDialog();
+ 
+   // ?model=<URL> autoload (#5851, load errors shown) and ?panel=/artifact deep links (#6927).
 +  useChProjectLoader();
    useModelUrlAutoload();
- 
-   // Deep-link collaboration join: a share link is `?room=…&t=…`. The recipient
-@@ -265,6 +272,8 @@ export function ViewerLayout() {
+   useProcessedModelAutoload(); // ?processed=<sha256>: a result the processing server already holds
+   useArtifactDeepLink();
+@@ -234,6 +237,7 @@ export function ViewerLayout() {
              </span>
            </div>
          )}
-+        <ChProjectBanner />
 +        <ChLensEngine />
          <ChLoadNoticeBanner />
          <KeyboardShortcutsDialog open={shortcutsDialog.open} onClose={shortcutsDialog.close} initialTab={shortcutsDialog.tab} />
          <SettingsDialogHost />
+diff --git a/apps/viewer/src/hooks/modelLoadCanceller.ts b/apps/viewer/src/hooks/modelLoadCanceller.ts
+index b6e8a032244fdcc05623105aac1a49b4a3c1f8f5..05e0df0652682ab3c7330dbe86659ed1d55e6b6f 100644
+--- a/apps/viewer/src/hooks/modelLoadCanceller.ts
++++ b/apps/viewer/src/hooks/modelLoadCanceller.ts
+@@ -25,6 +25,7 @@ import { getViewerStoreApi } from '@/store';
+ import { selectActiveLoadProgress, selectLoadCanceller } from '@/store/slices/loadingSlice';
+ import { beginActivity, discardActivity, finishActivity, updateActivity } from '@/lib/activity/activity-journal';
+ import type { TranslationKey } from '@/i18n';
++import type { ModelLoadOptions } from './modelLoadOptions.js';
+ 
+ type LoadOutcome = { outcome: 'completed' | 'failed' | 'cancelled'; detail?: string; detailKey?: TranslationKey };
+ 
+@@ -156,6 +157,7 @@ export function installModelLoadCanceller(
+   activity?: LoadActivity,
+   replacementCommitted: () => boolean = () => true,
+   deferPrimarySupersession = false,
++  cancellation?: ModelLoadOptions['cancellation'],
+ ): (() => void) & { commit(): void } {
+   const store = getViewerStoreApi();
+   const supersededLoads = new Set(pendingLoads.keys());
+@@ -169,6 +171,7 @@ export function installModelLoadCanceller(
+   const release = () => {
+     if (released) return;
+     released = true;
++    cancellation?.signal.removeEventListener('abort', abortOwnedLoad);
+     stopProgress();
+     if (jobId && activity?.handedOff) discardActivity(jobId);
+     else if (jobId && activity) {
+@@ -194,6 +197,10 @@ export function installModelLoadCanceller(
+     }
+     release();
+   };
++  const abortOwnedLoad = () => {
++    abandon();
++    settleUnownedLoadUi();
++  };
+   const cancel = () => {
+     // A retained reference to a load that has since ended or been replaced
+     // must not supersede, or reset the viewer under, the load that owns the slot.
+@@ -229,6 +236,7 @@ export function installModelLoadCanceller(
+       // map belong to the user.
+       settleUnownedLoadUi();
+     }
++    cancellation?.onUserCancel?.();
+   };
+   const commit = () => {
+     if (committed || released) return;
+@@ -256,5 +264,7 @@ export function installModelLoadCanceller(
+   }
+   pendingLoads.set(abandon, cancel);
+   store.getState().setActiveLoadCanceller(cancel);
++  cancellation?.signal.addEventListener('abort', abortOwnedLoad, { once: true });
++  if (cancellation?.signal.aborted) abortOwnedLoad();
+   return Object.assign(release, { commit });
+ }
+diff --git a/apps/viewer/src/hooks/modelLoadOptions.ts b/apps/viewer/src/hooks/modelLoadOptions.ts
+index 7f7dc45af72791dd8cf2c28d9371672e6c087e32..406d660e5fce0d056b71eeebb6f30ba6cea2a06f 100644
+--- a/apps/viewer/src/hooks/modelLoadOptions.ts
++++ b/apps/viewer/src/hooks/modelLoadOptions.ts
+@@ -10,6 +10,7 @@ export type GaussianLoadOutcome = 'completed' | 'cancelled' | 'failed';
+ 
+ export interface ModelLoadOptions {
+   sourceHandle?: FileSystemFileHandle;
++  cancellation?: { signal: AbortSignal; onUserCancel?: () => void };
+   /** Synchronous guard that may abort a primary load before it commits to replacing the scene. */
+   beforePrimaryReset?: () => void;
+   /** Retry the owning operation (e.g. replacement), including its commit/cleanup. */
+@@ -59,7 +60,7 @@ export interface SiteContextArrival {
+ }
+ 
+ /** Federation placement/display options share loader ownership and source handles. */
+-export interface FederationAddModelOptions extends Pick<ModelLoadOptions, 'siteContextArrival' | 'sourceHandle' | 'retryOperation' | 'workflowOwner' | 'gaussianPlacement' | 'gaussianUpAxis' | 'gaussianAttribution' | 'gaussianReplacingModelId' | 'onGaussianBudgetReserved' | 'onGaussianLoadSettled'> {
++export interface FederationAddModelOptions extends Pick<ModelLoadOptions, 'cancellation' | 'siteContextArrival' | 'sourceHandle' | 'retryOperation' | 'workflowOwner' | 'gaussianPlacement' | 'gaussianUpAxis' | 'gaussianAttribution' | 'gaussianReplacingModelId' | 'onGaussianBudgetReserved' | 'onGaussianLoadSettled'> {
+   name?: string;
+   modelId?: string;
+   loadedAt?: number;
+diff --git a/apps/viewer/src/hooks/useIfcFederation.ts b/apps/viewer/src/hooks/useIfcFederation.ts
+index b3cd2e4803e566c90b17c4dc33ea80817b0527e3..f4147cc1daac4922598e422ba03a19d1f276a3d8 100644
+--- a/apps/viewer/src/hooks/useIfcFederation.ts
++++ b/apps/viewer/src/hooks/useIfcFederation.ts
+@@ -111,17 +111,18 @@ export function useIfcFederation(
+     // A primary that starts while this add waits replaces the scene it was
+     // asked for: the add leaves the queue and touches nothing (L6).
+     const supersession = watchLoadSupersession('primary');
++      const signal = options?.cancellation ? AbortSignal.any([supersession.signal, options.cancellation.signal]) : supersession.signal;
+     let gateSlot: number;
+     try {
+-      gateSlot = await acquireFederationLoadSlot(fileSizeForGateMB, supersession.signal);
++        gateSlot = await acquireFederationLoadSlot(fileSizeForGateMB, signal);
+     } catch (error) {
+-      if (supersession.signal.aborted) return null;
++        if (signal.aborted) return null;
+       throw error;
+     } finally {
+       supersession.stop(); // from here this add's own load is what a primary supersedes
+     }
+     // Admitted, but a primary may have started before this add resumed.
+-    if (supersession.signal.aborted) {
++      if (signal.aborted) {
+       releaseFederationLoadSlot(gateSlot);
+       return null;
+     }
+@@ -153,7 +154,7 @@ export function useIfcFederation(
+         collapsed: options?.collapsed,
+         loadedAt,
+         sharedRtcOffset,
+-      }, { siteContextArrival: options?.siteContextArrival, sourceHandle: options?.sourceHandle, retryOperation: options?.retryOperation, workflowOwner: options?.workflowOwner, gaussianPlacement: options?.gaussianPlacement, gaussianUpAxis: options?.gaussianUpAxis, gaussianAttribution: options?.gaussianAttribution, gaussianReplacingModelId: options?.gaussianReplacingModelId, onGaussianBudgetReserved: options?.onGaussianBudgetReserved, onGaussianLoadSettled: options?.onGaussianLoadSettled, onLoadError: options?.onError, onModelRegistered: () => { thisAdd.registered = true; } });
++        }, { cancellation: options?.cancellation, siteContextArrival: options?.siteContextArrival, sourceHandle: options?.sourceHandle, retryOperation: options?.retryOperation, workflowOwner: options?.workflowOwner, gaussianPlacement: options?.gaussianPlacement, gaussianUpAxis: options?.gaussianUpAxis, gaussianAttribution: options?.gaussianAttribution, gaussianReplacingModelId: options?.gaussianReplacingModelId, onGaussianBudgetReserved: options?.onGaussianBudgetReserved, onGaussianLoadSettled: options?.onGaussianLoadSettled, onLoadError: options?.onError, onModelRegistered: () => { thisAdd.registered = true; } });
+ 
+       // Registration is the outcome, also when a newer add overlapped this one:
+       // a superseded load still settled a model (#4897, `federationRtcRebase.ts`).
+diff --git a/apps/viewer/src/hooks/useIfcLoader.ts b/apps/viewer/src/hooks/useIfcLoader.ts
+index 7779a3bf3b0f376d60b019097226948285758e1a..806fc37ec913642830ad0f34e699c982556e6d79 100644
+--- a/apps/viewer/src/hooks/useIfcLoader.ts
++++ b/apps/viewer/src/hooks/useIfcLoader.ts
+@@ -256,6 +256,7 @@ export function useIfcLoader() {
+     target: LoadTarget = { kind: 'primary' },
+     options?: ModelLoadOptions,
+   ): Promise<void> => {
++    if (options?.cancellation?.signal.aborted) return;
+     assertWorkflowOwner(options?.workflowOwner);
+     if (source.processedModel && target.kind !== 'primary') return refuseFederatedProcessedModel(options?.onLoadError);
+     const { file } = source;
+@@ -287,7 +288,8 @@ export function useIfcLoader() {
+       if (target.kind === 'primary' && primaryCommitted && loadSessionRef.current === currentSession) loadSessionRef.current += 1;
+       metadataAbort.abort();
+       abortGeometry?.();
+-    }, () => cancelOwnedStream, activity, () => initialized, target.kind === 'primary'); // #5849: federated cancellation preserves loaded models
++    }, () => cancelOwnedStream, activity, () => initialized, target.kind === 'primary', options?.cancellation); // #5849: federated cancellation preserves loaded models
++    if (isStale()) return;
+     const settleLoadUi = (progress: Parameters<typeof settleOwnedLoadUi>[1] = null) => settleOwnedLoadUi(releaseCanceller, progress, modelId);
+ 
+     const retryThisLoad = options?.retryOperation ?? (() => { void loadModel(source, target, options); });
 diff --git a/apps/viewer/src/hooks/useModelUrlAutoload.ts b/apps/viewer/src/hooks/useModelUrlAutoload.ts
-index d377314e74012151f58b5ba639d602d62ba7dc08..23bc5bd9eae81dc0e1f01e3bf700874860d4318b 100644
+index 71a5c6f21075fb4210182d9f26f020f4c66aeb9f..56a25b41e28cf2834c457549c5b5d657991f7b6f 100644
 --- a/apps/viewer/src/hooks/useModelUrlAutoload.ts
 +++ b/apps/viewer/src/hooks/useModelUrlAutoload.ts
-@@ -20,6 +20,7 @@
- 
+@@ -30,6 +30,7 @@ import { markLoadIntent } from '@/lib/load-intent';
+ import { pageUrlModelAllowed } from '@/lib/processed-model';
  import { chIsHtmlResponse } from '@/lib/ch/ch-file-validation';
  import { chSetLoadNotice } from '@/lib/ch/ch-load-notice';
 +import { chReadProjectParam } from '@/lib/ch/project-manifest';
- import { useEffect, useRef } from 'react';
- import { useIfcLoader } from './useIfcLoader.js';
- import { useIfcFederation } from './useIfcFederation.js';
-@@ -55,6 +56,10 @@ export function useModelUrlAutoload(): void {
-     if (!source) return;
-     const { modelUrl, baseUrl: sourceBaseUrl } = source;
-     if (!modelUrl) return;
-+    if (chReadProjectParam(window.location.search).slug !== '') {
-+      console.warn('[viewer] ?model= ignored: ?project= loads this session');
-+      return;
-+    }
-     autoloadDoneRef.current = true;
  
-     // `retry` is required at every call (#5851 review): a malformed or
+ export function useModelUrlAutoload(): void {
+   // The loader and federation hooks subscribe to actions only; `useIfc()` also
+@@ -42,10 +43,11 @@ export function useModelUrlAutoload(): void {
+   // probe is pending. Preserve the source requested on this mount.
+   const sourceRef = useRef<{ modelUrl: string | null; baseUrl: string } | null>(null);
+   if (sourceRef.current === null) {
+-    const params = new URLSearchParams(window.location.search);
++    const search = window.location.search;
++    const params = new URLSearchParams(search);
+     sourceRef.current = {
+       // The processed entry owns this page request, including its malformed-link error.
+-      modelUrl: params.has('processed') ? null : params.get('model'),
++      modelUrl: params.has('processed') || chReadProjectParam(search).slug !== '' ? null : params.get('model'),
+       baseUrl: window.location.href,
+     };
+   }
+diff --git a/apps/viewer/src/lib/processed-model.ts b/apps/viewer/src/lib/processed-model.ts
+index ffc6166a2533f28f2455371b51bd1e36c247d9f6..5b89d337e22ec66d6929569ee90c9d25e545c883 100644
+--- a/apps/viewer/src/lib/processed-model.ts
++++ b/apps/viewer/src/lib/processed-model.ts
+@@ -36,7 +36,7 @@ const pendingListeners = new Set<() => void>();
+ /** A host asked for a model (`openProcessedModel`, or the configuration's start model); a model named in the page URL then yields. */
+ let hostRequested = false;
+ let pageRequestFiled = false;
+-type PageUrlParameter = 'processed' | 'model' | 'room';
++type PageUrlParameter = 'processed' | 'model' | 'room' | 'project';
+ const ignoredLogged = new Set<PageUrlParameter>();
+ const hostRequestListeners = new Set<() => void>();
+ 

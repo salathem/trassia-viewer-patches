@@ -5,6 +5,7 @@
 import { CH_AUTOMATIC_TERRAIN_HEIGHT } from '@/lib/ch/kontext/terrain-policy';
 import { Mountain } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { TEXT_LINK_CLASS } from '@/components/ui/text-link';
 import { useViewerStore } from '@/store';
 import { useTranslation } from '@/i18n';
 import { formatLocaleNumber } from '@/i18n/intlFormat';
@@ -32,9 +33,12 @@ export function TerrainHeightButton({ modelId, editable, onApply }: {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onApply(terrainSaveHeight);
+            const current = useViewerStore.getState();
+            if (current.cesiumSourceModelId === modelId && current.cesiumTerrainSaveHeight !== null) {
+              onApply(current.cesiumTerrainSaveHeight);
+            }
           }}
-          className="flex items-center gap-0.5 text-2xs text-teal-500 hover:text-teal-700 dark:hover:text-teal-300 transition-colors mt-0.5"
+          className={`mt-0.5 flex items-center gap-0.5 text-2xs ${TEXT_LINK_CLASS}`}
         >
           <Mountain className="h-2.5 w-2.5" />
           <span>{t('properties.georef.heightMeters', { value: formatLocaleNumber(locale, terrainHeight, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })}</span>

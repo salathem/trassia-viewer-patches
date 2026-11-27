@@ -1,25 +1,26 @@
 diff --git a/apps/viewer/src/store/store-sync.ts b/apps/viewer/src/store/store-sync.ts
-index 278d2546a20578c135677ff1f4db92f186e287f3..163ef72e666d3e7bed9dc0e83c9304cd9c2664ea 100644
+index f1d44cd06a722c3f6d3867e4dfdc1f8b681d9b0d..b14b367c95d66fc48ba5dd1227d30db497e0a5df 100644
 --- a/apps/viewer/src/store/store-sync.ts
 +++ b/apps/viewer/src/store/store-sync.ts
-@@ -22,6 +22,9 @@ export const SIDEBAR_PANEL_FLAGS: ReadonlyArray<readonly [keyof ViewerState, Wor
+@@ -28,6 +28,8 @@ export function nextOpenSidebarPanel(state: ViewerState, isOff: (id: WorkspacePa
  /** Keep the unified sidebar to one docked panel when flags change (#1208). */
  export function registerSidebarExclusivity(store: StoreApi<ViewerState>): void {
    store.subscribe((state, prev) => {
-+    // Trassia (Paket PANEL-STAPEL, 0064): ein Schliessen setzt Slots und Flaggen
-+    // gemeinsam (`closeDockedSidebarPanel`); diese Absicht nicht neu aufloesen.
++    // An explicit close already updated both slots and all flags together.
 +    if (state.sidebarCloseRevision !== prev.sidebarCloseRevision) return;
      let opened: WorkspacePanelId | null = null;
      for (const [flag, id] of SIDEBAR_PANEL_FLAGS) {
-       if (state[flag] && !prev[flag]) { opened = id; break; }
-@@ -44,6 +47,10 @@ export function registerSidebarExclusivity(store: StoreApi<ViewerState>): void {
+       // A switched-off panel never takes the sidebar: the availability rule turns its flag back off.
+@@ -48,7 +50,11 @@ export function registerSidebarExclusivity(store: StoreApi<ViewerState>): void {
+     if (active !== 'properties') {
+       const flag = SIDEBAR_PANEL_FLAGS.find(([, id]) => id === active)?.[0];
        if (flag && !state[flag] && prev[flag]) {
-         const next = SIDEBAR_PANEL_FLAGS.find(([f]) => state[f]);
-         state.setSidebarActivePanel(next ? next[1] : 'properties');
-+        // Trassia (Paket SEITENLEISTE, 0048): schliesst das letzte offene Panel
-+        // (auch ueber sein eigenes X), bleibt der Bereich leer statt Information
-+        // zu zeigen — die Leiste klappt auf die Symbolspalte zusammen.
-+        if (!next && state.sidebarMode === 'expanded') state.setSidebarMode('collapsed');
+-        state.setSidebarActivePanel(nextOpenSidebarPanel(state, isPanelEnforcedOff));
++        const next = nextOpenSidebarPanel(state, isPanelEnforcedOff);
++        state.setSidebarActivePanel(next);
++        if (next === 'properties' && !state.sidebarSecondaryPanel && state.sidebarMode === 'expanded') {
++          state.setSidebarMode('collapsed');
++        }
        }
      }
    });
